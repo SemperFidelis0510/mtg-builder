@@ -10,7 +10,8 @@ import subprocess
 import sys
 
 from src.lib.config import ATOMIC_CARDS_PATH, CHROMA_PATH, COLLECTION_NAME, DATA_DIR, MODEL_NAME, REPO_ROOT
-from src.lib.card_data import card_to_document, make_id
+from src.lib.card_data import make_id
+from src.obj.card_face import CardFace
 
 # ---------------------------------------------------------------------------
 # Build-specific constants
@@ -125,23 +126,9 @@ def do_build() -> None:
         for i, face in enumerate(faces):
             if not isinstance(face, dict):
                 continue
-            doc: str = card_to_document(face, card_name)
+            card: CardFace = CardFace.from_json_face(face, card_name)
             uid: str = make_id(card_name, i)
-            meta: dict = {
-                "name": face.get("name") or card_name,
-                "type": face.get("type") or "",
-                "manaCost": face.get("manaCost") or "",
-                "manaValue": face.get("manaValue") or 0.0,
-                "colors": ",".join(face.get("colors") or []),
-                "colorIdentity": ",".join(face.get("colorIdentity") or []),
-                "power": face.get("power") or "",
-                "toughness": face.get("toughness") or "",
-                "keywords": ",".join(face.get("keywords") or []),
-                "subtypes": ",".join(face.get("subtypes") or []),
-                "supertypes": ",".join(face.get("supertypes") or []),
-                "loyalty": face.get("loyalty") or "",
-            }
-            rows.append((uid, doc, meta))
+            rows.append((uid, card.to_document(), card.to_chroma_metadata()))
 
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using device: {device}")

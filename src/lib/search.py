@@ -3,6 +3,7 @@
 import time
 
 from src.lib.config import CHROMA_PATH, COLLECTION_NAME, MODEL_NAME
+from src.obj.card_face import CardFace
 from src.utils.logger import LOGGER
 
 # ---------------------------------------------------------------------------
@@ -92,15 +93,9 @@ def search_cards(query: str, n_results: int = 5) -> str:
     LOGGER.debug("ChromaDB returned %s document(s)", len(docs))
     parts: list[str] = []
     for i, (doc, meta) in enumerate(zip(docs, metas), 1):
-        name: str = (meta or {}).get("name", "Unknown")
-        mana: str = (meta or {}).get("manaCost", "")
-        type_line: str = (meta or {}).get("type", "")
-        text: str = doc.split("Oracle Text:", 1)[-1].strip() if doc else ""
-        LOGGER.debug("Card %s/%s: %s", i, len(docs), name)
-        parts.append(
-            f"--- Card {i} of {len(docs)} ---\n"
-            f"Name: {name}\nMana Cost: {mana}\nType: {type_line}\nOracle Text: {text}"
-        )
+        card: CardFace = CardFace.from_chroma_result(meta, doc)
+        LOGGER.debug("Card %s/%s: %s", i, len(docs), card.name)
+        parts.append(card.format_display(i, len(docs)))
     result_count: int = len(docs)
     LOGGER.debug("Building response text for %s card(s)", result_count)
     LOGGER.info("search_cards finished query=%r returned %s card(s)", query, result_count)
