@@ -3,7 +3,10 @@
     "mtg-cards": {
       "command": "cmd",
       "args": ["/c", "main.bat", "serve"],
-      "cwd": "d:\\scripts\\MTG"
+      "cwd": "d:\\scripts\\MTG",
+      "env": {
+        "MTG_LOG_LEVEL": "DEBUG"
+      }
     }
   }
 }
