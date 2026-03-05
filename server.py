@@ -343,16 +343,16 @@ def run_server() -> None:
     mcp = FastMCP("MTG Card Search")
 
     @mcp.tool()
-    def search_cards_tool(query: str, n_results: int = 5) -> str:
+    def semantic_search_card(query: str, n_results: int = 5) -> str:
         """Search for Magic: The Gathering cards by semantic meaning.
         Returns card names and rules text matching the query."""
-        LOGGER.info("Request received tool=search_cards_tool query=%r n_results=%s", query, n_results)
+        LOGGER.info("Request received tool=semantic_search_card query=%r n_results=%s", query, n_results)
         result = search_cards(query=query, n_results=n_results)
-        LOGGER.info("Request completed tool=search_cards_tool query=%r", query)
+        LOGGER.info("Request completed tool=semantic_search_card query=%r", query)
         return result
 
     @mcp.tool()
-    def filter_cards_tool(
+    def plain_search_card(
         name: str = "",
         oracle_text: str = "",
         type_line: str = "",
@@ -372,7 +372,7 @@ def run_server() -> None:
         """Filter MTG cards by exact properties (name, type, colors, mana value, power/toughness, keywords, etc.).
         All filters are AND-combined. At least one filter must be provided. Returns card names and rules text."""
         LOGGER.info(
-            "Request received tool=filter_cards_tool name=%r type_line=%r colors=%r n_results=%s",
+            "Request received tool=plain_search_card name=%r type_line=%r colors=%r n_results=%s",
             name, type_line, colors, n_results,
         )
         result = filter_cards(
@@ -392,10 +392,10 @@ def run_server() -> None:
             format_legal=format_legal,
             n_results=n_results,
         )
-        LOGGER.info("Request completed tool=filter_cards_tool")
+        LOGGER.info("Request completed tool=plain_search_card")
         return result
 
-    LOGGER.info("Tool registered: search_cards_tool, filter_cards_tool; entering mcp.run(transport=stdio)")
+    LOGGER.info("Tool registered: semantic_search_card, plain_search_card; entering mcp.run(transport=stdio)")
     mcp.run(transport="stdio")
 
 
