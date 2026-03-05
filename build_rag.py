@@ -155,6 +155,15 @@ def do_build() -> None:
                 "name": face.get("name") or card_name,
                 "type": face.get("type") or "",
                 "manaCost": face.get("manaCost") or "",
+                "manaValue": face.get("manaValue") or 0.0,
+                "colors": ",".join(face.get("colors") or []),
+                "colorIdentity": ",".join(face.get("colorIdentity") or []),
+                "power": face.get("power") or "",
+                "toughness": face.get("toughness") or "",
+                "keywords": ",".join(face.get("keywords") or []),
+                "subtypes": ",".join(face.get("subtypes") or []),
+                "supertypes": ",".join(face.get("supertypes") or []),
+                "loyalty": face.get("loyalty") or "",
             }
             rows.append((uid, doc, meta))
 

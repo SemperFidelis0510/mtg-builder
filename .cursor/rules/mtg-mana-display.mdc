@@ -1,0 +1,43 @@
+---
+description: "When showing MTG mana costs or symbols, use circle emojis: number circles for generic mana, color circles for WUBRG"
+alwaysApply: true
+---
+# MTG Mana Display in Chat
+
+When displaying Magic: The Gathering mana costs or mana symbols in responses (e.g. when summarizing card info from search_cards_tool or filter_cards_tool), **always** use the following emoji conventions:
+
+## Generic mana (numbers)
+
+Use Unicode circled numbers for generic mana:
+- 1 → ①
+- 2 → ②
+- 3 → ③
+- 4 → ④
+- 5 → ⑤
+- 6 → ⑥
+- 7 → ⑦
+- 8 → ⑧
+- 9 → ⑨
+- 10 → ⑩  
+For values above 10, use the digit(s) without circle, or ⑩ plus additional circles if needed.
+
+**X** (variable cost) stays as **X**.
+
+## Colored mana (WUBRG)
+
+Use these circle/color emojis for the five colors:
+- **W** (White) → ⚪
+- **U** (Blue) → 🔵
+- **B** (Black) → ⚫
+- **R** (Red) → 🔴
+- **G** (Green) → 🟢
+
+## Examples
+
+- `{2}{U}` → ②🔵
+- `{1}{W}{W}` → ①⚪⚪
+- `{X}{R}{G}` → X🔴🟢
+- `{4}` → ④
+- `{B}{B}` → ⚫⚫
+
+Apply this whenever you quote or paraphrase a card's mana cost or mention mana symbols in the MTG workspace.
