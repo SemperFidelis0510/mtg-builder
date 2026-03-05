@@ -13,7 +13,8 @@ from pathlib import Path
 # Paths and log file name
 # ---------------------------------------------------------------------------
 _MODULE_DIR: Path = Path(__file__).resolve().parent
-LOGS_DIR: Path = _MODULE_DIR / "logs"
+_REPO_ROOT: Path = _MODULE_DIR.parent.parent
+LOGS_DIR: Path = _REPO_ROOT / "logs"
 
 _LOG_FMT: str = "%(asctime)s %(levelname)s %(name)s %(module)s.%(funcName)s %(message)s"
 _DATE_FMT: str = "%Y-%m-%d %H:%M:%S"

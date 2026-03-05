@@ -46,7 +46,7 @@ if errorlevel 1 (
 )
 call conda activate %CONDA_ENV%
 echo === Installing dependencies ===
-python build_rag.py --install
+python -m src.lib.build_rag --install
 if errorlevel 1 (
     echo Install failed.
     exit /b 1
@@ -57,9 +57,9 @@ goto end
 :download
 call "%_ACTIVATE%" %CONDA_ENV%
 if /i "%~2"=="force" (
-    python build_rag.py --download --force
+    python -m src.lib.build_rag --download --force
 ) else (
-    python build_rag.py --download
+    python -m src.lib.build_rag --download
 )
 if errorlevel 1 (
     echo Download failed.
@@ -69,7 +69,7 @@ goto end
 
 :build
 call "%_ACTIVATE%" %CONDA_ENV%
-python build_rag.py --build
+python -m src.lib.build_rag --build
 if errorlevel 1 (
     echo Build failed.
     exit /b 1

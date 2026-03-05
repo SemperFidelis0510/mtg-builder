@@ -8,24 +8,20 @@ import argparse
 import json
 import subprocess
 import sys
-from pathlib import Path
+
+from src.lib.config import ATOMIC_CARDS_PATH, CHROMA_PATH, COLLECTION_NAME, DATA_DIR, MODEL_NAME, REPO_ROOT
+from src.lib.card_data import card_to_document, make_id
 
 # ---------------------------------------------------------------------------
-# Constants (must match server.py for CHROMA_PATH, MODEL_NAME, COLLECTION_NAME)
+# Build-specific constants
 # ---------------------------------------------------------------------------
-SCRIPT_DIR = Path(__file__).resolve().parent
-DATA_DIR = SCRIPT_DIR / "data"
-ATOMIC_CARDS_URL = "https://mtgjson.com/api/v5/AtomicCards.json"
-ATOMIC_CARDS_PATH = DATA_DIR / "AtomicCards.json"
-CHROMA_PATH = SCRIPT_DIR / "chroma_db"
-MODEL_NAME = "all-MiniLM-L6-v2"
-COLLECTION_NAME = "mtg_cards"
-BATCH_SIZE = 500
+ATOMIC_CARDS_URL: str = "https://mtgjson.com/api/v5/AtomicCards.json"
+BATCH_SIZE: int = 500
 
 
-def parse_args():
+def parse_args() -> tuple[argparse.ArgumentParser, argparse.Namespace]:
     """Parse CLI arguments. Returns (parser, args)."""
-    parser = argparse.ArgumentParser(
+    parser: argparse.ArgumentParser = argparse.ArgumentParser(
         description="Build MTG RAG: install deps, download AtomicCards, build ChromaDB index."
     )
     parser.add_argument("--install", action="store_true", help="Install dependencies (PyTorch CUDA + requirements)")
@@ -50,16 +46,16 @@ def do_install() -> None:
             "--index-url",
             "https://download.pytorch.org/whl/cu128",
         ],
-        cwd=SCRIPT_DIR,
+        cwd=REPO_ROOT,
     )
-    req_path = SCRIPT_DIR / "requirements.txt"
+    req_path = REPO_ROOT / "requirements.txt"
     if not req_path.exists():
         print("requirements.txt not found; skipping remaining deps.")
         return
     print("Installing requirements from requirements.txt...")
     subprocess.check_call(
         [sys.executable, "-m", "pip", "install", "-r", str(req_path)],
-        cwd=SCRIPT_DIR,
+        cwd=REPO_ROOT,
     )
     print("Install complete.")
 
@@ -77,14 +73,13 @@ def do_download(force: bool) -> None:
     try:
         resp = requests.get(ATOMIC_CARDS_URL, stream=True, timeout=60)
         resp.raise_for_status()
-        total = int(resp.headers.get("Content-Length", 0))
+        total: int = int(resp.headers.get("Content-Length", 0))
         with open(tmp_path, "wb") as f:
             with tqdm(total=total, unit="B", unit_scale=True, desc="Downloading AtomicCards.json") as pbar:
                 for chunk in resp.iter_content(chunk_size=65536):
                     if chunk:
                         f.write(chunk)
                         pbar.update(len(chunk))
-        # Validate JSON before committing
         with open(tmp_path, "r", encoding="utf-8") as f:
             data = json.load(f)
         if "data" not in data:
@@ -105,24 +100,6 @@ def do_download(force: bool) -> None:
         raise RuntimeError(f"Download failed: {e}") from e
 
 
-def card_to_document(face: dict, card_name: str) -> str:
-    """Build a single document string for one card face."""
-    name = face.get("name") or card_name
-    mana = face.get("manaCost") or ""
-    type_line = face.get("type") or ""
-    text = face.get("text")
-    if text is None or (isinstance(text, str) and not text.strip()):
-        text = "(No rules text)"
-    return (
-        f"Name: {name}\nMana Cost: {mana}\nType: {type_line}\nOracle Text: {text}"
-    )
-
-
-def make_id(card_name: str, face_index: int) -> str:
-    """Build a unique ID from the dict key (guaranteed unique) and face index."""
-    return f"{card_name}::{face_index}"
-
-
 def do_build() -> None:
     """Parse AtomicCards.json, generate embeddings on GPU, batch upsert to ChromaDB."""
     if not ATOMIC_CARDS_PATH.exists():
@@ -141,17 +118,16 @@ def do_build() -> None:
     if not data:
         raise ValueError("AtomicCards.json has no 'data' key")
 
-    # Flatten: list of (id, document, metadata)
-    rows = []
+    rows: list[tuple[str, str, dict]] = []
     for card_name, faces in data.items():
         if not isinstance(faces, list):
             continue
         for i, face in enumerate(faces):
             if not isinstance(face, dict):
                 continue
-            doc = card_to_document(face, card_name)
-            uid = make_id(card_name, i)
-            meta = {
+            doc: str = card_to_document(face, card_name)
+            uid: str = make_id(card_name, i)
+            meta: dict = {
                 "name": face.get("name") or card_name,
                 "type": face.get("type") or "",
                 "manaCost": face.get("manaCost") or "",
@@ -167,7 +143,7 @@ def do_build() -> None:
             }
             rows.append((uid, doc, meta))
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device: str = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using device: {device}")
     model = SentenceTransformer(MODEL_NAME, device=device)
 
@@ -178,12 +154,12 @@ def do_build() -> None:
         metadata={"hnsw:space": "cosine"},
     )
 
-    n = len(rows)
+    n: int = len(rows)
     for start in tqdm(range(0, n, BATCH_SIZE), desc="Building index", unit="batch"):
         batch = rows[start : start + BATCH_SIZE]
-        ids_batch = [r[0] for r in batch]
-        docs_batch = [r[1] for r in batch]
-        metas_batch = [r[2] for r in batch]
+        ids_batch: list[str] = [r[0] for r in batch]
+        docs_batch: list[str] = [r[1] for r in batch]
+        metas_batch: list[dict] = [r[2] for r in batch]
         emb = model.encode(docs_batch, device=device, show_progress_bar=False)
         emb_list = emb.tolist()
         collection.upsert(
