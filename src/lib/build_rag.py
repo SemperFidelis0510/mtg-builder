@@ -8,6 +8,7 @@ import argparse
 import json
 import subprocess
 import sys
+from pathlib import Path
 
 from src.lib.config import ATOMIC_CARDS_PATH, CHROMA_PATH, COLLECTION_NAME, DATA_DIR, MODEL_NAME, REPO_ROOT
 from src.lib.card_data import make_id
@@ -19,6 +20,25 @@ from src.obj.card_face import CardFace
 ATOMIC_CARDS_URL: str = "https://mtgjson.com/api/v5/AtomicCards.json"
 BATCH_SIZE: int = 500
 
+# (pip packages, wheel index URL, human-readable label)
+_CUDA_CONFIGS: dict[str, tuple[list[str], str, str]] = {
+    "12": (
+        ["torch", "torchvision", "torchaudio"],
+        "https://download.pytorch.org/whl/cu128",
+        "CUDA 12.8",
+    ),
+    "11": (
+        ["torch==2.1.2", "torchvision==0.16.2", "torchaudio==2.1.2"],
+        "https://download.pytorch.org/whl/cu118",
+        "CUDA 11.8 (PyTorch 2.1.2)",
+    ),
+    "cpu": (
+        ["torch", "torchvision", "torchaudio"],
+        "https://download.pytorch.org/whl/cpu",
+        "CPU-only",
+    ),
+}
+
 
 def parse_args() -> tuple[argparse.ArgumentParser, argparse.Namespace]:
     """Parse CLI arguments. Returns (parser, args)."""
@@ -26,30 +46,28 @@ def parse_args() -> tuple[argparse.ArgumentParser, argparse.Namespace]:
         description="Build MTG RAG: install deps, download AtomicCards, build ChromaDB index."
     )
     parser.add_argument("--install", action="store_true", help="Install dependencies (PyTorch CUDA + requirements)")
+    parser.add_argument(
+        "--cuda", default="12", choices=list(_CUDA_CONFIGS),
+        help="CUDA version for PyTorch install: 12 (default), 11, or cpu",
+    )
     parser.add_argument("--download", action="store_true", help="Download AtomicCards.json")
     parser.add_argument("--force", action="store_true", help="Force re-download even if file exists")
     parser.add_argument("--build", action="store_true", help="Ingest JSON and build ChromaDB index")
     return parser, parser.parse_args()
 
 
-def do_install() -> None:
-    """Install CUDA-optimized PyTorch, then remaining dependencies from requirements.txt."""
-    print("Installing PyTorch with CUDA 12.4...")
+def do_install(cuda: str) -> None:
+    """Install PyTorch for the chosen CUDA target, then remaining deps from requirements.txt."""
+    packages: list[str]
+    index_url: str
+    label: str
+    packages, index_url, label = _CUDA_CONFIGS[cuda]
+    print(f"Installing PyTorch ({label})...")
     subprocess.check_call(
-        [
-            sys.executable,
-            "-m",
-            "pip",
-            "install",
-            "torch",
-            "torchvision",
-            "torchaudio",
-            "--index-url",
-            "https://download.pytorch.org/whl/cu128",
-        ],
+        [sys.executable, "-m", "pip", "install", *packages, "--index-url", index_url],
         cwd=REPO_ROOT,
     )
-    req_path = REPO_ROOT / "requirements.txt"
+    req_path: Path = REPO_ROOT / "requirements.txt"
     if not req_path.exists():
         print("requirements.txt not found; skipping remaining deps.")
         return
@@ -161,7 +179,7 @@ def do_build() -> None:
 def main() -> None:
     parser, args = parse_args()
     if args.install:
-        do_install()
+        do_install(cuda=args.cuda)
         return
     if args.download:
         do_download(force=args.force)

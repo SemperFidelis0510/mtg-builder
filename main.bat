@@ -46,7 +46,11 @@ if errorlevel 1 (
 )
 call conda activate %CONDA_ENV%
 echo === Installing dependencies ===
-python -m src.lib.build_rag --install
+if "%~2"=="" (
+    python -m src.lib.build_rag --install
+) else (
+    python -m src.lib.build_rag --install --cuda %~2
+)
 if errorlevel 1 (
     echo Install failed.
     exit /b 1
@@ -86,11 +90,14 @@ if errorlevel 1 (
 goto end
 
 :usage
-echo Usage: .\%~nx0 install ^| download [force] ^| build ^| serve
+echo Usage: .\%~nx0 install [11^|12^|cpu] ^| download [force] ^| build ^| serve
 echo.
-echo   install   - Create conda env "%CONDA_ENV%" and install all dependencies
-echo   download  - Download AtomicCards.json (add "force" to re-download)
-echo   build     - Ingest data and build ChromaDB vector index
-echo   serve     - Start the MCP server (stdio)
+echo   install [11^|12^|cpu] - Create conda env and install deps (default: CUDA 12)
+echo                          11  = CUDA 11.8 (PyTorch 2.1.2)
+echo                          12  = CUDA 12.8 (latest PyTorch, default)
+echo                          cpu = CPU-only (latest PyTorch, no GPU)
+echo   download [force]     - Download AtomicCards.json
+echo   build                - Ingest data and build ChromaDB vector index
+echo   serve                - Start the MCP server (stdio)
 
 :end
