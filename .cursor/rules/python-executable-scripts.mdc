@@ -1,0 +1,15 @@
+---
+description: Ensure new Python scripts intended to run their main are created as executables with venv-aware shebang
+alwaysApply: false
+globs: ["**/*.py"]
+---
+
+## Python Executable Scripts
+
+When creating a new Python script that is intended to be run directly (i.e. has an `if __name__ == "__main__":` block or a `main()` entry point):
+
+1. **Shebang line**: Always include a shebang pointing to the project's local venv Python interpreter as the very first line. Look for a `.venv/bin/python3` or `venv/bin/python3` relative to the project root. Use the absolute path, e.g. `#!/path/to/project/.venv/bin/python3`. If no local venv is found, fall back to `#!/usr/bin/env python3`.
+2. **Make it executable**: After writing the file, run `chmod +x <file>` to set the executable permission.
+3. **Encoding declaration**: Include `# -*- coding: utf-8 -*-` as the second line.
+
+This ensures scripts can be invoked directly from the shell (e.g. `./scripts/my_script.py`) and will use the correct local venv Python interpreter without requiring manual activation.

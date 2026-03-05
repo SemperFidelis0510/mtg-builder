@@ -1,0 +1,80 @@
+---
+description: "Guidelines for managing files under Perforce version control"
+alwaysApply: true
+---
+
+## Perforce (P4) File Management
+
+When editing, creating, or deleting files that are managed under a Perforce (P4) client, the corresponding P4 command must be applied first to update the client:
+
+### Before Editing a File
+Run `p4 edit <file>` to check out the file before making modifications, only if you are working on a new file that needs it. If the file is already checked for edit you do not need to `p4 edit` it again.
+
+### After Creating a New File
+Run `p4 add <file>` to mark the new file for addition to the depot.
+
+### Before Deleting a File
+Run `p4 delete <file>` to mark the file for deletion from the depot.
+
+### Important Notes
+- Always ensure you are in the correct P4 client/workspace context
+- Verify the file is within the P4 client root before applying P4 commands
+- Remember to submit changes with `p4 submit` when ready
+
+
+
+## Code Duplication - STRICTLY FORBIDDEN
+
+**NEVER duplicate code.** This is a critical rule that must always be followed.
+
+### Before Writing New Code
+
+Before creating any new function, module, or file, you MUST:
+
+1. **Understand the codebase first** - Thoroughly explore and search the existing codebase
+2. **Search for existing implementations** - Check if the logic you need already exists somewhere in the codebase
+3. **Reuse existing code** - If similar functionality exists, USE IT instead of writing new code
+
+### Mandatory Workflow
+
+1. **Search before you write** - Always search the codebase for existing implementations of the logic you need
+2. **Prefer existing solutions** - If the codebase has code that accomplishes what you want, you MUST use it
+3. **Extend, don't duplicate** - If existing code is close but not exact, consider extending it rather than creating parallel implementations
+4. **Ask if uncertain** - If you're unsure whether functionality exists, ask before implementing
+
+### Why This Matters
+
+- Duplicated code leads to maintenance nightmares
+- Bug fixes need to be applied in multiple places
+- Inconsistent behavior between duplicate implementations
+- Wasted effort reimplementing solved problems
+- Codebase becomes harder to understand and navigate
+
+
+
+## Code Duplication - STRICTLY FORBIDDEN
+
+**NEVER duplicate code.** This is a critical rule that must always be followed.
+
+### Before Writing New Code
+
+Before creating any new function, module, or file, you MUST:
+
+1. **Understand the codebase first** - Thoroughly explore and search the existing codebase
+2. **Search for existing implementations** - Check if the logic you need already exists somewhere in the codebase
+3. **Reuse existing code** - If similar functionality exists, USE IT instead of writing new code
+
+### Mandatory Workflow
+
+1. **Search before you write** - Always search the codebase for existing implementations of the logic you need
+2. **Prefer existing solutions** - If the codebase has code that accomplishes what you want, you MUST use it
+3. **Extend, don't duplicate** - If existing code is close but not exact, consider extending it rather than creating parallel implementations
+4. **Ask if uncertain** - If you're unsure whether functionality exists, ask before implementing
+
+### Why This Matters
+
+- Duplicated code leads to maintenance nightmares
+- Bug fixes need to be applied in multiple places
+- Inconsistent behavior between duplicate implementations
+- Wasted effort reimplementing solved problems
+- Codebase becomes harder to understand and navigate

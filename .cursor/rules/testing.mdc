@@ -1,0 +1,47 @@
+---
+description: Guidelines for creating tests, including import restrictions
+globs:
+alwaysApply: false
+---
+## User Test Creation Guidelines
+
+### Import Rules
+
+When creating tests, follow these strict import guidelines:
+
+1. **Only import the exact modules being tested** - Do not import internal dependencies of the tested module
+2. **Only import auxiliary modules required for the testing framework itself** (e.g., pytest, unittest, mock)
+3. **Never manipulate `sys.path`** - Do not append paths to `sys.path` to allow internal imports of tested modules
+4. **Do not use relative imports to bypass module boundaries**
+
+### Rationale
+
+We need to verify that the tested modules handle their own imports correctly. By only importing the module under test directly, we ensure:
+- The module's import statements are validated as part of the test
+- Missing or incorrect dependencies are caught during testing
+- The module works correctly when used as intended by external consumers
+- Import errors surface immediately rather than being masked by test setup
+
+
+
+### End-to-End Testing Principles
+
+Tests must validate the **end-to-end behavior** of the code, not its internal implementation:
+
+1. **Test behavior, not implementation** - Tests should verify what the code does, not how it does it internally
+2. **Tests should not break on refactoring** - If the internal implementation changes but the behavior remains the same, tests should still pass
+3. **Use public interfaces only** - Always interact with the code through its intended endpoints/APIs
+
+### Minimize Test-Side Implementation
+
+1. **Use the tested code's endpoints for everything** - Exercise as much of the actual code as possible by using its public interface
+2. **Do not import internal dependencies** - The tested code should handle its own imports; tests should not facilitate them
+3. **Do not manipulate internal variables** - Use the code's public methods to set up state rather than directly accessing internals
+4. **Let the code do the work** - If the tested code can perform an operation, use it rather than reimplementing the logic in tests
+
+### Reference Models
+
+The **only exception** for implementing logic in tests is when creating a **reference model**:
+- When you need to compare the code's output against expected results
+- When you need to validate correctness against a known-good implementation
+- In these cases, clearly document that the test logic serves as a reference model

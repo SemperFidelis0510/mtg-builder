@@ -1,0 +1,112 @@
+---
+alwaysApply: true
+---
+
+# Strict Error Handling — No Swallowing, No Fallbacks
+
+These rules are **mandatory**. The agent must never violate them. When in doubt, **raise and log an error**; never hide or soften failures on its own.
+
+---
+
+## 1. Never Swallow or Hide Errors
+
+- **Never** catch an exception and then `return None`, `return False`, `return []`, `pass`, or continue execution as if nothing happened.
+- **Never** use `try/except` solely to make an error "disappear" (e.g. to fix a compilation or runtime error by catching it and returning a safe value).
+- If something is wrong (invalid input, missing resource, failed operation), the process must **fail visibly**: log an error (if a logger is available) and **raise an exception** (or **do not catch** the native exception so it propagates).
+- **Never** log at Warning or Debug when a precondition or assumption is violated (e.g. missing required input, file not found when it is required). In such cases you **must** log at **Error** (if a logger exists) and **raise** an exception. Warning/Debug are not acceptable for "we don't have what we need to run this function."
+
+---
+
+## 2. Improper Input — Never Return or Sweep; Only Raise
+
+- If a function has **assumptions** about its inputs (non-null, non-empty, valid path, valid type, etc.), and those assumptions are **not satisfied**, you must **not**:
+  - `return None` or return any fallback value,
+  - `return` early without raising,
+  - Skip the call or "continue" as if the input were valid.
+- You **must**:
+  - **Raise an exception** (e.g. `ValueError`, `FileNotFoundError`, `TypeError`) with a clear message including the invalid value/context, and
+  - **Log an error** with the project logger (e.g. `LOGGER.Error(0, message)`) before raising, if a logger is available.
+- **Assertions** to check for proper input are **good**. Use them to document and enforce preconditions. But if the check fails, the only acceptable response is to **raise** (or let an assertion failure propagate). **Sweeping** improper input (returning, skipping, or defaulting) is **wrong**.
+
+---
+
+## 3. No Fallbacks for Improper Input or Bad Output
+
+- **No fallbacks** when input is improper or when an operation produces bad/empty output that does not meet the function's contract.
+- Do **not** return a default value, empty collection, or "safe" placeholder when:
+  - Required input is missing, invalid, or wrong type, or
+  - A called function returns something invalid/empty and the caller expects valid data.
+- The only acceptable responses are: **raise an exception** (and log error if logger available), or **do not catch** an existing exception so it propagates.
+- If you need to **filter** or **validate** the **output** of a function, do it with **assertions** (or explicit checks that then raise). You may **not** "fix" bad output by returning empty or fallback output instead of failing.
+
+---
+
+## 4. Empty or Fallback Behavior Only With Explicit User Permission
+
+- The agent **has no authority** to add fallbacks, support for specific empty input/output, or to reduce an error to a warning on its own.
+- **Only** in these cases is it allowed:
+  - The **user has explicitly asked** for that behavior (e.g. "treat missing file as empty"), or
+  - The agent **explicitly asks the user for permission** to add it, and only when it is **genuinely needed**.
+- If the agent thinks a fallback or "optional" behavior might be useful, it **must not** implement it without asking. It must **ask the user** and get explicit acceptance first.
+
+---
+
+## 5. Fixing Bugs — Never Hide the Bug; Fix the Cause
+
+- When fixing **compilation or runtime errors**, the agent **must not** "contain" the error with try/except or by returning a safe value so that the bug appears to disappear.
+- The agent **must** find the **root cause** (e.g. wrong call site, wrong type, missing file, invalid state) and **fix the code logic** so that the invalid case does not occur. Prefer the "hard" fix over masking.
+- **Only** if the agent sees **no other option** (e.g. the error is truly unavoidable in the current design) may it **ask the user** to allow ignoring this specific error. Even then:
+  - The error **must still be logged** (at least as a **warning**), and
+  - The agent **must get the user's explicit acceptance** before adding any such handling.
+
+---
+
+## 6. Summary — What the Agent Must Do
+
+| Situation | Allowed | Forbidden |
+|-----------|--------|-----------|
+| Invalid/missing input | Raise exception + log error (if logger) | Return None/empty/fallback, skip, continue, log Warning/Debug only |
+| Bad or unexpected output from a call | Assert or check then raise; fix caller/callee logic | Return empty/fallback output to "handle" bad result |
+| Exception already raised | Let it propagate; optionally wrap with context and re-raise | Catch and return/suppress/pass |
+| Preconditions not met | Assertions + raise; log error | Early return, default value, fallback path |
+| Adding fallback / optional behavior | Only if user explicitly asked or agent asked and user accepted | Adding on agent's own initiative |
+| Fixing a bug | Find root cause, fix logic | Catch exception or return safe value to hide the bug |
+
+---
+
+## 7. Reference Pattern
+
+```python
+# Good: validate input, then raise + log if invalid
+def process(path: Path, config: dict) -> Result:
+    if not path or not path.is_file():
+        LOGGER.Error(0, f"process: required file not found: {path}")
+        raise FileNotFoundError(f"process: required file not found: {path}")
+    if "required_key" not in config:
+        LOGGER.Error(0, f"process: missing required_key in config")
+        raise ValueError("process: missing required_key in config")
+    result = do_work(path, config)
+    assert result is not None, "do_work must not return None"
+    return result
+
+# Bad: sweeping invalid input
+def process(path: Path, config: dict) -> Optional[Result]:
+    if not path or not path.is_file():
+        return None  # FORBIDDEN
+    if "required_key" not in config:
+        LOGGER.Warning(0, "missing key, using default")  # FORBIDDEN for required input
+        config = {**config, "required_key": default}
+    ...
+```
+
+The agent must follow the "Good" pattern and never introduce the "Bad" pattern unless the user has explicitly requested it or explicitly accepted it after the agent asked.
+
+
+
+---
+
+## 8. No dict.get() with defaults
+
+- **Never** use `dict.get(key, default)` (e.g. `my_dict.get(key, None)`, `my_dict.get(key, "")`, `my_dict.get(key, False)`) when the key is expected to exist. Such usage hides missing keys and masks bugs.
+- **Use direct key access:** `my_dict[key]`. If the key is missing, `KeyError` will surface.
+- If a key is truly optional, handle it explicitly (e.g. `if key in my_dict: ...` or check then raise with a clear message); do **not** use a silent default from `.get()`.

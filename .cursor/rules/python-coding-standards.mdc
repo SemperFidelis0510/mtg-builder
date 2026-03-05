@@ -1,0 +1,157 @@
+---
+description: "Python coding standards: formatting, imports, type hints, error handling, performance, exceptions, logging, and workspace hygiene"
+globs: *.py
+alwaysApply: false
+---
+# Python Coding Standards
+
+## Multiline Text Blocks
+
+When defining large multiline text blocks (documentation, templates, embedded content), always use `f""" ... """` format even if interpolation is not currently needed. This ensures future extensibility and uniformity. Keep indentation correct so blocks don't break code or harm readability.
+
+```python
+text = f"""
+    Your
+    Multiline
+    Text
+"""
+
+if var_defined:
+    text = f"""
+        Your
+        Multiline
+        Text
+    """
+```
+
+## Import Organization
+
+Group imports in this order (separate with comments, NOT blank lines):
+1. Standard library imports
+2. Third-party imports (numpy, pandas, etc.)
+3. RBS infrastructure imports (Misc, RbsCore, p4Utils directories)
+4. Current directory modules
+5. Current tool/category modules (e.g., FvFlow/fv_utils when in FvFlow/McverFlowLib)
+6. Other RBS tool/category modules
+
+Rules:
+- Use absolute imports when possible
+- Avoid wildcard imports (`from module import *`)
+- Place `sys.path.append` statements before their corresponding imports
+
+```python
+# Standard library imports
+import os
+import sys
+from pathlib import Path
+from typing import Optional, List, Dict
+# Third-party imports
+import numpy as np
+import pandas as pd
+# RBS Infrastructure imports
+RBS_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+sys.path.append(os.path.join(RBS_DIR, 'RbsCore'))
+from rbs_class import rbs_class
+from rbs_general import rbs_general
+from RbsConfigTools import RbsConfigTools
+# Current tool modules
+sys.path.append(os.path.join(RBS_DIR, 'FvFlow', 'fv_utils'))
+from ConstantsFv import MCVER_TOOL
+```
+
+## Code Structure
+
+- **Function/Method Size**: Keep to 30 lines or fewer when possible
+- **Class Size**: Limit to 300 lines; consider breaking up larger classes
+- **Module Organization**: Group related functionality; avoid "kitchen sink" modules
+
+## Type Hints (Mandatory)
+
+- **ALL function/method parameters**: `def ProcessData(items: List[str], max_count: int)`
+- **ALL return values**: `-> Dict[str, int]:`
+- **ALL class attributes**: `self.cache: Dict[str, Any] = {}`
+- **ALL local variables on definition**: `result: List[int] = []`
+
+Rules:
+- **Nullable values**: Use `Optional[Type]` not `Union[Type, None]`
+- **File/directory paths**: Prefer `Path` over `str`
+- **Collections**: Be specific — `List[str]` not just `list`
+- **Complex dicts**: Use `TypedDict` for structured dictionaries
+- **Callables**: Use `Callable[[ArgType], ReturnType]` for function parameters
+
+```python
+from typing import Optional, List, Dict, Set, Callable
+from pathlib import Path
+
+class DataProcessor:
+    max_retries: int = 3
+    supported_formats: Set[str] = {'json', 'xml', 'csv'}
+
+    def __init__(self, config_path: Path):
+        self.config_path: Path = config_path
+        self.data_cache: Dict[str, List[str]] = {}
+
+def ProcessData(input_data: List[str], max_items: Optional[int] = None) -> Dict[str, int]:
+    result: Dict[str, int] = {}
+    max_to_process: int = max_items if max_items else len(input_data)
+    return result
+```
+
+## Path Handling
+
+- **Prefer `pathlib.Path`** for path operations (object-oriented, more readable)
+- **Alternative**: `os.path` module is acceptable if explicitly requested by user
+- **AVOID**: String concatenation for paths
+
+```python
+# Good: pathlib.Path
+from pathlib import Path
+config_path = Path("/home/config/settings.ini")
+new_path = config_path.parent / "backup" / "old_settings.ini"
+content = config_path.read_text()
+
+# Bad: string operations
+config_path = "/home/config/settings.ini"
+new_path = os.path.join(os.path.dirname(config_path), "backup", "old_settings.ini")
+```
+
+## Performance Guidelines
+
+- **Counting**: Use `collections.Counter` instead of manual counting
+- **Large datasets**: Use generators over lists when possible
+- **String concatenation**: Use `''.join()` not `+=` in loops
+- **File processing**: Process line-by-line, not `readlines()` for large files
+- **Caching**: Use `functools.lru_cache` for expensive computations
+- **Delete references**: `del large_object` when done to free memory
+
+## Error Handling & Strict Validation
+
+**All error-handling behavior is defined in the always-applied rule:** `.cursor/rules/error-handling-strict.mdc`. That rule forbids error swallowing, fallbacks for improper input/output, and silent returns; it requires raising and logging errors. The agent must follow it in addition to this file.
+
+- **Assertions**: Use assertions at the start of functions to enforce critical argument constraints, and after calling helpers to enforce valid return values. If a check fails, raise (or let the assertion fail); do not return or sweep.
+- **Type safety**: Rely on strict typing. Do not cast to `any` or suppress type errors just to get code to run.
+- **Exception design**: Prefer specific exception types (e.g. `ValueError`, `FileNotFoundError`, custom subclasses) with clear messages. When re-raising, use `raise NewError(...) from e` to preserve chain.
+- **No silencing**: Do not catch exceptions just to `pass` or return a safe value; see error-handling-strict.mdc for full rules.
+
+## Logging Format
+
+- Don't use line breaks at the beginning of logging entries.
+
+## Workspace Hygiene
+
+### No Meta-Files
+- Do not create text files (.txt), markdown files (.md), or log files to describe plans, summarize changes, or document runs.
+- Output must be actual code changes, not meta-commentary stored in the file system.
+- If you accidentally create a non-essential file, delete it immediately.
+
+### Direct Editing
+- NEVER create new files to "test" or "update" existing ones (e.g., `main_v2.py`, `utils_new.js`). Edit existing files directly.
+- Trust version control for history. Do not leave commented-out blocks of old code.
+
+### DRY (Don't Repeat Yourself)
+- Before writing a new function or utility, search the codebase for existing implementations.
+- If a function exists, import and reuse it.
+- If an existing function is close to what you need, refactor it rather than duplicating.
+
+### Immediate Action
+- When a request is made, go directly to the relevant file and apply changes. Do not outline thinking in a new file.

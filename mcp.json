@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "mtg-cards": {
+      "command": "cmd",
+      "args": ["/c", "main.bat", "serve"],
+      "cwd": "d:\\scripts\\MTG"
+    }
+  }
+}

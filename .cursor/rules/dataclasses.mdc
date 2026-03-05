@@ -1,0 +1,46 @@
+---
+globs: *.py
+alwaysApply: false
+---
+# Dataclass Conventions
+
+## Every Dataclass Must Have an Iteration Method
+
+All dataclasses must include an `__iter__` method that yields `(field_name, value)` tuples:
+
+```python
+from dataclasses import dataclass, fields
+
+@dataclass
+class MetricResult:
+    accuracy: float
+    precision: float
+    recall: float
+    f1_score: float
+
+    def __iter__(self):
+        for f in fields(self):
+            yield f.name, getattr(self, f.name)
+```
+
+## Use Iteration Instead of Repetitive Per-Field Code
+
+```python
+# BAD — repeating the same operation per field
+print(f"accuracy: {result.accuracy}")
+print(f"precision: {result.precision}")
+print(f"recall: {result.recall}")
+print(f"f1_score: {result.f1_score}")
+
+# GOOD — iterate using the built-in method
+for name, value in result:
+    print(f"{name}: {value}")
+```
+
+## Direct Field Access Is Fine
+
+Accessing specific fields directly (e.g. `result.accuracy`) is perfectly fine when only a few fields are needed. The iteration method targets **repetitive per-field code**, not every field access.
+
+## Key Principle
+
+If you find yourself writing the same pattern for each field of a dataclass, **use the `__iter__` method and loop**.
