@@ -1,0 +1,75 @@
+---
+description: Comprehensive overview of the MTG Card Search MCP repository structure, purpose, and logic distribution.
+globs: 
+---
+# MTG Card Search MCP - Repository Overview
+
+This repository hosts a **Model Context Protocol (MCP)** server that provides semantic and structured search capabilities for Magic: The Gathering (MTG) cards. It is designed to be integrated with Cursor to allow AI agents to query the MTG card database.
+
+## 1. Project Purpose
+
+The main goal is to expose MTG card data to LLMs via MCP tools:
+-   **Semantic Search**: Find cards by meaning (e.g., "creatures that draw cards on attack") using vector embeddings.
+-   **Structured Search**: Filter cards by specific attributes (name, type, color, mana value, etc.).
+
+## 2. File System Structure
+
+The project follows a modular Python structure:
+
+```text
+D:/scripts/MTG/
+├── server.py              # [ENTRY POINT] The MCP server implementation using FastMCP.
+├── main.bat               # [UTILITY] Windows batch script for install, download, build, and serve.
+├── mcp.json               # [CONFIG] Cursor MCP configuration file.
+├── requirements.txt       # [DEPS] Python dependencies (torch, sentence-transformers, chromadb, etc.).
+├── src/
+│   ├── lib/               # [CORE LOGIC]
+│   │   ├── config.py      # -> Constants, paths, and model configuration.
+│   │   ├── card_data.py   # -> Logic for loading AtomicCards.json and structured filtering.
+│   │   ├── search.py      # -> Logic for semantic search (ChromaDB + Embeddings).
+│   │   └── build_rag.py   # -> Scripts for downloading data and building the vector index.
+│   ├── obj/               # [MODELS]
+│   │   └── card_face.py   # -> Data class representing a single card face.
+│   └── utils/             # [UTILS]
+│       └── logger.py      # -> Centralized logging configuration.
+├── data/                  # [DATA] Stores AtomicCards.json (downloaded from MTGJSON).
+├── chroma_db/             # [STORAGE] Persistent ChromaDB vector index.
+└── logs/                  # [LOGS] Server log files.
+```
+
+## 3. Logic Distribution
+
+### A. MCP Server (`server.py`)
+-   Initializes the `FastMCP` server.
+-   Registers two main tools:
+    1.  `semantic_search_card(query, n_results)`: Delegates to `src.lib.search.search_cards`.
+    2.  `plain_search_card(...)`: Delegates to `src.lib.card_data.filter_cards`.
+-   Handles server startup and stdio communication.
+
+### B. Semantic Search (`src/lib/search.py`)
+-   **Lazy Loading**: Initializes the `SentenceTransformer` model and `chromadb.PersistentClient` only when needed.
+-   **Querying**: Encodes the natural language query into a vector and queries the ChromaDB collection.
+-   **Formatting**: Converts ChromaDB results into `CardFace` objects and formats them as a string response.
+
+### C. Structured Search & Data (`src/lib/card_data.py`)
+-   **Data Loading**: Loads the raw `AtomicCards.json` file.
+-   **Filtering**: Implements `filter_cards` to apply AND-based filters (name, oracle text, colors, type line, etc.) against the loaded data.
+
+### D. Data Ingestion (`src/lib/build_rag.py` called via `main.bat`)
+-   **Download**: Fetches the latest `AtomicCards.json` from MTGJSON.
+-   **Build**: Parses cards, generates embeddings using the specified model (e.g., `all-MiniLM-L6-v2`), and upserts them into `chroma_db`.
+
+## 4. Key Configuration
+
+-   **Environment Variables**: `MTG_LOG_LEVEL` controls logging verbosity (default: INFO).
+-   **Paths & Constants**: Defined in `src/lib/config.py`.
+-   **Execution**:
+    -   Use `main.bat serve` to start the server.
+    -   Use `main.bat build` to rebuild the index.
+
+## 5. Development Guidelines
+
+-   **Logging**: Always use `src.utils.logger.LOGGER`.
+-   **Type Hinting**: Enforce strict type hints for all functions and classes.
+-   **Error Handling**: Follow strict error handling rules (raise exceptions, do not swallow errors).
+-   **Dependencies**: Manage via `requirements.txt` and `main.bat install`.
