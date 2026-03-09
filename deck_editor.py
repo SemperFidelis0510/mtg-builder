@@ -19,4 +19,4 @@ def _open_browser_after_delay() -> None:
 
 if __name__ == "__main__":
     _open_browser_after_delay()
-    uvicorn.run(app, host=_HOST, port=_PORT)
+    uvicorn.run(app, host=_HOST, port=_PORT, use_colors=False)

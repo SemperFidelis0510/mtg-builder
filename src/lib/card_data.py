@@ -50,12 +50,14 @@ def _parse_colors(colors_str: str) -> set[str]:
     return {c.strip().upper() for c in colors_str.split(",") if c.strip()}
 
 
-def filter_cards(
+def filter_cards_list(
     name: str = "",
     oracle_text: str = "",
     type_line: str = "",
     colors: str = "",
     color_identity: str = "",
+    color_identity_colorless: bool = False,
+    colorless_only: bool = False,
     mana_value: float = -1.0,
     mana_value_min: float = -1.0,
     mana_value_max: float = -1.0,
@@ -66,14 +68,17 @@ def filter_cards(
     supertype: str = "",
     format_legal: str = "",
     n_results: int = 20,
-) -> str:
-    """Filter MTG cards by exact/filter properties. All filters are AND-combined. At least one filter must be set."""
+    offset: int = 0,
+) -> list[Card]:
+    """Filter MTG cards by exact/filter properties. All filters are AND-combined. Returns list of Card. At least one filter must be set. offset/n_results support pagination."""
     has_filter: bool = (
         bool(name.strip())
         or bool(oracle_text.strip())
         or bool(type_line.strip())
         or bool(colors.strip())
         or bool(color_identity.strip())
+        or color_identity_colorless
+        or colorless_only
         or mana_value >= 0
         or mana_value_min >= 0
         or mana_value_max >= 0
@@ -85,8 +90,8 @@ def filter_cards(
         or bool(format_legal.strip())
     )
     if not has_filter:
-        LOGGER.error(0, "filter_cards: at least one filter parameter must be set")
-        raise ValueError("filter_cards: at least one filter parameter must be set")
+        LOGGER.error(0, "filter_cards_list: at least one filter parameter must be set")
+        raise ValueError("filter_cards_list: at least one filter parameter must be set")
 
     cards: list[Card] = get_card_data()
     name_lower: str = name.strip().lower() if name else ""
@@ -102,6 +107,7 @@ def filter_cards(
     format_lower: str = format_legal.strip().lower() if format_legal else ""
 
     results: list[Card] = []
+    skipped: int = 0
     for card in cards:
         if name_lower and name_lower not in card.name.lower():
             continue
@@ -113,10 +119,19 @@ def filter_cards(
             card_colors: set[str] = {c.upper() for c in card.colors}
             if card_colors != colors_filter:
                 continue
-        if color_identity_filter:
+        if color_identity_filter or color_identity_colorless:
             card_identity: set[str] = {c.upper() for c in card.color_identity}
-            if not card_identity.issubset(color_identity_filter):
-                continue
+            if color_identity_filter and color_identity_colorless:
+                if not card_identity.issubset(color_identity_filter) and len(card_identity) > 0:
+                    continue
+            elif color_identity_filter:
+                if not card_identity.issubset(color_identity_filter):
+                    continue
+            elif color_identity_colorless:
+                if len(card_identity) > 0:
+                    continue
+        if colorless_only and len(card.colors) > 0:
+            continue
         if mana_value >= 0 and card.mana_value != mana_value:
             continue
         if mana_value_min >= 0 and card.mana_value < mana_value_min:
@@ -148,11 +163,54 @@ def filter_cards(
             if legal_val != "legal":
                 continue
 
+        if skipped < offset:
+            skipped += 1
+            continue
         results.append(card)
         if len(results) >= n_results:
             break
 
-    parts: list[str] = []
-    for i, card in enumerate(results, 1):
-        parts.append(card.format_display(i, len(results)))
+    return results
+
+
+def filter_cards(
+    name: str = "",
+    oracle_text: str = "",
+    type_line: str = "",
+    colors: str = "",
+    color_identity: str = "",
+    color_identity_colorless: bool = False,
+    colorless_only: bool = False,
+    mana_value: float = -1.0,
+    mana_value_min: float = -1.0,
+    mana_value_max: float = -1.0,
+    power: str = "",
+    toughness: str = "",
+    keywords: str = "",
+    subtype: str = "",
+    supertype: str = "",
+    format_legal: str = "",
+    n_results: int = 20,
+) -> str:
+    """Filter MTG cards by exact/filter properties. All filters are AND-combined. At least one filter must be set."""
+    results: list[Card] = filter_cards_list(
+        name=name,
+        oracle_text=oracle_text,
+        type_line=type_line,
+        colors=colors,
+        color_identity=color_identity,
+        color_identity_colorless=color_identity_colorless,
+        colorless_only=colorless_only,
+        mana_value=mana_value,
+        mana_value_min=mana_value_min,
+        mana_value_max=mana_value_max,
+        power=power,
+        toughness=toughness,
+        keywords=keywords,
+        subtype=subtype,
+        supertype=supertype,
+        format_legal=format_legal,
+        n_results=n_results,
+    )
+    parts: list[str] = [card.format_display(i, len(results)) for i, card in enumerate(results, 1)]
     return "\n\n".join(parts) if parts else "No cards found."

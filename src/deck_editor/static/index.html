@@ -113,6 +113,52 @@
     }
     .autocomplete-dropdown li:hover,
     .autocomplete-dropdown li.highlight { background: var(--border); }
+    .adv-search-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.6);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      box-sizing: border-box;
+    }
+    .adv-search-modal.open { display: flex; }
+    .adv-search-modal .modal-content {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      width: 100%;
+      max-width: 920px;
+      max-height: 90vh;
+      overflow: hidden;
+      position: relative;
+    }
+    .adv-search-modal .modal-close {
+      position: absolute;
+      top: 0.5rem;
+      right: 0.5rem;
+      z-index: 1001;
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      background: var(--border);
+      border: none;
+      border-radius: 4px;
+      color: var(--text);
+      font-size: 1.25rem;
+      line-height: 1;
+      cursor: pointer;
+    }
+    .adv-search-modal .modal-close:hover { background: var(--accent); }
+    .adv-search-modal .modal-iframe {
+      width: 100%;
+      height: 85vh;
+      min-height: 400px;
+      border: none;
+      display: block;
+    }
     .main {
       display: flex;
       flex: 1;
@@ -238,6 +284,23 @@
     .removed-list:not(:empty) { border-color: transparent; }
     .removed-list li { margin: 0; padding: 0; }
     .sortable-drag { opacity: 0.8; }
+    .card-preview {
+      position: fixed;
+      z-index: 10000;
+      display: none;
+      border-radius: 12px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+      border: 2px solid var(--border);
+      pointer-events: auto;
+    }
+    .card-preview.visible { display: block; }
+    .card-preview img {
+      width: 244px;
+      height: 340px;
+      object-fit: cover;
+      border-radius: 10px;
+      display: block;
+    }
   </style>
 </head>
 <body>
@@ -257,6 +320,7 @@
       <ul class="autocomplete-dropdown" id="autocompleteDropdown" style="display: none;"></ul>
     </div>
     <button type="button" class="add-card-btn" id="addCardBtn" title="Add the searched card to the deck">Add to deck</button>
+    <button type="button" class="add-card-btn" id="advancedSearchBtn" title="Open advanced search by criteria">Advanced Search</button>
     <span class="search-msg" id="searchMsg"></span>
   </div>
   <main class="main">
@@ -268,6 +332,14 @@
       <ul class="removed-list" id="removedZone"></ul>
     </div>
   </main>
+  <div id="cardPreview" class="card-preview" aria-hidden="true"><img src="" alt=""></div>
+
+  <div class="adv-search-modal" id="advSearchModal" aria-hidden="true">
+    <div class="modal-content">
+      <button type="button" class="modal-close" id="advSearchModalClose" aria-label="Close">×</button>
+      <iframe class="modal-iframe" id="advSearchIframe" src="about:blank" title="Advanced Card Search"></iframe>
+    </div>
+  </div>
 
   <script>
     const TYPE_KEYS = [
@@ -288,6 +360,47 @@
     function scryfallImageUrl(name) {
       return 'https://api.scryfall.com/cards/named?exact=' + encodeURIComponent(name) + '&format=image&version=normal';
     }
+    function scryfallImageUrlLarge(name) {
+      return 'https://api.scryfall.com/cards/named?exact=' + encodeURIComponent(name) + '&format=image&version=large';
+    }
+    function showCardPreview(name, x, y) {
+      var el = document.getElementById('cardPreview');
+      if (!el || !name) return;
+      var img = el.querySelector('img');
+      img.src = scryfallImageUrlLarge(name);
+      img.alt = name;
+      el.style.left = (x + 16) + 'px';
+      el.style.top = (y + 16) + 'px';
+      el.classList.add('visible');
+      el.setAttribute('aria-hidden', 'false');
+    }
+    function hideCardPreview() {
+      var el = document.getElementById('cardPreview');
+      if (el) {
+        el.classList.remove('visible');
+        el.setAttribute('aria-hidden', 'true');
+      }
+    }
+    document.addEventListener('mouseover', function (e) {
+      var stack = e.target.closest('.card-stack');
+      if (stack && stack.dataset.name) showCardPreview(stack.dataset.name, e.clientX, e.clientY);
+      var preview = document.getElementById('cardPreview');
+      if (e.target === preview || (preview && preview.contains(e.target))) return;
+    });
+    document.addEventListener('mouseout', function (e) {
+      var stack = e.target.closest('.card-stack');
+      var related = e.relatedTarget;
+      var preview = document.getElementById('cardPreview');
+      if (stack && stack.dataset.name && (!related || !stack.contains(related)) && (!preview || !preview.contains(related))) hideCardPreview();
+      if (preview && (e.target === preview || preview.contains(e.target)) && (!related || !preview.contains(related))) hideCardPreview();
+    });
+    document.addEventListener('mousemove', function (e) {
+      var preview = document.getElementById('cardPreview');
+      if (preview && preview.classList.contains('visible')) {
+        preview.style.left = (e.clientX + 16) + 'px';
+        preview.style.top = (e.clientY + 16) + 'px';
+      }
+    });
 
     function collapseToStacks(arr) {
       if (!Array.isArray(arr)) return [];
@@ -583,6 +696,26 @@
       });
       input.addEventListener('blur', function () {
         setTimeout(hideAutocomplete, 180);
+      });
+    })();
+
+    (function initAdvSearchModal() {
+      var modal = document.getElementById('advSearchModal');
+      var iframe = document.getElementById('advSearchIframe');
+      var closeBtn = document.getElementById('advSearchModalClose');
+      document.getElementById('advancedSearchBtn').addEventListener('click', function () {
+        iframe.src = '/search';
+        modal.classList.add('open');
+        modal.setAttribute('aria-hidden', 'false');
+      });
+      function closeModal() {
+        modal.classList.remove('open');
+        modal.setAttribute('aria-hidden', 'true');
+        iframe.src = 'about:blank';
+      }
+      closeBtn.addEventListener('click', closeModal);
+      modal.addEventListener('click', function (e) {
+        if (e.target === modal) closeModal();
       });
     })();
 

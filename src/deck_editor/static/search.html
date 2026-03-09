@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Advanced Card Search</title>
+  <style>
+    :root {
+      --bg: #1a1a2e;
+      --panel: #16213e;
+      --border: #0f3460;
+      --text: #e8e8e8;
+      --accent: #e94560;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 1rem;
+    }
+    h1 { margin: 0 0 1rem 0; font-size: 1.25rem; }
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 0.5rem 1rem;
+      margin-bottom: 1rem;
+    }
+    .form-grid label {
+      display: block;
+      font-size: 0.8rem;
+      margin-bottom: 2px;
+      color: #a0a0a0;
+    }
+    .form-grid input[type="text"],
+    .form-grid input[type="number"],
+    .form-grid select {
+      width: 100%;
+      padding: 0.35rem 0.5rem;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      font-size: 0.9rem;
+    }
+    .colors-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+    .colors-row .color-chip {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      border: 2px solid transparent;
+      position: relative;
+    }
+    .colors-row .color-chip:hover { border-color: var(--text); }
+    .colors-row .color-chip:has(input:checked) { border-color: #fff; box-shadow: 0 0 0 2px var(--bg); }
+    .colors-row .color-chip input { margin: 0; opacity: 0; position: absolute; inset: 0; width: 100%; height: 100%; cursor: pointer; z-index: 1; }
+    .color-W { background: #f0e6d8; }
+    .color-U { background: #a8d0e6; }
+    .color-B { background: #3d3d3d; }
+    .color-R { background: #d3544a; }
+    .color-G { background: #7cb35b; }
+    .color-C { background: #888; }
+    .form-actions { margin-bottom: 1rem; }
+    .form-actions button {
+      padding: 0.5rem 1rem;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .form-actions button:hover { opacity: 0.9; }
+    .search-msg {
+      font-size: 0.85rem;
+      margin-bottom: 0.5rem;
+      color: #a0a0a0;
+    }
+    .search-msg.error { color: #f88; }
+    .search-msg.ok { color: #6f6; }
+    .results-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+    .results-grid li { margin: 0; padding: 0; }
+    .result-card {
+      width: 150px;
+      cursor: pointer;
+      border-radius: 8px;
+      border: 2px solid transparent;
+      transition: border-color 0.15s;
+    }
+    .result-card:hover { border-color: var(--border); }
+    .result-card img {
+      width: 100%;
+      height: 210px;
+      object-fit: cover;
+      border-radius: 6px;
+      display: block;
+    }
+    .result-card .name {
+      font-size: 0.75rem;
+      padding: 2px 4px;
+      text-align: center;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .card-preview {
+      position: fixed;
+      z-index: 10000;
+      display: none;
+      border-radius: 12px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+      border: 2px solid var(--border);
+      pointer-events: auto;
+    }
+    .card-preview.visible { display: block; }
+    .card-preview img {
+      width: 244px;
+      height: 340px;
+      object-fit: cover;
+      border-radius: 10px;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <h1>Advanced Card Search</h1>
+  <p class="search-msg" id="searchMsg">Set at least one filter, then click Search. Double-click a card to add it to the deck.</p>
+
+  <form id="searchForm" class="form-grid">
+    <div>
+      <label for="name">Name</label>
+      <input type="text" id="name" name="name" placeholder="e.g. Bolt">
+    </div>
+    <div>
+      <label for="oracle_text">Oracle text</label>
+      <input type="text" id="oracle_text" name="oracle_text" placeholder="contains...">
+    </div>
+    <div>
+      <label for="type">Type</label>
+      <select id="type" name="type">
+        <option value="">None</option>
+        <option value="Creature">Creature</option>
+        <option value="Land">Land</option>
+        <option value="Instant">Instant</option>
+        <option value="Sorcery">Sorcery</option>
+        <option value="Artifact">Artifact</option>
+        <option value="Enchantment">Enchantment</option>
+        <option value="Planeswalker">Planeswalker</option>
+        <option value="Tribal">Tribal</option>
+      </select>
+    </div>
+    <div>
+      <label for="subtype">Subtype</label>
+      <select id="subtype" name="subtype">
+        <option value="">None</option>
+      </select>
+    </div>
+    <div>
+      <label for="supertype">Supertype</label>
+      <select id="supertype" name="supertype">
+        <option value="">None</option>
+        <option value="Legendary">Legendary</option>
+        <option value="Snow">Snow</option>
+        <option value="Basic">Basic</option>
+        <option value="World">World</option>
+      </select>
+    </div>
+    <div>
+      <label>Colors</label>
+      <div class="colors-row">
+        <label class="color-chip color-W" title="White"><input type="checkbox" id="cW" name="color" value="W"></label>
+        <label class="color-chip color-U" title="Blue"><input type="checkbox" id="cU" name="color" value="U"></label>
+        <label class="color-chip color-B" title="Black"><input type="checkbox" id="cB" name="color" value="B"></label>
+        <label class="color-chip color-R" title="Red"><input type="checkbox" id="cR" name="color" value="R"></label>
+        <label class="color-chip color-G" title="Green"><input type="checkbox" id="cG" name="color" value="G"></label>
+        <label class="color-chip color-C" title="Colorless"><input type="checkbox" id="cC" name="colorless"></label>
+      </div>
+    </div>
+    <div>
+      <label>Color identity</label>
+      <div class="colors-row" id="colorIdentityRow">
+        <label class="color-chip color-W" title="White"><input type="checkbox" name="color_identity" value="W"></label>
+        <label class="color-chip color-U" title="Blue"><input type="checkbox" name="color_identity" value="U"></label>
+        <label class="color-chip color-B" title="Black"><input type="checkbox" name="color_identity" value="B"></label>
+        <label class="color-chip color-R" title="Red"><input type="checkbox" name="color_identity" value="R"></label>
+        <label class="color-chip color-G" title="Green"><input type="checkbox" name="color_identity" value="G"></label>
+        <label class="color-chip color-C" title="Colorless"><input type="checkbox" id="ciC" name="color_identity_colorless"></label>
+      </div>
+    </div>
+    <div>
+      <label for="mana_value_min">Mana cost min</label>
+      <select id="mana_value_min" name="mana_value_min">
+        <option value="-1">None</option>
+        <option value="0">0</option>
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value="4">4</option>
+        <option value="5">5</option>
+        <option value="6">6</option>
+        <option value="7">7</option>
+        <option value="8">8</option>
+        <option value="9">9</option>
+        <option value="10">10</option>
+        <option value="11">11</option>
+        <option value="12">12</option>
+        <option value="13">13</option>
+        <option value="14">14</option>
+        <option value="15">15</option>
+        <option value="16">16</option>
+        <option value="17">17</option>
+        <option value="18">18</option>
+        <option value="19">19</option>
+        <option value="20">20</option>
+      </select>
+    </div>
+    <div>
+      <label for="mana_value_max">Mana cost max</label>
+      <select id="mana_value_max" name="mana_value_max">
+        <option value="-1">None</option>
+        <option value="0">0</option>
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value="4">4</option>
+        <option value="5">5</option>
+        <option value="6">6</option>
+        <option value="7">7</option>
+        <option value="8">8</option>
+        <option value="9">9</option>
+        <option value="10">10</option>
+        <option value="11">11</option>
+        <option value="12">12</option>
+        <option value="13">13</option>
+        <option value="14">14</option>
+        <option value="15">15</option>
+        <option value="16">16</option>
+        <option value="17">17</option>
+        <option value="18">18</option>
+        <option value="19">19</option>
+        <option value="20">20</option>
+      </select>
+    </div>
+    <div>
+      <label for="power">Power</label>
+      <input type="text" id="power" name="power" placeholder="e.g. 2">
+    </div>
+    <div>
+      <label for="toughness">Toughness</label>
+      <input type="text" id="toughness" name="toughness" placeholder="e.g. 2">
+    </div>
+    <div>
+      <label for="keywords">Keywords</label>
+      <input type="text" id="keywords" name="keywords" placeholder="e.g. flying">
+    </div>
+    <div>
+      <label for="format_legal">Format legal</label>
+      <input type="text" id="format_legal" name="format_legal" placeholder="e.g. commander">
+    </div>
+  </form>
+
+  <div class="form-actions">
+    <button type="submit" form="searchForm" id="searchBtn">Search</button>
+  </div>
+
+  <ul class="results-grid" id="resultsGrid"></ul>
+  <div id="cardPreview" class="card-preview" aria-hidden="true"><img src="" alt=""></div>
+
+  <script>
+    var SUBTYPES_BY_TYPE = {
+      'Creature': ['Elf', 'Human', 'Wizard', 'Dragon', 'Angel', 'Goblin', 'Zombie', 'Soldier', 'Warrior', 'Bird', 'Beast', 'Spirit', 'Elemental', 'Merfolk', 'Vampire', 'Demon', 'Cat', 'Dog', 'Insect', 'Hydra', 'Knight', 'Cleric', 'Rogue', 'Shaman'],
+      'Land': ['Island', 'Forest', 'Mountain', 'Plains', 'Swamp', 'Gate', 'Desert', 'Lair', 'Locus', 'Urza\'s', 'Mine', 'Power-Plant', 'Tower'],
+      'Artifact': ['Equipment', 'Vehicle', 'Fortification', 'Treasure', 'Food', 'Clue'],
+      'Enchantment': ['Aura', 'Saga', 'Shard', 'Cartouche', 'Curse', 'Shrine'],
+      'Instant': [],
+      'Sorcery': [],
+      'Planeswalker': [],
+      'Tribal': ['Elf', 'Human', 'Wizard', 'Goblin', 'Merfolk', 'Faerie', 'Soldier', 'Warrior', 'Spirit']
+    };
+
+    function updateSubtypeOptions() {
+      var typeSelect = document.getElementById('type');
+      var subtypeSelect = document.getElementById('subtype');
+      var typeVal = typeSelect.value.trim();
+      var list = typeVal && SUBTYPES_BY_TYPE[typeVal] ? SUBTYPES_BY_TYPE[typeVal] : [];
+      subtypeSelect.innerHTML = '<option value="">None</option>';
+      list.forEach(function (s) {
+        var opt = document.createElement('option');
+        opt.value = s;
+        opt.textContent = s;
+        subtypeSelect.appendChild(opt);
+      });
+    }
+
+    document.getElementById('type').addEventListener('change', updateSubtypeOptions);
+    updateSubtypeOptions();
+
+    function scryfallImageUrl(name) {
+      return 'https://api.scryfall.com/cards/named?exact=' + encodeURIComponent(name) + '&format=image&version=normal';
+    }
+    function scryfallImageUrlLarge(name) {
+      return 'https://api.scryfall.com/cards/named?exact=' + encodeURIComponent(name) + '&format=image&version=large';
+    }
+    function showCardPreview(name, x, y) {
+      var el = document.getElementById('cardPreview');
+      if (!el || !name) return;
+      var img = el.querySelector('img');
+      img.src = scryfallImageUrlLarge(name);
+      img.alt = name;
+      el.style.left = (x + 16) + 'px';
+      el.style.top = (y + 16) + 'px';
+      el.classList.add('visible');
+      el.setAttribute('aria-hidden', 'false');
+    }
+    function hideCardPreview() {
+      var el = document.getElementById('cardPreview');
+      if (el) {
+        el.classList.remove('visible');
+        el.setAttribute('aria-hidden', 'true');
+      }
+    }
+    document.addEventListener('mouseover', function (e) {
+      var card = e.target.closest('.result-card');
+      if (card && card.dataset.name) showCardPreview(card.dataset.name, e.clientX, e.clientY);
+    });
+    document.addEventListener('mouseout', function (e) {
+      var card = e.target.closest('.result-card');
+      var related = e.relatedTarget;
+      var preview = document.getElementById('cardPreview');
+      if (card && card.dataset.name && (!related || !card.contains(related)) && (!preview || !preview.contains(related))) hideCardPreview();
+      if (preview && (e.target === preview || preview.contains(e.target)) && (!related || !preview.contains(related))) hideCardPreview();
+    });
+    document.addEventListener('mousemove', function (e) {
+      var preview = document.getElementById('cardPreview');
+      if (preview && preview.classList.contains('visible')) {
+        preview.style.left = (e.clientX + 16) + 'px';
+        preview.style.top = (e.clientY + 16) + 'px';
+      }
+    });
+
+    function setMsg(text, isError) {
+      var el = document.getElementById('searchMsg');
+      el.textContent = text;
+      el.className = 'search-msg' + (isError ? ' error' : ' ok');
+    }
+
+    function buildBody() {
+      var body = {};
+      var name = document.getElementById('name').value.trim();
+      if (name) body.name = name;
+      var oracle_text = document.getElementById('oracle_text').value.trim();
+      if (oracle_text) body.oracle_text = oracle_text;
+      var typeVal = document.getElementById('type').value.trim();
+      if (typeVal) body.type = typeVal;
+      var subtypeVal = document.getElementById('subtype').value.trim();
+      if (subtypeVal) body.subtype = subtypeVal;
+      var colorChecks = document.querySelectorAll('input[name="color"]:checked');
+      var colorlessCheck = document.getElementById('cC').checked;
+      if (colorlessCheck && colorChecks.length === 0) {
+        body.colorless_only = true;
+      } else if (colorChecks.length > 0) {
+        body.colors = Array.from(colorChecks).map(function (c) { return c.value; }).join(',');
+      }
+      var identityChecks = document.querySelectorAll('input[name="color_identity"]:checked');
+      if (identityChecks.length > 0) {
+        body.color_identity = Array.from(identityChecks).map(function (c) { return c.value; }).join(',');
+      }
+      var ciColorlessEl = document.getElementById('ciC');
+      if (ciColorlessEl && ciColorlessEl.checked) body.color_identity_colorless = true;
+      var mana_value_min = parseInt(document.getElementById('mana_value_min').value, 10);
+      if (!isNaN(mana_value_min) && mana_value_min >= 0) body.mana_value_min = mana_value_min;
+      var mana_value_max = parseInt(document.getElementById('mana_value_max').value, 10);
+      if (!isNaN(mana_value_max) && mana_value_max >= 0) body.mana_value_max = mana_value_max;
+      var power = document.getElementById('power').value.trim();
+      if (power) body.power = power;
+      var toughness = document.getElementById('toughness').value.trim();
+      if (toughness) body.toughness = toughness;
+      var keywords = document.getElementById('keywords').value.trim();
+      if (keywords) body.keywords = keywords;
+      var supertypeVal = document.getElementById('supertype').value.trim();
+      if (supertypeVal) body.supertype = supertypeVal;
+      var format_legal = document.getElementById('format_legal').value.trim();
+      if (format_legal) body.format_legal = format_legal;
+      return body;
+    }
+
+    function makeCardEl(card) {
+      var name = card.name || '';
+      var li = document.createElement('li');
+      var wrap = document.createElement('div');
+      wrap.className = 'result-card';
+      wrap.dataset.name = name;
+      wrap.title = 'Double-click to add to deck: ' + name;
+      var img = document.createElement('img');
+      img.src = scryfallImageUrl(name);
+      img.alt = name;
+      img.loading = 'lazy';
+      img.onerror = function () { this.style.background = '#333'; this.style.minHeight = '210px'; };
+      var span = document.createElement('span');
+      span.className = 'name';
+      span.textContent = name;
+      wrap.appendChild(img);
+      wrap.appendChild(span);
+      wrap.addEventListener('dblclick', function () {
+        fetch('/api/add_card', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name })
+        }).then(function (r) {
+          if (r.ok) setMsg('Added: ' + name, false);
+          else return r.json().then(function (j) { setMsg(j.detail || 'Add failed', true); });
+        }).catch(function () { setMsg('Add failed', true); });
+      });
+      li.appendChild(wrap);
+      return li;
+    }
+
+    function renderResults(cards) {
+      var grid = document.getElementById('resultsGrid');
+      grid.innerHTML = '';
+      cards.forEach(function (card) {
+        grid.appendChild(makeCardEl(card));
+      });
+    }
+
+    function appendResults(cards) {
+      var grid = document.getElementById('resultsGrid');
+      cards.forEach(function (card) {
+        grid.appendChild(makeCardEl(card));
+      });
+    }
+
+    var PAGE_SIZE = 20;
+    var lastSearchBody = null;
+    var loadMoreInProgress = false;
+
+    function doSearch(offset, append) {
+      var body = buildBody();
+      var filterKeys = Object.keys(body).filter(function (k) { return k !== 'n_results' && k !== 'offset'; });
+      if (filterKeys.length === 0) {
+        setMsg('Set at least one search filter (name, type, colors, etc.).', true);
+        return;
+      }
+      body.offset = offset || 0;
+      body.n_results = PAGE_SIZE;
+      if (!append) lastSearchBody = buildBody();
+      setMsg(append ? 'Loading more…' : 'Searching…', false);
+      fetch('/api/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      }).then(function (r) {
+        return r.json().then(function (data) {
+          if (!r.ok) {
+            setMsg(data.detail || 'Search failed', true);
+            if (!append) renderResults([]);
+            loadMoreInProgress = false;
+            return;
+          }
+          var results = data.results || [];
+          if (append) {
+            appendResults(results);
+            var total = document.getElementById('resultsGrid').children.length;
+            setMsg(total + ' card(s) shown. Double-click a card to add to deck.' + (results.length === PAGE_SIZE ? ' Scroll for more.' : ''), false);
+          } else {
+            renderResults(results);
+            setMsg(results.length + ' card(s) found. Double-click a card to add to deck.' + (results.length === PAGE_SIZE ? ' Scroll for more.' : ''), false);
+          }
+          loadMoreInProgress = false;
+        });
+      }).catch(function () {
+        setMsg('Search failed', true);
+        if (!append) renderResults([]);
+        loadMoreInProgress = false;
+      });
+    }
+
+    document.getElementById('searchForm').addEventListener('submit', function (e) {
+      e.preventDefault();
+      loadMoreInProgress = true;
+      doSearch(0, false);
+    });
+
+    window.addEventListener('scroll', function () {
+      if (loadMoreInProgress || !lastSearchBody) return;
+      var grid = document.getElementById('resultsGrid');
+      var total = grid.children.length;
+      if (total > 0 && total % PAGE_SIZE !== 0) return;
+      var doc = document.documentElement;
+      var scrollTop = window.scrollY || doc.scrollTop;
+      var scrollHeight = doc.scrollHeight;
+      var clientHeight = doc.clientHeight;
+      var nearBottom = scrollHeight - scrollTop - clientHeight < 200;
+      if (nearBottom) {
+        loadMoreInProgress = true;
+        var body = {};
+        for (var k in lastSearchBody) body[k] = lastSearchBody[k];
+        body.offset = total;
+        body.n_results = PAGE_SIZE;
+        setMsg('Loading more…', false);
+        fetch('/api/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        }).then(function (r) {
+          return r.json().then(function (data) {
+            if (!r.ok) {
+              loadMoreInProgress = false;
+              return;
+            }
+            var results = data.results || [];
+            appendResults(results);
+            var newTotal = grid.children.length;
+            setMsg(newTotal + ' card(s) shown. Double-click a card to add to deck.' + (results.length === PAGE_SIZE ? ' Scroll for more.' : ''), false);
+            loadMoreInProgress = false;
+          });
+        }).catch(function () {
+          loadMoreInProgress = false;
+        });
+      }
+    });
+  </script>
+</body>
+</html>

@@ -9,6 +9,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 
+from src.lib.card_data import filter_cards_list
 from src.lib.config import DECK_EDITOR_SAVE_DIR
 from src.obj.deck import Deck
 from src.utils.logger import LOGGER
@@ -120,6 +121,79 @@ async def serve_editor() -> FileResponse:
         LOGGER.error(0, "Deck editor static file not found: %s", index_path)
         raise FileNotFoundError(f"Static file not found: {index_path}")
     return FileResponse(index_path)
+
+
+@app.get("/search")
+async def serve_search() -> FileResponse:
+    """Serve the advanced search popup HTML page."""
+    static_dir: Path = Path(__file__).resolve().parent / "static"
+    search_path: Path = static_dir / "search.html"
+    if not search_path.is_file():
+        LOGGER.error(0, "Deck editor static file not found: %s", search_path)
+        raise FileNotFoundError(f"Static file not found: {search_path}")
+    return FileResponse(search_path)
+
+
+@app.post("/api/search")
+async def search_cards_api(body: dict) -> dict:
+    """Advanced search: same filters as filter_cards. Returns JSON list of card dicts."""
+    name: str = body["name"] if "name" in body and isinstance(body["name"], str) else ""
+    oracle_text: str = body["oracle_text"] if "oracle_text" in body and isinstance(body["oracle_text"], str) else ""
+    type_line: str = ""
+    if "type" in body and isinstance(body["type"], str) and (body["type"] or "").strip():
+        type_line = (body["type"] or "").strip()
+    elif "type_line" in body and isinstance(body["type_line"], str):
+        type_line = body["type_line"] or ""
+    colors: str = body["colors"] if "colors" in body and isinstance(body["colors"], str) else ""
+    color_identity: str = (
+        body["color_identity"] if "color_identity" in body and isinstance(body["color_identity"], str) else ""
+    )
+    color_identity_colorless: bool = body.get("color_identity_colorless") is True
+    colorless_only: bool = body.get("colorless_only") is True
+    mana_value: float = float(body["mana_value"]) if "mana_value" in body and body["mana_value"] is not None else -1.0
+    mana_value_min: float = (
+        float(body["mana_value_min"]) if "mana_value_min" in body and body["mana_value_min"] is not None else -1.0
+    )
+    mana_value_max: float = (
+        float(body["mana_value_max"]) if "mana_value_max" in body and body["mana_value_max"] is not None else -1.0
+    )
+    power: str = body["power"] if "power" in body and isinstance(body["power"], str) else ""
+    toughness: str = body["toughness"] if "toughness" in body and isinstance(body["toughness"], str) else ""
+    keywords: str = body["keywords"] if "keywords" in body and isinstance(body["keywords"], str) else ""
+    subtype: str = body["subtype"] if "subtype" in body and isinstance(body["subtype"], str) else ""
+    supertype: str = body["supertype"] if "supertype" in body and isinstance(body["supertype"], str) else ""
+    format_legal: str = (
+        body["format_legal"] if "format_legal" in body and isinstance(body["format_legal"], str) else ""
+    )
+    n_results: int = int(body["n_results"]) if "n_results" in body and body["n_results"] is not None else 20
+    n_results = max(1, min(100, n_results))
+    offset: int = int(body["offset"]) if "offset" in body and body["offset"] is not None else 0
+    offset = max(0, offset)
+
+    try:
+        results = filter_cards_list(
+            name=name,
+            oracle_text=oracle_text,
+            type_line=type_line,
+            colors=colors,
+            color_identity=color_identity,
+            color_identity_colorless=color_identity_colorless,
+            colorless_only=colorless_only,
+            mana_value=mana_value,
+            mana_value_min=mana_value_min,
+            mana_value_max=mana_value_max,
+            power=power,
+            toughness=toughness,
+            keywords=keywords,
+            subtype=subtype,
+            supertype=supertype,
+            format_legal=format_legal,
+            n_results=n_results,
+            offset=offset,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return {"results": [c.to_dict() for c in results]}
 
 
 @app.post("/api/deck")
