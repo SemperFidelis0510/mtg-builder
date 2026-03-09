@@ -83,6 +83,30 @@
       color: #a0a0a0;
     }
     .search-bar .search-msg.error { color: #f88; }
+    .search-wrap { position: relative; display: inline-block; }
+    .autocomplete-dropdown {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      max-height: 240px;
+      overflow-y: auto;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      margin-top: 2px;
+      z-index: 100;
+      list-style: none;
+      margin-left: 0;
+      padding: 4px 0;
+    }
+    .autocomplete-dropdown li {
+      padding: 0.4rem 0.6rem;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+    .autocomplete-dropdown li:hover,
+    .autocomplete-dropdown li.highlight { background: var(--border); }
     .main {
       display: flex;
       flex: 1;
@@ -149,6 +173,50 @@
     }
     .card-img:active { cursor: grabbing; }
     .card-img[data-name] { border: 1px solid var(--border); }
+    .card-stack {
+      position: relative;
+      display: inline-block;
+      margin: 0;
+      padding: 0;
+    }
+    .card-stack .card-img { margin: 0; }
+    .card-stack-badge {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      min-width: 22px;
+      padding: 2px 6px;
+      background: var(--accent);
+      color: #fff;
+      border-radius: 10px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      text-align: center;
+      pointer-events: none;
+    }
+    .card-stack-controls {
+      position: absolute;
+      bottom: 4px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 4px;
+      pointer-events: auto;
+    }
+    .card-stack-controls button {
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      line-height: 1;
+    }
+    .card-stack-controls button:hover { background: var(--border); }
     .removed-list {
       list-style: none;
       margin: 0;
@@ -170,12 +238,17 @@
   <header class="header">
     <h1>MTG Deck Editor</h1>
     <div>
-      <button class="save-btn" id="saveBtn" disabled>Save Deck</button>
+      <button type="button" class="save-btn" id="loadBtn">Load deck</button>
+      <input type="file" id="loadFileInput" accept=".json" style="display: none">
+      <button class="save-btn" id="saveBtn" disabled title="Opens save dialog (suggested name: deck_&lt;timestamp&gt;.json). Choose the decks folder in your repo to save there.">Save Deck</button>
       <span class="save-result" id="saveResult"></span>
     </div>
   </header>
   <div class="search-bar">
-    <input type="text" id="cardSearch" placeholder="Search card by name..." title="Type a card name and click Add or press Enter">
+    <div class="search-wrap">
+      <input type="text" id="cardSearch" placeholder="Search card by name..." title="Type a card name and click Add or press Enter" autocomplete="off">
+      <ul class="autocomplete-dropdown" id="autocompleteDropdown" style="display: none;"></ul>
+    </div>
     <button type="button" class="add-card-btn" id="addCardBtn" title="Add the searched card to the deck">Add to deck</button>
     <span class="search-msg" id="searchMsg"></span>
   </div>
@@ -209,17 +282,93 @@
       return 'https://api.scryfall.com/cards/named?exact=' + encodeURIComponent(name) + '&format=image&version=normal';
     }
 
-    function makeCardEl(name) {
-      const li = document.createElement('li');
-      const img = document.createElement('img');
+    function collapseToStacks(arr) {
+      if (!Array.isArray(arr)) return [];
+      var counts = {};
+      for (var i = 0; i < arr.length; i++) {
+        var n = arr[i];
+        counts[n] = (counts[n] || 0) + 1;
+      }
+      return Object.keys(counts).map(function (name) { return { name: name, count: counts[name] }; });
+    }
+
+    function expandStacks(stacks) {
+      var out = [];
+      stacks.forEach(function (s) {
+        for (var i = 0; i < (s.count || 1); i++) out.push(s.name);
+      });
+      return out;
+    }
+
+    function updateSectionHeaderTotal(listEl) {
+      if (!listEl) return;
+      var section = listEl.closest('.section');
+      if (!section) return;
+      var typeKey = section.dataset.type;
+      var total = 0;
+      listEl.querySelectorAll('.card-stack[data-count]').forEach(function (el) {
+        total += parseInt(el.getAttribute('data-count') || '1', 10);
+      });
+      var header = section.querySelector('.section-header');
+      if (header) header.textContent = (TYPE_LABELS[typeKey] || typeKey) + ' (' + total + ')';
+    }
+
+    function makeCardStackEl(name, count) {
+      count = Math.max(1, parseInt(count, 10) || 1);
+      var li = document.createElement('li');
+      li.style.listStyle = 'none';
+      var wrap = document.createElement('div');
+      wrap.className = 'card-stack';
+      wrap.dataset.name = name;
+      wrap.dataset.count = String(count);
+      wrap.setAttribute('data-name', name);
+      wrap.setAttribute('data-count', String(count));
+
+      var img = document.createElement('img');
       img.className = 'card-img';
       img.src = scryfallImageUrl(name);
       img.alt = name;
       img.title = name;
-      img.dataset.name = name;
       img.loading = 'lazy';
       img.onerror = function () { this.style.background = '#333'; this.style.minWidth = '150px'; this.style.minHeight = '210px'; };
-      li.appendChild(img);
+
+      var badge = document.createElement('span');
+      badge.className = 'card-stack-badge';
+      badge.textContent = String(count);
+
+      var controls = document.createElement('div');
+      controls.className = 'card-stack-controls';
+      var btnPlus = document.createElement('button');
+      btnPlus.textContent = '+';
+      btnPlus.type = 'button';
+      var btnMinus = document.createElement('button');
+      btnMinus.textContent = '-';
+      btnMinus.type = 'button';
+
+      function setCount(c) {
+        c = Math.max(0, c);
+        wrap.setAttribute('data-count', String(c));
+        badge.textContent = String(c);
+        if (c === 0) {
+          li.remove();
+          var list = li.parentNode;
+          if (list && list.id && list.id.indexOf('list-') === 0) updateSectionHeaderTotal(list);
+          return;
+        }
+        updateSectionHeaderTotal(li.parentNode);
+      }
+
+      btnPlus.addEventListener('mousedown', function (e) { e.preventDefault(); e.stopPropagation(); });
+      btnPlus.addEventListener('click', function (e) { e.stopPropagation(); setCount(parseInt(wrap.getAttribute('data-count'), 10) + 1); });
+      btnMinus.addEventListener('mousedown', function (e) { e.preventDefault(); e.stopPropagation(); });
+      btnMinus.addEventListener('click', function (e) { e.stopPropagation(); setCount(parseInt(wrap.getAttribute('data-count'), 10) - 1); });
+
+      controls.appendChild(btnMinus);
+      controls.appendChild(btnPlus);
+      wrap.appendChild(img);
+      wrap.appendChild(badge);
+      wrap.appendChild(controls);
+      li.appendChild(wrap);
       return li;
     }
 
@@ -231,23 +380,25 @@
 
       TYPE_KEYS.forEach(function (key) {
         const cards = Array.isArray(deck[key]) ? deck[key] : [];
+        const stacks = collapseToStacks(cards);
         const section = document.createElement('div');
         section.className = 'section';
         section.dataset.type = key;
+        const total = cards.length;
         section.innerHTML =
-          '<div class="section-header">' + (TYPE_LABELS[key] || key) + ' (' + cards.length + ')</div>' +
+          '<div class="section-header">' + (TYPE_LABELS[key] || key) + ' (' + total + ')</div>' +
           '<div class="section-body"><ul class="card-list" id="list-' + key + '"></ul></div>';
         const list = section.querySelector('.card-list');
-        cards.forEach(function (name) {
-          list.appendChild(makeCardEl(name));
+        stacks.forEach(function (s) {
+          list.appendChild(makeCardStackEl(s.name, s.count));
         });
         container.appendChild(section);
       });
 
       const removedZone = document.getElementById('removedZone');
       removedZone.innerHTML = '';
-      removed.forEach(function (name) {
-        removedZone.appendChild(makeCardEl(name));
+      collapseToStacks(removed).forEach(function (s) {
+        removedZone.appendChild(makeCardStackEl(s.name, s.count));
       });
 
       document.getElementById('saveBtn').disabled = false;
@@ -271,14 +422,18 @@
       var listId = 'list-' + typeKey;
       var list = document.getElementById(listId);
       if (!list) return;
-      list.appendChild(makeCardEl(cardName));
-      var section = list.closest('.section');
-      if (section) {
-        var header = section.querySelector('.section-header');
-        if (header) {
-          var n = list.querySelectorAll('.card-img[data-name]').length;
-          header.textContent = (TYPE_LABELS[typeKey] || typeKey) + ' (' + n + ')';
-        }
+      var existing = null;
+      list.querySelectorAll('.card-stack[data-name]').forEach(function (el) {
+        if (el.getAttribute('data-name') === cardName) existing = el;
+      });
+      if (existing) {
+        var c = parseInt(existing.getAttribute('data-count'), 10) || 1;
+        existing.setAttribute('data-count', String(c + 1));
+        existing.querySelector('.card-stack-badge').textContent = String(c + 1);
+        updateSectionHeaderTotal(list);
+      } else {
+        list.appendChild(makeCardStackEl(cardName, 1));
+        updateSectionHeaderTotal(list);
       }
     }
 
@@ -315,12 +470,112 @@
         });
     }
 
+    var autocompleteDebounceTimer = null;
+    var autocompleteAbort = null;
+    var autocompleteHighlight = -1;
+
+    function showAutocomplete(names) {
+      var ul = document.getElementById('autocompleteDropdown');
+      ul.innerHTML = '';
+      ul.style.display = 'block';
+      autocompleteHighlight = -1;
+      (names || []).slice(0, 15).forEach(function (name, i) {
+        var li = document.createElement('li');
+        li.textContent = name;
+        li.dataset.name = name;
+        li.addEventListener('click', function () { selectAutocomplete(name); });
+        ul.appendChild(li);
+      });
+    }
+
+    function hideAutocomplete() {
+      var ul = document.getElementById('autocompleteDropdown');
+      ul.style.display = 'none';
+      ul.innerHTML = '';
+      autocompleteHighlight = -1;
+    }
+
+    function selectAutocomplete(name) {
+      hideAutocomplete();
+      document.getElementById('cardSearch').value = '';
+      var msgEl = document.getElementById('searchMsg');
+      msgEl.textContent = 'Adding…';
+      msgEl.className = 'search-msg';
+      fetch('https://api.scryfall.com/cards/named?exact=' + encodeURIComponent(name))
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data.object === 'error') {
+            msgEl.textContent = data.details || 'Card not found.';
+            msgEl.className = 'search-msg error';
+            return;
+          }
+          var typeKey = typeLineToSectionKey(data.type_line);
+          addCardToDeck(name, typeKey);
+          msgEl.textContent = 'Added: ' + name;
+          msgEl.className = 'search-msg';
+        })
+        .catch(function () {
+          msgEl.textContent = 'Failed to add card.';
+          msgEl.className = 'search-msg error';
+        });
+    }
+
+    function runAutocomplete(query) {
+      if (autocompleteAbort) autocompleteAbort.abort();
+      if (!query || query.length < 2) { hideAutocomplete(); return; }
+      autocompleteAbort = new AbortController();
+      fetch('https://api.scryfall.com/cards/autocomplete?q=' + encodeURIComponent(query), { signal: autocompleteAbort.signal })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data.data && data.data.length) showAutocomplete(data.data);
+          else hideAutocomplete();
+        })
+        .catch(function (err) {
+          if (err.name !== 'AbortError') hideAutocomplete();
+        });
+    }
+
     (function initSearch() {
       var input = document.getElementById('cardSearch');
       var addBtn = document.getElementById('addCardBtn');
+      var dropdown = document.getElementById('autocompleteDropdown');
       addBtn.addEventListener('click', doSearch);
       input.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') { e.preventDefault(); doSearch(); }
+        if (e.key === 'Enter') {
+          var items = dropdown.querySelectorAll('li');
+          if (items.length && autocompleteHighlight >= 0 && items[autocompleteHighlight]) {
+            e.preventDefault();
+            selectAutocomplete(items[autocompleteHighlight].dataset.name);
+            return;
+          }
+          e.preventDefault();
+          doSearch();
+        } else if (e.key === 'Escape') {
+          hideAutocomplete();
+          input.blur();
+        } else if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          var items = dropdown.querySelectorAll('li');
+          if (items.length) {
+            autocompleteHighlight = (autocompleteHighlight + 1) % items.length;
+            items.forEach(function (el, i) { el.classList.toggle('highlight', i === autocompleteHighlight); });
+          }
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          var items = dropdown.querySelectorAll('li');
+          if (items.length) {
+            autocompleteHighlight = autocompleteHighlight <= 0 ? items.length - 1 : autocompleteHighlight - 1;
+            items.forEach(function (el, i) { el.classList.toggle('highlight', i === autocompleteHighlight); });
+          }
+        }
+      });
+      input.addEventListener('input', function () {
+        if (autocompleteDebounceTimer) clearTimeout(autocompleteDebounceTimer);
+        var q = (input.value || '').trim();
+        autocompleteDebounceTimer = setTimeout(function () { runAutocomplete(q); }, 280);
+      });
+      input.addEventListener('blur', function () {
+        setTimeout(hideAutocomplete, 180);
       });
     })();
 
@@ -332,6 +587,7 @@
 
       const options = {
         group: { name: 'cards', pull: true, put: true },
+        handle: '.card-img',
         animation: 150,
         ghostClass: 'sortable-ghost',
         dragClass: 'sortable-drag'
@@ -347,22 +603,20 @@
 
     function collectState() {
       const deck = { name: '', colors: [], description: '', removed: [] };
-      TYPE_KEYS.forEach(function (key) {
-        const list = document.getElementById('list-' + key);
-        deck[key] = [];
-        if (list) {
-          list.querySelectorAll('.card-img[data-name]').forEach(function (img) {
-            deck[key].push(img.dataset.name);
-          });
-        }
-      });
-      const removedZone = document.getElementById('removedZone');
-      deck.removed = [];
-      if (removedZone) {
-        removedZone.querySelectorAll('.card-img[data-name]').forEach(function (img) {
-          deck.removed.push(img.dataset.name);
+      function expandList(listEl) {
+        var arr = [];
+        if (!listEl) return arr;
+        listEl.querySelectorAll('.card-stack[data-name][data-count]').forEach(function (el) {
+          var name = el.getAttribute('data-name');
+          var count = parseInt(el.getAttribute('data-count'), 10) || 1;
+          for (var i = 0; i < count; i++) arr.push(name);
         });
+        return arr;
       }
+      TYPE_KEYS.forEach(function (key) {
+        deck[key] = expandList(document.getElementById('list-' + key));
+      });
+      deck.removed = expandList(document.getElementById('removedZone'));
       return deck;
     }
 
@@ -382,13 +636,23 @@
       }).catch(function () { return { name: '', colors: [], description: '' }; });
     }
 
+    function suggestedSaveName() {
+      var d = new Date();
+      var y = d.getFullYear();
+      var m = String(d.getMonth() + 1).padStart(2, '0');
+      var day = String(d.getDate()).padStart(2, '0');
+      var h = String(d.getHours()).padStart(2, '0');
+      var min = String(d.getMinutes()).padStart(2, '0');
+      var s = String(d.getSeconds()).padStart(2, '0');
+      return 'deck_' + y + m + day + '_' + h + min + s + '.json';
+    }
+
     document.getElementById('saveBtn').addEventListener('click', function () {
-      const btn = this;
-      const resultEl = document.getElementById('saveResult');
+      var resultEl = document.getElementById('saveResult');
       resultEl.textContent = '';
-      const state = collectState();
+      var state = collectState();
       getDeckMeta().then(function (meta) {
-        const body = {
+        var deck = {
           name: meta.name,
           colors: meta.colors,
           description: meta.description,
@@ -399,26 +663,76 @@
           instants: state.instants,
           sorceries: state.sorceries,
           spells: state.spells,
-          lands: state.lands,
-          removed: state.removed
+          lands: state.lands
         };
-        return fetch('/api/deck', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body)
-        });
-      }).then(function (r) {
-        if (!r.ok) throw new Error('PUT failed');
-        return fetch('/api/save', { method: 'POST' });
-      }).then(function (r) {
-        if (!r.ok) throw new Error('Save failed');
-        return r.json();
-      }).then(function (json) {
-        resultEl.textContent = 'Saved: ' + (json.saved_to || '');
+        var blob = new Blob([JSON.stringify(deck, null, 2)], { type: 'application/json' });
+        if (typeof window.showSaveFilePicker === 'function') {
+          window.showSaveFilePicker({
+            suggestedName: suggestedSaveName(),
+            types: [{ description: 'JSON deck', accept: { 'application/json': ['.json'] } }]
+          }).then(function (handle) {
+            return handle.createWritable();
+          }).then(function (writable) {
+            return writable.write(blob).then(function () { return writable.close(); });
+          }).then(function () {
+            resultEl.textContent = 'Saved.';
+          }).catch(function (err) {
+            if (err.name === 'AbortError') {
+              resultEl.textContent = 'Cancelled.';
+            } else {
+              resultEl.textContent = 'Error: ' + (err.message || 'save failed');
+              resultEl.style.color = '#f88';
+            }
+          });
+        } else {
+          var url = URL.createObjectURL(blob);
+          var a = document.createElement('a');
+          a.href = url;
+          a.download = suggestedSaveName();
+          a.click();
+          URL.revokeObjectURL(url);
+          resultEl.textContent = 'Download started (browser may not support save dialog).';
+        }
       }).catch(function (err) {
         resultEl.textContent = 'Error: ' + (err.message || 'save failed');
         resultEl.style.color = '#f88';
       });
+    });
+
+    document.getElementById('loadBtn').addEventListener('click', function () {
+      document.getElementById('loadFileInput').click();
+    });
+    document.getElementById('loadFileInput').addEventListener('change', function () {
+      var file = this.files && this.files[0];
+      if (!file) return;
+      var fr = new FileReader();
+      fr.onload = function () {
+        var json;
+        try { json = JSON.parse(fr.result); } catch (e) {
+          document.getElementById('searchMsg').textContent = 'Invalid JSON file.';
+          document.getElementById('searchMsg').className = 'search-msg error';
+          return;
+        }
+        fetch('/api/deck', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(json)
+        }).then(function (r) {
+          if (!r.ok) throw new Error('Load failed');
+          return fetch('/api/deck');
+        }).then(function (r) { return r.json(); })
+          .then(renderDeck)
+          .then(function () {
+            document.getElementById('searchMsg').textContent = 'Deck loaded.';
+            document.getElementById('searchMsg').className = 'search-msg';
+          })
+          .catch(function () {
+            document.getElementById('searchMsg').textContent = 'Load failed.';
+            document.getElementById('searchMsg').className = 'search-msg error';
+          });
+      };
+      fr.readAsText(file);
+      this.value = '';
     });
 
     fetch('/api/deck')

@@ -38,11 +38,6 @@ share/python-wheels/
 MANIFEST
 
 # PyInstaller
-<<<<<<< HEAD
-=======
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
->>>>>>> 2b8bc011b0ad9f953283ca63a9c20e5ad769b062
 *.manifest
 *.spec
 
@@ -97,17 +92,6 @@ profile_default/
 ipython_config.py
 
 # pyenv
-<<<<<<< HEAD
-# .python-version
-
-# pipenv
-#Pipfile.lock
-
-# UV
-#uv.lock
-
-# poetry
-=======
 #   For a library or package, you might want to ignore these files since the code is
 #   intended to run in multiple environments; otherwise, check them in:
 # .python-version
@@ -130,29 +114,16 @@ ipython_config.py
 #   This is especially recommended for binary packages to ensure reproducibility, and is more
 #   commonly ignored for libraries.
 #   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
->>>>>>> 2b8bc011b0ad9f953283ca63a9c20e5ad769b062
 #poetry.lock
 #poetry.toml
 
 # pdm
-<<<<<<< HEAD
-=======
-#   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
-#   pdm recommends including project-wide configuration in pdm.toml, but excluding .pdm-python.
-#   https://pdm-project.org/en/latest/usage/project/#working-with-version-control
->>>>>>> 2b8bc011b0ad9f953283ca63a9c20e5ad769b062
 #pdm.lock
 #pdm.toml
 .pdm-python
 .pdm-build/
 
 # pixi
-<<<<<<< HEAD
-#pixi.lock
-.pixi
-
-# PEP 582
-=======
 #   Similar to Pipfile.lock, it is generally recommended to include pixi.lock in version control.
 #pixi.lock
 #   Pixi creates a virtual environment in the .pixi directory, just like venv module creates one
@@ -160,7 +131,6 @@ ipython_config.py
 .pixi
 
 # PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
->>>>>>> 2b8bc011b0ad9f953283ca63a9c20e5ad769b062
 __pypackages__/
 
 # Celery stuff
@@ -204,11 +174,6 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
-<<<<<<< HEAD
-# Abstra
-.abstra/
-
-=======
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
 #  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
@@ -229,7 +194,6 @@ cython_debug/
 #  you could uncomment the following to ignore the entire vscode folder
 # .vscode/
 
->>>>>>> 2b8bc011b0ad9f953283ca63a9c20e5ad769b062
 # Ruff stuff:
 .ruff_cache/
 
@@ -237,12 +201,9 @@ cython_debug/
 .pypirc
 
 # Cursor
-<<<<<<< HEAD
-=======
 #  Cursor is an AI-powered code editor. `.cursorignore` specifies files/directories to
 #  exclude from AI features like autocomplete and code analysis. Recommended for sensitive data
 #  refer to https://docs.cursor.com/context/ignore-files
->>>>>>> 2b8bc011b0ad9f953283ca63a9c20e5ad769b062
 .cursorignore
 .cursorindexingignore
 
@@ -250,3 +211,7 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+
+decks/*
+chrome_db/

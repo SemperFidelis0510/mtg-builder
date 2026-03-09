@@ -7,7 +7,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 
-from src.lib.config import DATA_DIR
+from src.lib.config import DECK_EDITOR_SAVE_DIR
 from src.obj.deck import Deck
 from src.utils.logger import LOGGER
 
@@ -37,15 +37,6 @@ def _deck_to_response(deck: Deck) -> dict:
     out: dict = deck.to_dict()
     out["removed"] = list(_removed)
     return {"deck": out, "removed": _removed}
-
-
-def _build_cards_from_type_lists(data: dict) -> list[str]:
-    """Rebuild unified cards list from type lists (for save)."""
-    cards: list[str] = []
-    for key in TYPE_KEYS:
-        if key in data and isinstance(data[key], list):
-            cards.extend(data[key])
-    return cards
 
 
 def _sanitize_filename(name: str) -> str:
@@ -110,7 +101,6 @@ async def update_deck(body: dict) -> dict:
     if "description" in body and isinstance(body["description"], str):
         description = body["description"]
 
-    cards: list[str] = _build_cards_from_type_lists(body)
     creatures: list[str] = body["creatures"] if "creatures" in body and isinstance(body["creatures"], list) else []
     artifacts: list[str] = body["artifacts"] if "artifacts" in body and isinstance(body["artifacts"], list) else []
     enchantments: list[str] = (
@@ -124,11 +114,12 @@ async def update_deck(body: dict) -> dict:
     sorceries: list[str] = body["sorceries"] if "sorceries" in body and isinstance(body["sorceries"], list) else []
     spells: list[str] = body["spells"] if "spells" in body and isinstance(body["spells"], list) else []
 
+    # Deck expects cards as list[Card] or list[dict]; editor only sends type lists (names). Leave cards empty.
     _current_deck = Deck(
         name=name,
         colors=colors,
         description=description,
-        cards=cards,
+        cards=None,
         creatures=creatures,
         artifacts=artifacts,
         enchantments=enchantments,
@@ -143,15 +134,12 @@ async def update_deck(body: dict) -> dict:
 
 @app.post("/api/save")
 async def save_deck() -> dict:
-    """Write current deck to a JSON file (excluding removed). Return path."""
+    """Write current deck to a JSON file (excluding removed). Return path. Uses Deck.save()."""
     safe_name: str = _sanitize_filename(_current_deck.name)
     timestamp: str = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     filename: str = f"{safe_name}_{timestamp}.json"
-    out_path: Path = DATA_DIR / filename
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    import json
-
-    with open(out_path, "w", encoding="utf-8") as f:
-        json.dump(_current_deck.to_dict(), f, indent=2)
+    out_path: Path = DECK_EDITOR_SAVE_DIR / filename
+    DECK_EDITOR_SAVE_DIR.mkdir(parents=True, exist_ok=True)
+    _current_deck.save("json", out_path)
     LOGGER.info("Deck saved to %s", out_path)
     return {"saved_to": str(out_path)}
