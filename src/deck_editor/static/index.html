@@ -156,7 +156,12 @@
       display: flex;
       flex-wrap: wrap;
       gap: 4px;
+      min-height: 220px;
+      border: 2px dashed var(--border);
+      border-radius: 8px;
+      padding: 4px;
     }
+    .removed-list:not(:empty) { border-color: transparent; }
     .removed-list li { margin: 0; padding: 0; }
     .sortable-drag { opacity: 0.8; }
   </style>
@@ -326,7 +331,7 @@
       sortables = [];
 
       const options = {
-        group: 'cards',
+        group: { name: 'cards', pull: true, put: true },
         animation: 150,
         ghostClass: 'sortable-ghost',
         dragClass: 'sortable-drag'
