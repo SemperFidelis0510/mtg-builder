@@ -1,4 +1,4 @@
-"""CardFace dataclass -- single source of truth for MTG card data representation."""
+"""Card dataclass -- single source of truth for MTG card data representation."""
 
 import dataclasses
 from dataclasses import dataclass, field, fields
@@ -14,17 +14,18 @@ def _field_default(f: dataclasses.Field) -> Any:
 
 
 @dataclass
-class CardFace:
-    """Represents a single face of a Magic: The Gathering card.
+class Card:
+    """Represents a Magic: The Gathering card (one face).
 
     Field metadata drives implicit JSON parsing, ChromaDB serialization,
     and display formatting via ``fields()`` iteration -- adding a new field
     automatically propagates through the whole pipeline.
 
     Metadata keys per field:
-        json_key      -- key in AtomicCards.json (required)
+        json_key      -- key in AtomicCards.json (required for MTGJSON-sourced fields)
         fallback_key  -- secondary JSON key tried when the primary is None
         chroma        -- False to exclude from ChromaDB metadata (default True)
+        source        -- "derived" for fields not in MTGJSON (e.g. triggers, effects)
     """
 
     name: str = field(default="", metadata={"json_key": "name"})
@@ -49,6 +50,14 @@ class CardFace:
         default_factory=dict,
         metadata={"json_key": "legalities", "chroma": False},
     )
+    triggers: list[str] = field(
+        default_factory=list,
+        metadata={"source": "derived"},
+    )
+    effects: list[str] = field(
+        default_factory=list,
+        metadata={"source": "derived"},
+    )
 
     def __iter__(self):
         for f in fields(self):
@@ -59,10 +68,12 @@ class CardFace:
     # ------------------------------------------------------------------
 
     @classmethod
-    def from_json_face(cls, face: dict, card_name: str) -> "CardFace":
-        """Parse a raw JSON face dict from AtomicCards.json into a CardFace."""
+    def from_json_face(cls, face: dict, card_name: str) -> "Card":
+        """Parse a raw JSON face dict from AtomicCards.json into a Card."""
         kwargs: dict[str, Any] = {}
         for f in fields(cls):
+            if f.metadata.get("source") == "derived":
+                continue
             json_key: str = f.metadata["json_key"]
             raw = face.get(json_key)
             if raw is None and "fallback_key" in f.metadata:
@@ -84,8 +95,8 @@ class CardFace:
         return cls(**kwargs)
 
     @classmethod
-    def from_chroma_result(cls, meta: dict | None, doc: str) -> "CardFace":
-        """Build a CardFace from a ChromaDB query result (flat metadata + document)."""
+    def from_chroma_result(cls, meta: dict | None, doc: str) -> "Card":
+        """Build a Card from a ChromaDB query result (flat metadata + document)."""
         safe_meta: dict = meta or {}
         text: str = doc.split("Oracle Text:", 1)[-1].strip() if doc else ""
 
@@ -93,6 +104,8 @@ class CardFace:
         for f in fields(cls):
             if f.name == "text":
                 kwargs["text"] = text
+                continue
+            if f.metadata.get("source") == "derived":
                 continue
 
             json_key: str = f.metadata["json_key"]
@@ -115,22 +128,45 @@ class CardFace:
 
         return cls(**kwargs)
 
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "Card":
+        """Create a Card from a dict with field-name keys."""
+        kwargs: dict[str, Any] = {}
+        for f in fields(cls):
+            if f.name in data:
+                kwargs[f.name] = data[f.name]
+        return cls(**kwargs)
+
     # ------------------------------------------------------------------
     # Serialization / display
     # ------------------------------------------------------------------
 
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize this Card to a plain dict keyed by field name."""
+        result: dict[str, Any] = {}
+        for name, value in self:
+            if isinstance(value, list):
+                result[name] = list(value)
+            elif isinstance(value, dict):
+                result[name] = dict(value)
+            else:
+                result[name] = value
+        return result
+
     def to_document(self) -> str:
-        """Build a document string for embedding / indexing this card face."""
+        """Build a document string for embedding / indexing this card."""
         text: str = self.text if self.text.strip() else "(No rules text)"
         return f"Name: {self.name}\nMana Cost: {self.mana_cost}\nType: {self.type_line}\nOracle Text: {text}"
 
     def to_chroma_metadata(self) -> dict[str, str | float]:
         """Build a flat metadata dict for ChromaDB (lists are comma-joined).
 
-        Fields with ``metadata["chroma"] == False`` are excluded.
+        Fields with ``metadata["chroma"] == False`` or ``metadata["source"] == "derived"`` are excluded.
         """
         meta: dict[str, str | float] = {}
         for f in fields(self):
+            if f.metadata.get("source") == "derived":
+                continue
             if "chroma" in f.metadata and not f.metadata["chroma"]:
                 continue
             json_key: str = f.metadata["json_key"]

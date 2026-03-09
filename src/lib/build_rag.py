@@ -12,7 +12,7 @@ from pathlib import Path
 
 from src.lib.config import ATOMIC_CARDS_PATH, CHROMA_PATH, COLLECTION_NAME, DATA_DIR, MODEL_NAME, REPO_ROOT
 from src.lib.card_data import make_id
-from src.obj.card_face import CardFace
+from src.obj.card import Card
 
 # ---------------------------------------------------------------------------
 # Build-specific constants
@@ -144,7 +144,7 @@ def do_build() -> None:
         for i, face in enumerate(faces):
             if not isinstance(face, dict):
                 continue
-            card: CardFace = CardFace.from_json_face(face, card_name)
+            card: Card = Card.from_json_face(face, card_name)
             uid: str = make_id(card_name, i)
             rows.append((uid, card.to_document(), card.to_chroma_metadata()))
 

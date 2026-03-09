@@ -133,7 +133,7 @@ MTG/
 │   │   ├── search.py      # Semantic search via ChromaDB + embeddings
 │   │   └── build_rag.py   # Install, download, and build pipeline
 │   ├── obj/
-│   │   └── card_face.py   # CardFace dataclass
+│   │   └── card.py        # Card dataclass
 │   └── utils/
 │       └── logger.py      # Logging setup
 ├── data/                  # AtomicCards.json (downloaded, gitignored)

@@ -29,7 +29,7 @@ D:/scripts/MTG/
 │   │   ├── search.py      # -> Logic for semantic search (ChromaDB + Embeddings).
 │   │   └── build_rag.py   # -> Scripts for downloading data and building the vector index.
 │   ├── obj/               # [MODELS]
-│   │   └── card_face.py   # -> Data class representing a single card face.
+│   │   └── card.py        # -> Data class representing a card (Card).
 │   └── utils/             # [UTILS]
 │       └── logger.py      # -> Centralized logging configuration.
 ├── data/                  # [DATA] Stores AtomicCards.json (downloaded from MTGJSON).
@@ -49,7 +49,7 @@ D:/scripts/MTG/
 ### B. Semantic Search (`src/lib/search.py`)
 -   **Lazy Loading**: Initializes the `SentenceTransformer` model and `chromadb.PersistentClient` only when needed.
 -   **Querying**: Encodes the natural language query into a vector and queries the ChromaDB collection.
--   **Formatting**: Converts ChromaDB results into `CardFace` objects and formats them as a string response.
+-   **Formatting**: Converts ChromaDB results into `Card` objects and formats them as a string response.
 
 ### C. Structured Search & Data (`src/lib/card_data.py`)
 -   **Data Loading**: Loads the raw `AtomicCards.json` file.

@@ -3,7 +3,7 @@
 import time
 
 from src.lib.config import CHROMA_PATH, COLLECTION_NAME, MODEL_NAME
-from src.obj.card_face import CardFace
+from src.obj.card import Card
 from src.utils.logger import LOGGER
 
 # ---------------------------------------------------------------------------
@@ -93,7 +93,7 @@ def search_cards(query: str, n_results: int = 5) -> str:
     LOGGER.debug("ChromaDB returned %s document(s)", len(docs))
     parts: list[str] = []
     for i, (doc, meta) in enumerate(zip(docs, metas), 1):
-        card: CardFace = CardFace.from_chroma_result(meta, doc)
+        card: Card = Card.from_chroma_result(meta, doc)
         LOGGER.debug("Card %s/%s: %s", i, len(docs), card.name)
         parts.append(card.format_display(i, len(docs)))
     result_count: int = len(docs)

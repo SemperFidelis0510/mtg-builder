@@ -3,17 +3,17 @@
 import json
 
 from src.lib.config import ATOMIC_CARDS_PATH
-from src.obj.card_face import CardFace
+from src.obj.card import Card
 from src.utils.logger import LOGGER
 
 # ---------------------------------------------------------------------------
 # Lazy singleton for flattened card data
 # ---------------------------------------------------------------------------
-_card_data: list[CardFace] | None = None
+_card_data: list[Card] | None = None
 
 
-def get_card_data() -> list[CardFace]:
-    """Lazy-load AtomicCards.json and return a flattened list of CardFace objects."""
+def get_card_data() -> list[Card]:
+    """Lazy-load AtomicCards.json and return a flattened list of Card objects."""
     global _card_data
     if _card_data is None:
         if not ATOMIC_CARDS_PATH.is_file():
@@ -25,14 +25,14 @@ def get_card_data() -> list[CardFace]:
         if data is None:
             LOGGER.error(0, "get_card_data: AtomicCards.json missing 'data' key")
             raise ValueError("get_card_data: AtomicCards.json missing 'data' key")
-        out: list[CardFace] = []
+        out: list[Card] = []
         for card_name, faces in data.items():
             if not isinstance(faces, list):
                 continue
             for face in faces:
                 if not isinstance(face, dict):
                     continue
-                out.append(CardFace.from_json_face(face, card_name))
+                out.append(Card.from_json_face(face, card_name))
         _card_data = out
         LOGGER.info("Card data loaded faces=%s path=%s", len(_card_data), ATOMIC_CARDS_PATH)
     return _card_data
@@ -88,7 +88,7 @@ def filter_cards(
         LOGGER.error(0, "filter_cards: at least one filter parameter must be set")
         raise ValueError("filter_cards: at least one filter parameter must be set")
 
-    cards: list[CardFace] = get_card_data()
+    cards: list[Card] = get_card_data()
     name_lower: str = name.strip().lower() if name else ""
     oracle_lower: str = oracle_text.strip().lower() if oracle_text else ""
     type_lower: str = type_line.strip().lower() if type_line else ""
@@ -101,7 +101,7 @@ def filter_cards(
     supertype_lower: str = supertype.strip().lower() if supertype else ""
     format_lower: str = format_legal.strip().lower() if format_legal else ""
 
-    results: list[CardFace] = []
+    results: list[Card] = []
     for card in cards:
         if name_lower and name_lower not in card.name.lower():
             continue
