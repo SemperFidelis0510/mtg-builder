@@ -1,0 +1,22 @@
+---
+description: "When the user asks to add a card to the deck or open deck, use the MCP tool append_cards_to_deck"
+alwaysApply: true
+---
+# Adding Cards to the Deck (Deck Editor)
+
+When the user asks to add a card (or cards) to **"the deck"**, **"the open deck"**, **"the loaded deck"**, **"my deck"**, or any similar phrasing that refers to a deck they have open in the deck editor, the agent must:
+
+1. **Use the MCP tool** `append_cards_to_deck` to add the requested card(s) to the deck editor's currently loaded deck.
+2. **Do not** only suggest code, curl commands, or manual steps—actually invoke the tool (when the agent has MCP access) so the cards are added and the deck editor UI updates via SSE.
+
+## Tool usage
+
+- **Tool name:** `append_cards_to_deck`
+- **Parameter:** `card_names` — a single string with one or more card names, comma-separated (e.g. `"Sol Ring"` or `"Lightning Bolt, Counterspell"`).
+- **Prerequisite:** The deck editor server must be running (e.g. `python deck_editor.py` or `main.bat deck-editor`). If the tool returns an error that the editor is unreachable, tell the user to start the deck editor first.
+
+## Examples of user intent
+
+- "Add Soul Warden to the deck" → call `append_cards_to_deck("Soul Warden")`
+- "Add Sol Ring to the open deck" → call `append_cards_to_deck("Sol Ring")`
+- "Put Lightning Bolt and Counterspell in my deck" → call `append_cards_to_deck("Lightning Bolt, Counterspell")`

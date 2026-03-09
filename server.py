@@ -8,7 +8,15 @@ Build the RAG index first using build_rag.py (or main.bat install / download / b
 import os
 import time
 
-from src.lib.config import CHROMA_PATH, COLLECTION_NAME, MODEL_NAME, REPO_ROOT
+import requests
+
+from src.lib.config import (
+    CHROMA_PATH,
+    COLLECTION_NAME,
+    DECK_EDITOR_BASE_URL,
+    MODEL_NAME,
+    REPO_ROOT,
+)
 from src.lib.card_data import filter_cards
 from src.lib.search import search_cards
 from src.utils.logger import LOGGER
@@ -98,7 +106,39 @@ def run_server() -> None:
         LOGGER.info("Request completed tool=plain_search_card")
         return result
 
-    LOGGER.info("Tool registered: semantic_search_card, plain_search_card; entering mcp.run(transport=stdio)")
+    @mcp.tool()
+    def append_cards_to_deck(card_names: str) -> str:
+        """Append one or more cards to the currently loaded deck in the deck editor server.
+        card_names: comma-separated list of card names (e.g. 'Lightning Bolt, Counterspell').
+        The deck editor must be running (e.g. python deck_editor.py). Cards are resolved by the editor and appear in the correct section. Returns a short status or error message."""
+        names: list[str] = [n.strip() for n in card_names.split(",") if n.strip()]
+        if not names:
+            return "Error: card_names must contain at least one card name (comma-separated)."
+        url: str = f"{DECK_EDITOR_BASE_URL.rstrip('/')}/api/add_card"
+        LOGGER.info("Request received tool=append_cards_to_deck names=%s", names)
+        try:
+            r = requests.post(url, json={"names": names}, timeout=10)
+        except requests.RequestException as e:
+            LOGGER.error(0, "append_cards_to_deck: request failed: %s", e)
+            return f"Error: deck editor unreachable at {url}. Is the deck editor running (e.g. python deck_editor.py)?"
+        if r.status_code == 404:
+            try:
+                detail = r.json().get("detail", r.text)
+            except Exception:
+                detail = r.text
+            LOGGER.warning("append_cards_to_deck: card not found: %s", detail)
+            return f"Error: {detail}"
+        if r.status_code != 200:
+            try:
+                detail = r.json().get("detail", r.text)
+            except Exception:
+                detail = r.text
+            LOGGER.error(0, "append_cards_to_deck: %s %s", r.status_code, detail)
+            return f"Error: {r.status_code} {detail}"
+        LOGGER.info("Request completed tool=append_cards_to_deck added=%s", len(names))
+        return f"Added {len(names)} card(s) to the deck: {', '.join(names)}."
+
+    LOGGER.info("Tool registered: semantic_search_card, plain_search_card, append_cards_to_deck; entering mcp.run(transport=stdio)")
     mcp.run(transport="stdio")
 
 
