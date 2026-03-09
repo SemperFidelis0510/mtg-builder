@@ -31,10 +31,11 @@ exit /b 1
 :found_conda
 
 if "%~1"=="" goto usage
-if /i "%~1"=="install"  goto install
-if /i "%~1"=="download" goto download
-if /i "%~1"=="build"    goto build
-if /i "%~1"=="serve"    goto serve
+if /i "%~1"=="install"      goto install
+if /i "%~1"=="download"     goto download
+if /i "%~1"=="build"       goto build
+if /i "%~1"=="serve"       goto serve
+if /i "%~1"=="deck-editor" goto deck_editor
 goto usage
 
 :install
@@ -89,8 +90,17 @@ if errorlevel 1 (
 )
 goto end
 
+:deck_editor
+call "%_ACTIVATE%" %CONDA_ENV%
+python deck_editor.py
+if errorlevel 1 (
+    echo Deck editor exited with error.
+    exit /b 1
+)
+goto end
+
 :usage
-echo Usage: .\%~nx0 install [11^|12^|cpu] ^| download [force] ^| build ^| serve
+echo Usage: .\%~nx0 install [11^|12^|cpu] ^| download [force] ^| build ^| serve ^| deck-editor
 echo.
 echo   install [11^|12^|cpu] - Create conda env and install deps (default: CUDA 12)
 echo                          11  = CUDA 11.8 (PyTorch 2.1.2)
@@ -99,5 +109,6 @@ echo                          cpu = CPU-only (latest PyTorch, no GPU)
 echo   download [force]     - Download AtomicCards.json
 echo   build                - Ingest data and build ChromaDB vector index
 echo   serve                - Start the MCP server (stdio)
+echo   deck-editor          - Start the deck editor web server (http://127.0.0.1:8000)
 
 :end

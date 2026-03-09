@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MTG Deck Editor</title>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+  <style>
+    :root {
+      --bg: #1a1a2e;
+      --panel: #16213e;
+      --border: #0f3460;
+      --text: #e8e8e8;
+      --accent: #e94560;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    .header {
+      padding: 0.75rem 1rem;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    .header h1 { margin: 0; font-size: 1.25rem; }
+    .save-btn {
+      padding: 0.5rem 1rem;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .save-btn:hover { opacity: 0.9; }
+    .save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .save-result {
+      font-size: 0.85rem;
+      color: #8f8;
+      margin-left: 0.5rem;
+    }
+    .search-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 1rem;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+    }
+    .search-bar input {
+      flex: 1;
+      max-width: 280px;
+      padding: 0.4rem 0.6rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      font-size: 0.95rem;
+    }
+    .search-bar input:disabled { opacity: 0.6; cursor: not-allowed; }
+    .search-bar .add-card-btn {
+      padding: 0.4rem 0.8rem;
+      background: var(--border);
+      color: var(--text);
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+    .search-bar .add-card-btn:hover:not(:disabled) { background: #1a4a7a; }
+    .search-bar .add-card-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .search-bar .search-msg {
+      font-size: 0.85rem;
+      color: #a0a0a0;
+    }
+    .search-bar .search-msg.error { color: #f88; }
+    .main {
+      display: flex;
+      flex: 1;
+      min-height: calc(100vh - 120px);
+    }
+    .deck-column {
+      flex: 1;
+      overflow: auto;
+      padding: 1rem;
+      border-right: 1px solid var(--border);
+    }
+    .removed-column {
+      width: 280px;
+      flex-shrink: 0;
+      padding: 1rem;
+      background: var(--panel);
+    }
+    .removed-column h2 {
+      margin: 0 0 0.75rem 0;
+      font-size: 1rem;
+      color: #a0a0a0;
+    }
+    .section {
+      margin-bottom: 1rem;
+    }
+    .section-header {
+      padding: 0.4rem 0.5rem;
+      background: var(--border);
+      border-radius: 4px 4px 0 0;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.9rem;
+      user-select: none;
+    }
+    .section-header:hover { background: #1a4a7a; }
+    .section-body {
+      padding: 0.5rem;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-top: none;
+      border-radius: 0 0 4px 4px;
+      min-height: 44px;
+    }
+    .section-body.sortable-ghost { opacity: 0.4; }
+    .card-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+    .card-list li {
+      margin: 0;
+      padding: 0;
+    }
+    .card-img {
+      width: 150px;
+      height: 210px;
+      object-fit: cover;
+      border-radius: 8px;
+      cursor: grab;
+      display: block;
+    }
+    .card-img:active { cursor: grabbing; }
+    .card-img[data-name] { border: 1px solid var(--border); }
+    .removed-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+    .removed-list li { margin: 0; padding: 0; }
+    .sortable-drag { opacity: 0.8; }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <h1>MTG Deck Editor</h1>
+    <div>
+      <button class="save-btn" id="saveBtn" disabled>Save Deck</button>
+      <span class="save-result" id="saveResult"></span>
+    </div>
+  </header>
+  <div class="search-bar">
+    <input type="text" id="cardSearch" placeholder="Search card by name..." title="Type a card name and click Add or press Enter">
+    <button type="button" class="add-card-btn" id="addCardBtn" title="Add the searched card to the deck">Add to deck</button>
+    <span class="search-msg" id="searchMsg"></span>
+  </div>
+  <main class="main">
+    <div class="deck-column">
+      <div id="deckSections"></div>
+    </div>
+    <div class="removed-column">
+      <h2>Removed / Staging</h2>
+      <ul class="removed-list" id="removedZone"></ul>
+    </div>
+  </main>
+
+  <script>
+    const TYPE_KEYS = [
+      'creatures', 'artifacts', 'enchantments', 'planeswalkers',
+      'instants', 'sorceries', 'spells', 'lands'
+    ];
+    const TYPE_LABELS = {
+      creatures: 'Creatures',
+      artifacts: 'Artifacts',
+      enchantments: 'Enchantments',
+      planeswalkers: 'Planeswalkers',
+      instants: 'Instants',
+      sorceries: 'Sorceries',
+      spells: 'Spells',
+      lands: 'Lands'
+    };
+
+    function scryfallImageUrl(name) {
+      return 'https://api.scryfall.com/cards/named?exact=' + encodeURIComponent(name) + '&format=image&version=normal';
+    }
+
+    function makeCardEl(name) {
+      const li = document.createElement('li');
+      const img = document.createElement('img');
+      img.className = 'card-img';
+      img.src = scryfallImageUrl(name);
+      img.alt = name;
+      img.title = name;
+      img.dataset.name = name;
+      img.loading = 'lazy';
+      img.onerror = function () { this.style.background = '#333'; this.style.minWidth = '150px'; this.style.minHeight = '210px'; };
+      li.appendChild(img);
+      return li;
+    }
+
+    function renderDeck(data) {
+      const container = document.getElementById('deckSections');
+      container.innerHTML = '';
+      const deck = data.deck || {};
+      const removed = data.removed || [];
+
+      TYPE_KEYS.forEach(function (key) {
+        const cards = Array.isArray(deck[key]) ? deck[key] : [];
+        const section = document.createElement('div');
+        section.className = 'section';
+        section.dataset.type = key;
+        section.innerHTML =
+          '<div class="section-header">' + (TYPE_LABELS[key] || key) + ' (' + cards.length + ')</div>' +
+          '<div class="section-body"><ul class="card-list" id="list-' + key + '"></ul></div>';
+        const list = section.querySelector('.card-list');
+        cards.forEach(function (name) {
+          list.appendChild(makeCardEl(name));
+        });
+        container.appendChild(section);
+      });
+
+      const removedZone = document.getElementById('removedZone');
+      removedZone.innerHTML = '';
+      removed.forEach(function (name) {
+        removedZone.appendChild(makeCardEl(name));
+      });
+
+      document.getElementById('saveBtn').disabled = false;
+      initSortable();
+    }
+
+    function typeLineToSectionKey(typeLine) {
+      if (!typeLine || typeof typeLine !== 'string') return 'spells';
+      var t = typeLine.toLowerCase();
+      if (t.indexOf('land') !== -1) return 'lands';
+      if (t.indexOf('creature') !== -1) return 'creatures';
+      if (t.indexOf('planeswalker') !== -1) return 'planeswalkers';
+      if (t.indexOf('artifact') !== -1) return 'artifacts';
+      if (t.indexOf('enchantment') !== -1) return 'enchantments';
+      if (t.indexOf('instant') !== -1) return 'instants';
+      if (t.indexOf('sorcery') !== -1) return 'sorceries';
+      return 'spells';
+    }
+
+    function addCardToDeck(cardName, typeKey) {
+      var listId = 'list-' + typeKey;
+      var list = document.getElementById(listId);
+      if (!list) return;
+      list.appendChild(makeCardEl(cardName));
+      var section = list.closest('.section');
+      if (section) {
+        var header = section.querySelector('.section-header');
+        if (header) {
+          var n = list.querySelectorAll('.card-img[data-name]').length;
+          header.textContent = (TYPE_LABELS[typeKey] || typeKey) + ' (' + n + ')';
+        }
+      }
+    }
+
+    function doSearch() {
+      var input = document.getElementById('cardSearch');
+      var msgEl = document.getElementById('searchMsg');
+      var query = (input.value || '').trim();
+      if (!query) {
+        msgEl.textContent = 'Enter a card name.';
+        msgEl.className = 'search-msg';
+        return;
+      }
+      msgEl.textContent = 'Searching…';
+      msgEl.className = 'search-msg';
+      fetch('https://api.scryfall.com/cards/named?fuzzy=' + encodeURIComponent(query))
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data.object === 'error') {
+            msgEl.textContent = data.details || 'Card not found.';
+            msgEl.className = 'search-msg error';
+            return;
+          }
+          var name = data.name;
+          var typeKey = typeLineToSectionKey(data.type_line);
+          addCardToDeck(name, typeKey);
+          msgEl.textContent = 'Added: ' + name;
+          msgEl.className = 'search-msg';
+          input.value = '';
+          input.focus();
+        })
+        .catch(function () {
+          msgEl.textContent = 'Search failed.';
+          msgEl.className = 'search-msg error';
+        });
+    }
+
+    (function initSearch() {
+      var input = document.getElementById('cardSearch');
+      var addBtn = document.getElementById('addCardBtn');
+      addBtn.addEventListener('click', doSearch);
+      input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); doSearch(); }
+      });
+    })();
+
+    let sortables = [];
+
+    function initSortable() {
+      sortables.forEach(function (s) { if (s.destroy) s.destroy(); });
+      sortables = [];
+
+      const options = {
+        group: 'cards',
+        animation: 150,
+        ghostClass: 'sortable-ghost',
+        dragClass: 'sortable-drag'
+      };
+
+      TYPE_KEYS.forEach(function (key) {
+        const el = document.getElementById('list-' + key);
+        if (el) sortables.push(Sortable.create(el, options));
+      });
+      const removedEl = document.getElementById('removedZone');
+      if (removedEl) sortables.push(Sortable.create(removedEl, options));
+    }
+
+    function collectState() {
+      const deck = { name: '', colors: [], description: '', removed: [] };
+      TYPE_KEYS.forEach(function (key) {
+        const list = document.getElementById('list-' + key);
+        deck[key] = [];
+        if (list) {
+          list.querySelectorAll('.card-img[data-name]').forEach(function (img) {
+            deck[key].push(img.dataset.name);
+          });
+        }
+      });
+      const removedZone = document.getElementById('removedZone');
+      deck.removed = [];
+      if (removedZone) {
+        removedZone.querySelectorAll('.card-img[data-name]').forEach(function (img) {
+          deck.removed.push(img.dataset.name);
+        });
+      }
+      return deck;
+    }
+
+    function getDeckMeta() {
+      return fetch('/api/deck').then(function (r) {
+        if (!r.ok) return { deck: null, removed: [] };
+        return r.json();
+      }).then(function (data) {
+        if (data.deck) {
+          return {
+            name: data.deck.name,
+            colors: data.deck.colors || [],
+            description: data.deck.description || ''
+          };
+        }
+        return { name: '', colors: [], description: '' };
+      }).catch(function () { return { name: '', colors: [], description: '' }; });
+    }
+
+    document.getElementById('saveBtn').addEventListener('click', function () {
+      const btn = this;
+      const resultEl = document.getElementById('saveResult');
+      resultEl.textContent = '';
+      const state = collectState();
+      getDeckMeta().then(function (meta) {
+        const body = {
+          name: meta.name,
+          colors: meta.colors,
+          description: meta.description,
+          creatures: state.creatures,
+          artifacts: state.artifacts,
+          enchantments: state.enchantments,
+          planeswalkers: state.planeswalkers,
+          instants: state.instants,
+          sorceries: state.sorceries,
+          spells: state.spells,
+          lands: state.lands,
+          removed: state.removed
+        };
+        return fetch('/api/deck', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+      }).then(function (r) {
+        if (!r.ok) throw new Error('PUT failed');
+        return fetch('/api/save', { method: 'POST' });
+      }).then(function (r) {
+        if (!r.ok) throw new Error('Save failed');
+        return r.json();
+      }).then(function (json) {
+        resultEl.textContent = 'Saved: ' + (json.saved_to || '');
+      }).catch(function (err) {
+        resultEl.textContent = 'Error: ' + (err.message || 'save failed');
+        resultEl.style.color = '#f88';
+      });
+    });
+
+    fetch('/api/deck')
+      .then(function (r) { return r.json(); })
+      .catch(function () { return { deck: {}, removed: [] }; })
+      .then(renderDeck);
+  </script>
+</body>
+</html>
