@@ -52,7 +52,7 @@ def _parse_colors(colors_str: str) -> set[str]:
 
 def filter_cards_list(
     name: str = "",
-    oracle_text: str = "",
+    oracle_text: str | list[str] = "",
     type_line: str = "",
     colors: str = "",
     color_identity: str = "",
@@ -71,9 +71,13 @@ def filter_cards_list(
     offset: int = 0,
 ) -> list[Card]:
     """Filter MTG cards by exact/filter properties. All filters are AND-combined. Returns list of Card. At least one filter must be set. offset/n_results support pagination."""
+    _oracle_list: list[str] = (
+        [s.strip() for s in oracle_text] if isinstance(oracle_text, list) else [oracle_text.strip()] if oracle_text else []
+    )
+    _oracle_list = [s for s in _oracle_list if s]
     has_filter: bool = (
         bool(name.strip())
-        or bool(oracle_text.strip())
+        or bool(_oracle_list)
         or bool(type_line.strip())
         or bool(colors.strip())
         or bool(color_identity.strip())
@@ -95,7 +99,7 @@ def filter_cards_list(
 
     cards: list[Card] = get_card_data()
     name_lower: str = name.strip().lower() if name else ""
-    oracle_lower: str = oracle_text.strip().lower() if oracle_text else ""
+    oracle_lower_list: list[str] = [s.lower() for s in _oracle_list]
     type_lower: str = type_line.strip().lower() if type_line else ""
     colors_filter: set[str] = _parse_colors(colors)
     color_identity_filter: set[str] = _parse_colors(color_identity)
@@ -111,8 +115,10 @@ def filter_cards_list(
     for card in cards:
         if name_lower and name_lower not in card.name.lower():
             continue
-        if oracle_lower and oracle_lower not in card.text.lower():
-            continue
+        if oracle_lower_list:
+            card_text_lower: str = card.text.lower()
+            if not all(phrase in card_text_lower for phrase in oracle_lower_list):
+                continue
         if type_lower and type_lower not in card.type_line.lower():
             continue
         if colors_filter:

@@ -28,6 +28,31 @@
       gap: 0.5rem 1rem;
       margin-bottom: 1rem;
     }
+    .oracle-text-wrap { grid-column: 1 / -1; }
+    .oracle-entries { display: flex; flex-direction: column; gap: 0.4rem; }
+    .oracle-entry-row {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .oracle-entry-row input { flex: 1; min-width: 0; }
+    .oracle-btn {
+      flex-shrink: 0;
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--panel);
+      color: var(--text);
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      line-height: 1;
+    }
+    .oracle-btn:hover { background: var(--border); }
+    .oracle-btn-add { color: #6f6; }
+    .oracle-btn-remove { color: #f66; }
     .form-grid label {
       display: block;
       font-size: 0.8rem;
@@ -59,6 +84,20 @@
     }
     .colors-row .color-chip:hover { border-color: var(--text); }
     .colors-row .color-chip:has(input:checked) { border-color: #fff; box-shadow: 0 0 0 2px var(--bg); }
+    .colors-row .color-chip:has(input:checked)::after {
+      content: "✓";
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1rem;
+      font-weight: 700;
+      color: #222;
+      pointer-events: none;
+    }
+    .colors-row .color-chip.color-B:has(input:checked)::after,
+    .colors-row .color-chip.color-C:has(input:checked)::after { color: #fff; }
     .colors-row .color-chip input { margin: 0; opacity: 0; position: absolute; inset: 0; width: 100%; height: 100%; cursor: pointer; z-index: 1; }
     .color-W { background: #f0e6d8; }
     .color-U { background: #a8d0e6; }
@@ -144,9 +183,14 @@
       <label for="name">Name</label>
       <input type="text" id="name" name="name" placeholder="e.g. Bolt">
     </div>
-    <div>
-      <label for="oracle_text">Oracle text</label>
-      <input type="text" id="oracle_text" name="oracle_text" placeholder="contains...">
+    <div class="oracle-text-wrap">
+      <label>Oracle text</label>
+      <div id="oracleTextEntries" class="oracle-entries">
+        <div class="oracle-entry-row">
+          <input type="text" name="oracle_text" placeholder="contains...">
+          <button type="button" class="oracle-btn oracle-btn-add" title="Add another phrase">+</button>
+        </div>
+      </div>
     </div>
     <div>
       <label for="type">Type</label>
@@ -308,6 +352,32 @@
     document.getElementById('type').addEventListener('change', updateSubtypeOptions);
     updateSubtypeOptions();
 
+    (function () {
+      var container = document.getElementById('oracleTextEntries');
+      if (!container) return;
+      container.addEventListener('click', function (e) {
+        if (e.target.classList.contains('oracle-btn-add')) {
+          var row = document.createElement('div');
+          row.className = 'oracle-entry-row';
+          var inp = document.createElement('input');
+          inp.type = 'text';
+          inp.name = 'oracle_text';
+          inp.placeholder = 'contains...';
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'oracle-btn oracle-btn-remove';
+          btn.title = 'Remove this phrase';
+          btn.textContent = '-';
+          row.appendChild(inp);
+          row.appendChild(btn);
+          container.appendChild(row);
+        } else if (e.target.classList.contains('oracle-btn-remove')) {
+          var row = e.target.closest('.oracle-entry-row');
+          if (row && row.parentNode && row.parentNode.children.length > 1) row.remove();
+        }
+      });
+    })();
+
     function scryfallImageUrl(name) {
       return 'https://api.scryfall.com/cards/named?exact=' + encodeURIComponent(name) + '&format=image&version=normal';
     }
@@ -361,8 +431,9 @@
       var body = {};
       var name = document.getElementById('name').value.trim();
       if (name) body.name = name;
-      var oracle_text = document.getElementById('oracle_text').value.trim();
-      if (oracle_text) body.oracle_text = oracle_text;
+      var oracleInputs = document.querySelectorAll('#oracleTextEntries input[name="oracle_text"]');
+      var oracleValues = Array.from(oracleInputs).map(function (inp) { return inp.value.trim(); }).filter(Boolean);
+      if (oracleValues.length > 0) body.oracle_text = oracleValues;
       var typeVal = document.getElementById('type').value.trim();
       if (typeVal) body.type = typeVal;
       var subtypeVal = document.getElementById('subtype').value.trim();

@@ -138,7 +138,12 @@ async def serve_search() -> FileResponse:
 async def search_cards_api(body: dict) -> dict:
     """Advanced search: same filters as filter_cards. Returns JSON list of card dicts."""
     name: str = body["name"] if "name" in body and isinstance(body["name"], str) else ""
-    oracle_text: str = body["oracle_text"] if "oracle_text" in body and isinstance(body["oracle_text"], str) else ""
+    oracle_text: str | list[str] = ""
+    if "oracle_text" in body:
+        if isinstance(body["oracle_text"], list):
+            oracle_text = [s for s in body["oracle_text"] if isinstance(s, str) and s.strip()]
+        elif isinstance(body["oracle_text"], str) and body["oracle_text"].strip():
+            oracle_text = body["oracle_text"].strip()
     type_line: str = ""
     if "type" in body and isinstance(body["type"], str) and (body["type"] or "").strip():
         type_line = (body["type"] or "").strip()
