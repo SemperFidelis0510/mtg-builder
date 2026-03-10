@@ -260,24 +260,33 @@ class Deck:
         out_path.write_text(text, encoding="utf-8")
 
     def to_dict(self) -> dict:
-        """Serialize this Deck to a plain dict (only __init__ fields: name, colors, description, cards, maybe, sideboard)."""
+        """Serialize this Deck to a plain dict. cards/maybe/sideboard are stored as flat name lists."""
         return {
             "name": self.name,
             "colors": list(self.colors),
             "description": self.description,
-            "cards": [c.to_dict() for c in self.cards],
-            "maybe": [c.to_dict() for c in self.maybe],
-            "sideboard": [c.to_dict() for c in self.sideboard],
+            "cards": [c.name for c in self.cards],
+            "maybe": [c.name for c in self.maybe],
+            "sideboard": [c.name for c in self.sideboard],
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "Deck":
-        """Construct a Deck from a dict (inverse of to_dict). Accepts merged keys (non_creatures, spells) or legacy (artifacts, enchantments, planeswalkers, instants, sorceries)."""
+    def _cards_list_from_data(cls, raw: list) -> list["Card"]:
+        """Resolve a JSON list to Card objects. Accepts name strings, card dicts, or Card instances."""
         from src.obj.card import Card
 
+        if not raw:
+            return []
+        if isinstance(raw[0], str):
+            return _cards_from_names(raw)
+        return _normalize_cards_arg(raw, Card)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Deck":
+        """Construct a Deck from a dict (inverse of to_dict). Accepts name lists, full card dicts, or legacy type-list keys."""
         cards_arg: list["Card"] = []
         if "cards" in data and isinstance(data["cards"], list):
-            cards_arg = [Card.from_dict(c) for c in data["cards"]]
+            cards_arg = cls._cards_list_from_data(data["cards"])
         else:
             all_names: list[str] = []
             if "creatures" in data and isinstance(data["creatures"], list):
@@ -303,17 +312,12 @@ class Deck:
             if all_names:
                 cards_arg = _cards_from_names(all_names)
 
-        maybe_raw = data["maybe"] if "maybe" in data and isinstance(data["maybe"], list) else None
-        if maybe_raw and isinstance(maybe_raw[0], str):
-            maybe_arg: list["Card"] = _cards_from_names(maybe_raw)
-        else:
-            maybe_arg = _normalize_cards_arg(maybe_raw, Card)
-
-        sideboard_raw = data["sideboard"] if "sideboard" in data and isinstance(data["sideboard"], list) else None
-        if sideboard_raw and isinstance(sideboard_raw[0], str):
-            sideboard_arg: list["Card"] = _cards_from_names(sideboard_raw)
-        else:
-            sideboard_arg = _normalize_cards_arg(sideboard_raw, Card)
+        maybe_arg: list["Card"] = cls._cards_list_from_data(
+            data["maybe"] if "maybe" in data and isinstance(data["maybe"], list) else []
+        )
+        sideboard_arg: list["Card"] = cls._cards_list_from_data(
+            data["sideboard"] if "sideboard" in data and isinstance(data["sideboard"], list) else []
+        )
 
         return cls(
             name=data["name"] if "name" in data else "",
