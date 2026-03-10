@@ -38,12 +38,9 @@ class Deck:
         description: Optional deck description.
         cards: Full list of Card objects in the deck (duplicates for multiple copies).
         creatures: Card names that are creatures.
-        artifacts: Card names that are artifacts.
-        enchantments: Card names that are enchantments.
-        planeswalkers: Card names that are planeswalkers.
+        non_creatures: Card names that are artifacts, enchantments, or planeswalkers.
+        spells: Card names that are instants or sorceries.
         lands: Card names that are lands.
-        instants: Card names that are instants.
-        sorceries: Card names that are sorceries.
     """
 
     def __init__(
@@ -53,12 +50,9 @@ class Deck:
         description: str = "",
         cards: list["Card"] | list[dict] | None = None,
         creatures: list[str] | None = None,
-        artifacts: list[str] | None = None,
-        enchantments: list[str] | None = None,
-        planeswalkers: list[str] | None = None,
+        non_creatures: list[str] | None = None,
+        spells: list[str] | None = None,
         lands: list[str] | None = None,
-        instants: list[str] | None = None,
-        sorceries: list[str] | None = None,
     ) -> None:
         from src.obj.card import Card as CardCls
 
@@ -67,12 +61,9 @@ class Deck:
         self.description: str = description
         self.cards: list["Card"] = _normalize_cards_arg(cards, CardCls)
         self.creatures: list[str] = list(creatures) if creatures is not None else []
-        self.artifacts: list[str] = list(artifacts) if artifacts is not None else []
-        self.enchantments: list[str] = list(enchantments) if enchantments is not None else []
-        self.planeswalkers: list[str] = list(planeswalkers) if planeswalkers is not None else []
+        self.non_creatures: list[str] = list(non_creatures) if non_creatures is not None else []
+        self.spells: list[str] = list(spells) if spells is not None else []
         self.lands: list[str] = list(lands) if lands is not None else []
-        self.instants: list[str] = list(instants) if instants is not None else []
-        self.sorceries: list[str] = list(sorceries) if sorceries is not None else []
 
     def add_cards(self, names: list[str]) -> None:
         """Resolve card names to Card objects from the card database and append them to this deck.
@@ -151,37 +142,50 @@ class Deck:
             "description": self.description,
             "cards": [c.to_dict() for c in self.cards],
             "creatures": list(self.creatures),
-            "artifacts": list(self.artifacts),
-            "enchantments": list(self.enchantments),
-            "planeswalkers": list(self.planeswalkers),
+            "non_creatures": list(self.non_creatures),
+            "spells": list(self.spells),
             "lands": list(self.lands),
-            "instants": list(self.instants),
-            "sorceries": list(self.sorceries),
         }
 
     @classmethod
     def from_dict(cls, data: dict) -> "Deck":
-        """Construct a Deck from a dict (inverse of to_dict)."""
+        """Construct a Deck from a dict (inverse of to_dict). Accepts merged keys (non_creatures, spells) or legacy (artifacts, enchantments, planeswalkers, instants, sorceries)."""
         from src.obj.card import Card
 
         cards_arg: list["Card"] | None = None
         if "cards" in data:
             raw_cards: list = data["cards"]
             cards_arg = [Card.from_dict(c) for c in raw_cards] if isinstance(raw_cards, list) else None
+
+        non_creatures: list[str] | None = None
+        if "non_creatures" in data and isinstance(data["non_creatures"], list):
+            non_creatures = data["non_creatures"]
+        else:
+            legacy: list[str] = []
+            for key in ("artifacts", "enchantments", "planeswalkers"):
+                if key in data and isinstance(data[key], list):
+                    legacy.extend(data[key])
+            if legacy:
+                non_creatures = legacy
+
+        spells: list[str] | None = None
+        if "spells" in data and isinstance(data["spells"], list):
+            spells = data["spells"]
+        else:
+            legacy_spells: list[str] = []
+            for key in ("instants", "sorceries"):
+                if key in data and isinstance(data[key], list):
+                    legacy_spells.extend(data[key])
+            if legacy_spells:
+                spells = legacy_spells
+
         return cls(
             name=data["name"] if "name" in data else "",
             colors=data["colors"] if "colors" in data else None,
             description=data["description"] if "description" in data else "",
             cards=cards_arg,
             creatures=data["creatures"] if "creatures" in data else None,
-            artifacts=data["artifacts"] if "artifacts" in data else None,
-            enchantments=data["enchantments"] if "enchantments" in data else None,
-            planeswalkers=data["planeswalkers"] if "planeswalkers" in data else None,
+            non_creatures=non_creatures,
+            spells=spells,
             lands=data["lands"] if "lands" in data else None,
-            instants=data["instants"] if "instants" in data else None,
-            sorceries=(
-                (data["sorceries"] if "sorceries" in data else [])
-                + (data["spells"] if "spells" in data else [])
-            )
-            or None,
         )

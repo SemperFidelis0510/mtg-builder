@@ -329,15 +329,36 @@
       margin: 0;
       padding: 0;
       display: flex;
+      flex-direction: column;
       flex-wrap: wrap;
       gap: 4px;
-      min-height: 220px;
+      min-height: 80px;
       border: 2px dashed var(--border);
       border-radius: 8px;
       padding: 4px;
     }
     .removed-list:not(:empty) { border-color: transparent; }
     .removed-list li { margin: 0; padding: 0; }
+    .card-stack.maybe-board-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      cursor: grab;
+      min-width: 0;
+    }
+    .card-stack.maybe-board-item:active { cursor: grabbing; }
+    .card-stack.maybe-board-item .maybe-board-name {
+      flex: 1;
+      min-width: 0;
+      font-size: 0.9rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
     .sortable-drag { opacity: 0.8; }
     .card-preview {
       position: fixed;
@@ -384,7 +405,7 @@
       <div id="deckSections"></div>
     </div>
     <div class="removed-column">
-      <h2>Removed / Staging</h2>
+      <h2>Maybe Board</h2>
       <ul class="removed-list" id="removedZone"></ul>
     </div>
   </main>
@@ -402,16 +423,12 @@
     var statsMvChartInstance = null;
 
     const TYPE_KEYS = [
-      'creatures', 'artifacts', 'enchantments', 'planeswalkers',
-      'instants', 'sorceries', 'lands'
+      'creatures', 'non_creatures', 'spells', 'lands'
     ];
     const TYPE_LABELS = {
       creatures: 'Creatures',
-      artifacts: 'Artifacts',
-      enchantments: 'Enchantments',
-      planeswalkers: 'Planeswalkers',
-      instants: 'Instants',
-      sorceries: 'Sorceries',
+      non_creatures: 'Non-creatures',
+      spells: 'Spells',
       lands: 'Lands'
     };
 
@@ -490,11 +507,8 @@
             colors: meta.colors,
             description: meta.description,
             creatures: state.creatures,
-            artifacts: state.artifacts,
-            enchantments: state.enchantments,
-            planeswalkers: state.planeswalkers,
-            instants: state.instants,
-            sorceries: state.sorceries,
+            non_creatures: state.non_creatures,
+            spells: state.spells,
             lands: state.lands,
             removed: state.removed
           };
@@ -512,14 +526,15 @@
     function updateSectionHeaderTotal(listEl) {
       if (!listEl) return;
       var section = listEl.closest('.section');
-      if (!section) return;
-      var typeKey = section.dataset.type;
+      var typeKey = section ? section.dataset.type : null;
       var total = 0;
       listEl.querySelectorAll('.card-stack[data-count]').forEach(function (el) {
         total += parseInt(el.getAttribute('data-count') || '1', 10);
       });
-      var header = section.querySelector('.section-header');
-      if (header) header.textContent = (TYPE_LABELS[typeKey] || typeKey) + ' (' + total + ')';
+      if (section && typeKey) {
+        var header = section.querySelector('.section-header');
+        if (header) header.textContent = (TYPE_LABELS[typeKey] || typeKey) + ' (' + total + ')';
+      }
       updateTotalsPanel();
       syncDeckToServer();
     }
@@ -582,6 +597,62 @@
       banner.appendChild(controls);
       wrap.appendChild(img);
       wrap.appendChild(banner);
+      li.appendChild(wrap);
+      return li;
+    }
+
+    function makeMaybeBoardCardEl(name, count) {
+      count = Math.max(1, parseInt(count, 10) || 1);
+      var li = document.createElement('li');
+      li.style.listStyle = 'none';
+      var wrap = document.createElement('div');
+      wrap.className = 'card-stack maybe-board-item';
+      wrap.dataset.name = name;
+      wrap.dataset.count = String(count);
+      wrap.setAttribute('data-name', name);
+      wrap.setAttribute('data-count', String(count));
+
+      var nameSpan = document.createElement('span');
+      nameSpan.className = 'maybe-board-name';
+      nameSpan.textContent = name;
+      nameSpan.title = name;
+
+      var badge = document.createElement('span');
+      badge.className = 'card-stack-badge';
+      badge.textContent = String(count);
+
+      var controls = document.createElement('div');
+      controls.className = 'card-stack-controls';
+      var btnPlus = document.createElement('button');
+      btnPlus.textContent = '+';
+      btnPlus.type = 'button';
+      var btnMinus = document.createElement('button');
+      btnMinus.textContent = '-';
+      btnMinus.type = 'button';
+
+      function setCount(c) {
+        c = Math.max(0, c);
+        wrap.setAttribute('data-count', String(c));
+        badge.textContent = String(c);
+        if (c === 0) {
+          var list = li.parentNode;
+          li.remove();
+          updateSectionHeaderTotal(list);
+          return;
+        }
+        updateSectionHeaderTotal(li.parentNode);
+      }
+
+      btnPlus.addEventListener('mousedown', function (e) { e.preventDefault(); e.stopPropagation(); });
+      btnPlus.addEventListener('click', function (e) { e.stopPropagation(); setCount(parseInt(wrap.getAttribute('data-count'), 10) + 1); });
+      btnMinus.addEventListener('mousedown', function (e) { e.preventDefault(); e.stopPropagation(); });
+      btnMinus.addEventListener('click', function (e) { e.stopPropagation(); setCount(parseInt(wrap.getAttribute('data-count'), 10) - 1); });
+
+      controls.appendChild(btnMinus);
+      controls.appendChild(btnPlus);
+      wrap.appendChild(nameSpan);
+      wrap.appendChild(badge);
+      wrap.appendChild(controls);
       li.appendChild(wrap);
       return li;
     }
@@ -662,7 +733,7 @@
       const removedZone = document.getElementById('removedZone');
       removedZone.innerHTML = '';
       collapseToStacks(removed).forEach(function (s) {
-        removedZone.appendChild(makeCardStackEl(s.name, s.count));
+        removedZone.appendChild(makeMaybeBoardCardEl(s.name, s.count));
       });
 
       document.getElementById('saveBtn').disabled = false;
@@ -726,16 +797,13 @@
     }
 
     function typeLineToSectionKey(typeLine) {
-      if (!typeLine || typeof typeLine !== 'string') return 'sorceries';
+      if (!typeLine || typeof typeLine !== 'string') return 'spells';
       var t = typeLine.toLowerCase();
       if (t.indexOf('land') !== -1) return 'lands';
       if (t.indexOf('creature') !== -1) return 'creatures';
-      if (t.indexOf('planeswalker') !== -1) return 'planeswalkers';
-      if (t.indexOf('artifact') !== -1) return 'artifacts';
-      if (t.indexOf('enchantment') !== -1) return 'enchantments';
-      if (t.indexOf('instant') !== -1) return 'instants';
-      if (t.indexOf('sorcery') !== -1) return 'sorceries';
-      return 'sorceries';
+      if (t.indexOf('planeswalker') !== -1 || t.indexOf('artifact') !== -1 || t.indexOf('enchantment') !== -1) return 'non_creatures';
+      if (t.indexOf('instant') !== -1 || t.indexOf('sorcery') !== -1) return 'spells';
+      return 'spells';
     }
 
     function addCardToDeck(cardName, typeKey) {
@@ -919,7 +987,7 @@
       var iframe = document.getElementById('advSearchIframe');
       var closeBtn = document.getElementById('advSearchModalClose');
       document.getElementById('advancedSearchBtn').addEventListener('click', function () {
-        iframe.src = '/search';
+        iframe.src = '/search?t=' + Date.now();
         modal.classList.add('open');
         modal.setAttribute('aria-hidden', 'false');
       });
@@ -942,7 +1010,7 @@
 
       const options = {
         group: { name: 'cards', pull: true, put: true },
-        handle: '.card-img',
+        handle: '.card-img, .maybe-board-name',
         animation: 150,
         ghostClass: 'sortable-ghost',
         dragClass: 'sortable-drag'
@@ -953,7 +1021,33 @@
         if (el) sortables.push(Sortable.create(el, options));
       });
       const removedEl = document.getElementById('removedZone');
-      if (removedEl) sortables.push(Sortable.create(removedEl, options));
+      if (removedEl) {
+        sortables.push(Sortable.create(removedEl, {
+          group: { name: 'cards', pull: true, put: true },
+          handle: '.card-img, .maybe-board-name',
+          animation: 150,
+          ghostClass: 'sortable-ghost',
+          dragClass: 'sortable-drag',
+          onEnd: function () {
+            var zone = document.getElementById('removedZone');
+            if (!zone) return;
+            var toReplace = [];
+            for (var i = 0; i < zone.children.length; i++) {
+              var li = zone.children[i];
+              var stack = li.querySelector('.card-stack');
+              if (stack && stack.querySelector('.card-img') && !stack.classList.contains('maybe-board-item')) {
+                var name = stack.getAttribute('data-name');
+                var count = parseInt(stack.getAttribute('data-count'), 10) || 1;
+                toReplace.push({ li: li, name: name, count: count });
+              }
+            }
+            toReplace.forEach(function (r) {
+              var newLi = makeMaybeBoardCardEl(r.name, r.count);
+              r.li.parentNode.replaceChild(newLi, r.li);
+            });
+          }
+        }));
+      }
     }
 
     function collectState() {
@@ -1029,11 +1123,8 @@
           colors: meta.colors,
           description: meta.description,
           creatures: state.creatures,
-          artifacts: state.artifacts,
-          enchantments: state.enchantments,
-          planeswalkers: state.planeswalkers,
-          instants: state.instants,
-          sorceries: state.sorceries,
+          non_creatures: state.non_creatures,
+          spells: state.spells,
           lands: state.lands
         };
         var blob = new Blob([JSON.stringify(deck, null, 2)], { type: 'application/json' });

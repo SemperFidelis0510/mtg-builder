@@ -23,12 +23,25 @@
     }
     h1 { margin: 0 0 1rem 0; font-size: 1.25rem; }
     .form-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-      gap: 0.5rem 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
       margin-bottom: 1rem;
     }
-    .oracle-text-wrap { grid-column: 1 / -1; }
+    .form-grid .field-name { max-width: 280px; }
+    .oracle-text-wrap { }
+    .form-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.5rem 1rem;
+      align-items: end;
+    }
+    @media (max-width: 900px) {
+      .form-row { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 500px) {
+      .form-row { grid-template-columns: 1fr; }
+    }
     .oracle-entries { display: flex; flex-direction: column; gap: 0.4rem; }
     .oracle-entry-row {
       display: flex;
@@ -179,140 +192,167 @@
   <p class="search-msg" id="searchMsg">Set at least one filter, then click Search. Double-click a card to add it to the deck.</p>
 
   <form id="searchForm" class="form-grid">
-    <div>
+    <div class="field-name">
       <label for="name">Name</label>
       <input type="text" id="name" name="name" placeholder="e.g. Bolt">
     </div>
     <div class="oracle-text-wrap">
       <label>Oracle text</label>
       <div id="oracleTextEntries" class="oracle-entries">
-        <div class="oracle-entry-row">
+        <div class="oracle-entry-row oracle-add-row" id="oracleAddRow">
           <input type="text" name="oracle_text" placeholder="contains...">
           <button type="button" class="oracle-btn oracle-btn-add" title="Add another phrase">+</button>
         </div>
       </div>
     </div>
-    <div>
-      <label for="type">Type</label>
-      <select id="type" name="type">
-        <option value="">None</option>
-        <option value="Creature">Creature</option>
-        <option value="Land">Land</option>
-        <option value="Instant">Instant</option>
-        <option value="Sorcery">Sorcery</option>
-        <option value="Artifact">Artifact</option>
-        <option value="Enchantment">Enchantment</option>
-        <option value="Planeswalker">Planeswalker</option>
-        <option value="Tribal">Tribal</option>
-      </select>
-    </div>
-    <div>
-      <label for="subtype">Subtype</label>
-      <select id="subtype" name="subtype">
-        <option value="">None</option>
-      </select>
-    </div>
-    <div>
-      <label for="supertype">Supertype</label>
-      <select id="supertype" name="supertype">
-        <option value="">None</option>
-        <option value="Legendary">Legendary</option>
-        <option value="Snow">Snow</option>
-        <option value="Basic">Basic</option>
-        <option value="World">World</option>
-      </select>
-    </div>
-    <div>
-      <label>Colors</label>
-      <div class="colors-row">
-        <label class="color-chip color-W" title="White"><input type="checkbox" id="cW" name="color" value="W"></label>
-        <label class="color-chip color-U" title="Blue"><input type="checkbox" id="cU" name="color" value="U"></label>
-        <label class="color-chip color-B" title="Black"><input type="checkbox" id="cB" name="color" value="B"></label>
-        <label class="color-chip color-R" title="Red"><input type="checkbox" id="cR" name="color" value="R"></label>
-        <label class="color-chip color-G" title="Green"><input type="checkbox" id="cG" name="color" value="G"></label>
-        <label class="color-chip color-C" title="Colorless"><input type="checkbox" id="cC" name="colorless"></label>
+    <div class="form-row">
+      <div>
+        <label>Colors</label>
+        <div class="colors-row">
+          <label class="color-chip color-W" title="White"><input type="checkbox" id="cW" name="color" value="W"></label>
+          <label class="color-chip color-U" title="Blue"><input type="checkbox" id="cU" name="color" value="U"></label>
+          <label class="color-chip color-B" title="Black"><input type="checkbox" id="cB" name="color" value="B"></label>
+          <label class="color-chip color-R" title="Red"><input type="checkbox" id="cR" name="color" value="R"></label>
+          <label class="color-chip color-G" title="Green"><input type="checkbox" id="cG" name="color" value="G"></label>
+          <label class="color-chip color-C" title="Colorless"><input type="checkbox" id="cC" name="colorless"></label>
+        </div>
+      </div>
+      <div>
+        <label>Color identity</label>
+        <div class="colors-row" id="colorIdentityRow">
+          <label class="color-chip color-W" title="White"><input type="checkbox" name="color_identity" value="W"></label>
+          <label class="color-chip color-U" title="Blue"><input type="checkbox" name="color_identity" value="U"></label>
+          <label class="color-chip color-B" title="Black"><input type="checkbox" name="color_identity" value="B"></label>
+          <label class="color-chip color-R" title="Red"><input type="checkbox" name="color_identity" value="R"></label>
+          <label class="color-chip color-G" title="Green"><input type="checkbox" name="color_identity" value="G"></label>
+          <label class="color-chip color-C" title="Colorless"><input type="checkbox" id="ciC" name="color_identity_colorless"></label>
+        </div>
+      </div>
+      <div>
+        <label for="mana_value_min">Mana cost min</label>
+        <select id="mana_value_min" name="mana_value_min">
+          <option value="-1">None</option>
+          <option value="0">0</option>
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+          <option value="5">5</option>
+          <option value="6">6</option>
+          <option value="7">7</option>
+          <option value="8">8</option>
+          <option value="9">9</option>
+          <option value="10">10</option>
+          <option value="11">11</option>
+          <option value="12">12</option>
+          <option value="13">13</option>
+          <option value="14">14</option>
+          <option value="15">15</option>
+          <option value="16">16</option>
+          <option value="17">17</option>
+          <option value="18">18</option>
+          <option value="19">19</option>
+          <option value="20">20</option>
+        </select>
+      </div>
+      <div>
+        <label for="mana_value_max">Mana cost max</label>
+        <select id="mana_value_max" name="mana_value_max">
+          <option value="-1">None</option>
+          <option value="0">0</option>
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+          <option value="5">5</option>
+          <option value="6">6</option>
+          <option value="7">7</option>
+          <option value="8">8</option>
+          <option value="9">9</option>
+          <option value="10">10</option>
+          <option value="11">11</option>
+          <option value="12">12</option>
+          <option value="13">13</option>
+          <option value="14">14</option>
+          <option value="15">15</option>
+          <option value="16">16</option>
+          <option value="17">17</option>
+          <option value="18">18</option>
+          <option value="19">19</option>
+          <option value="20">20</option>
+        </select>
       </div>
     </div>
-    <div>
-      <label>Color identity</label>
-      <div class="colors-row" id="colorIdentityRow">
-        <label class="color-chip color-W" title="White"><input type="checkbox" name="color_identity" value="W"></label>
-        <label class="color-chip color-U" title="Blue"><input type="checkbox" name="color_identity" value="U"></label>
-        <label class="color-chip color-B" title="Black"><input type="checkbox" name="color_identity" value="B"></label>
-        <label class="color-chip color-R" title="Red"><input type="checkbox" name="color_identity" value="R"></label>
-        <label class="color-chip color-G" title="Green"><input type="checkbox" name="color_identity" value="G"></label>
-        <label class="color-chip color-C" title="Colorless"><input type="checkbox" id="ciC" name="color_identity_colorless"></label>
+    <div class="form-row">
+      <div>
+        <label for="type">Type</label>
+        <select id="type" name="type">
+          <option value="">None</option>
+          <option value="Creature">Creature</option>
+          <option value="Land">Land</option>
+          <option value="Instant">Instant</option>
+          <option value="Sorcery">Sorcery</option>
+          <option value="Artifact">Artifact</option>
+          <option value="Enchantment">Enchantment</option>
+          <option value="Planeswalker">Planeswalker</option>
+          <option value="Tribal">Tribal</option>
+        </select>
+      </div>
+      <div>
+        <label for="subtype">Subtype</label>
+        <select id="subtype" name="subtype">
+          <option value="">None</option>
+        </select>
+      </div>
+      <div>
+        <label for="supertype">Supertype</label>
+        <select id="supertype" name="supertype">
+          <option value="">None</option>
+          <option value="Legendary">Legendary</option>
+          <option value="Snow">Snow</option>
+          <option value="Basic">Basic</option>
+          <option value="World">World</option>
+        </select>
       </div>
     </div>
-    <div>
-      <label for="mana_value_min">Mana cost min</label>
-      <select id="mana_value_min" name="mana_value_min">
-        <option value="-1">None</option>
-        <option value="0">0</option>
-        <option value="1">1</option>
-        <option value="2">2</option>
-        <option value="3">3</option>
-        <option value="4">4</option>
-        <option value="5">5</option>
-        <option value="6">6</option>
-        <option value="7">7</option>
-        <option value="8">8</option>
-        <option value="9">9</option>
-        <option value="10">10</option>
-        <option value="11">11</option>
-        <option value="12">12</option>
-        <option value="13">13</option>
-        <option value="14">14</option>
-        <option value="15">15</option>
-        <option value="16">16</option>
-        <option value="17">17</option>
-        <option value="18">18</option>
-        <option value="19">19</option>
-        <option value="20">20</option>
-      </select>
-    </div>
-    <div>
-      <label for="mana_value_max">Mana cost max</label>
-      <select id="mana_value_max" name="mana_value_max">
-        <option value="-1">None</option>
-        <option value="0">0</option>
-        <option value="1">1</option>
-        <option value="2">2</option>
-        <option value="3">3</option>
-        <option value="4">4</option>
-        <option value="5">5</option>
-        <option value="6">6</option>
-        <option value="7">7</option>
-        <option value="8">8</option>
-        <option value="9">9</option>
-        <option value="10">10</option>
-        <option value="11">11</option>
-        <option value="12">12</option>
-        <option value="13">13</option>
-        <option value="14">14</option>
-        <option value="15">15</option>
-        <option value="16">16</option>
-        <option value="17">17</option>
-        <option value="18">18</option>
-        <option value="19">19</option>
-        <option value="20">20</option>
-      </select>
-    </div>
-    <div>
-      <label for="power">Power</label>
-      <input type="text" id="power" name="power" placeholder="e.g. 2">
-    </div>
-    <div>
-      <label for="toughness">Toughness</label>
-      <input type="text" id="toughness" name="toughness" placeholder="e.g. 2">
-    </div>
-    <div>
-      <label for="keywords">Keywords</label>
-      <input type="text" id="keywords" name="keywords" placeholder="e.g. flying">
-    </div>
-    <div>
-      <label for="format_legal">Format legal</label>
-      <input type="text" id="format_legal" name="format_legal" placeholder="e.g. commander">
+    <div class="form-row">
+      <div>
+        <label for="power">Power</label>
+        <input type="text" id="power" name="power" placeholder="e.g. 2">
+      </div>
+      <div>
+        <label for="toughness">Toughness</label>
+        <input type="text" id="toughness" name="toughness" placeholder="e.g. 2">
+      </div>
+      <div>
+        <label for="keywords">Keywords</label>
+        <input type="text" id="keywords" name="keywords" placeholder="e.g. flying">
+      </div>
+      <div>
+        <label for="format_legal">Format legal</label>
+        <select id="format_legal" name="format_legal">
+          <option value="">None</option>
+          <option value="standard">Standard</option>
+          <option value="modern">Modern</option>
+          <option value="pioneer">Pioneer</option>
+          <option value="explorer">Explorer</option>
+          <option value="legacy">Legacy</option>
+          <option value="vintage">Vintage</option>
+          <option value="commander">Commander</option>
+          <option value="pauper">Pauper</option>
+          <option value="brawl">Brawl</option>
+          <option value="historic">Historic</option>
+          <option value="historicbrawl">Historic Brawl</option>
+          <option value="alchemy">Alchemy</option>
+          <option value="oldschool">Old School</option>
+          <option value="premodern">Premodern</option>
+          <option value="duel">Duel Commander</option>
+          <option value="paupercommander">Pauper Commander</option>
+          <option value="penny">Penny Dreadful</option>
+          <option value="future">Future</option>
+          <option value="gladiator">Gladiator</option>
+        </select>
+      </div>
     </div>
   </form>
 
@@ -354,15 +394,20 @@
 
     (function () {
       var container = document.getElementById('oracleTextEntries');
-      if (!container) return;
+      var addRow = document.getElementById('oracleAddRow');
+      if (!container || !addRow) return;
       container.addEventListener('click', function (e) {
         if (e.target.classList.contains('oracle-btn-add')) {
+          var addInput = addRow.querySelector('input');
+          var value = addInput ? addInput.value.trim() : '';
+          if (addInput) addInput.value = '';
           var row = document.createElement('div');
           row.className = 'oracle-entry-row';
           var inp = document.createElement('input');
           inp.type = 'text';
           inp.name = 'oracle_text';
           inp.placeholder = 'contains...';
+          if (value) inp.value = value;
           var btn = document.createElement('button');
           btn.type = 'button';
           btn.className = 'oracle-btn oracle-btn-remove';
@@ -370,10 +415,10 @@
           btn.textContent = '-';
           row.appendChild(inp);
           row.appendChild(btn);
-          container.appendChild(row);
+          container.insertBefore(row, addRow);
         } else if (e.target.classList.contains('oracle-btn-remove')) {
           var row = e.target.closest('.oracle-entry-row');
-          if (row && row.parentNode && row.parentNode.children.length > 1) row.remove();
+          if (row && row.classList && !row.classList.contains('oracle-add-row')) row.remove();
         }
       });
     })();
@@ -384,16 +429,30 @@
     function scryfallImageUrlLarge(name) {
       return 'https://api.scryfall.com/cards/named?exact=' + encodeURIComponent(name) + '&format=image&version=large';
     }
+    function clampPreviewToViewport(el, desiredLeft, desiredTop) {
+      if (!el) return;
+      var w = el.offsetWidth || 250;
+      var h = el.offsetHeight || 346;
+      var vw = window.innerWidth;
+      var vh = window.innerHeight;
+      var left = Math.max(8, Math.min(desiredLeft, vw - w - 8));
+      var top = Math.max(8, Math.min(desiredTop, vh - h - 8));
+      el.style.left = left + 'px';
+      el.style.top = top + 'px';
+    }
     function showCardPreview(name, x, y) {
       var el = document.getElementById('cardPreview');
       if (!el || !name) return;
       var img = el.querySelector('img');
       img.src = scryfallImageUrlLarge(name);
       img.alt = name;
-      el.style.left = (x + 16) + 'px';
-      el.style.top = (y + 16) + 'px';
+      var desiredLeft = x + 16;
+      var desiredTop = y + 16;
+      el.style.left = desiredLeft + 'px';
+      el.style.top = desiredTop + 'px';
       el.classList.add('visible');
       el.setAttribute('aria-hidden', 'false');
+      clampPreviewToViewport(el, desiredLeft, desiredTop);
     }
     function hideCardPreview() {
       var el = document.getElementById('cardPreview');
@@ -416,8 +475,9 @@
     document.addEventListener('mousemove', function (e) {
       var preview = document.getElementById('cardPreview');
       if (preview && preview.classList.contains('visible')) {
-        preview.style.left = (e.clientX + 16) + 'px';
-        preview.style.top = (e.clientY + 16) + 'px';
+        var desiredLeft = e.clientX + 16;
+        var desiredTop = e.clientY + 16;
+        clampPreviewToViewport(preview, desiredLeft, desiredTop);
       }
     });
 

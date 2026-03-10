@@ -1,6 +1,7 @@
 """Card dataclass -- single source of truth for MTG card data representation."""
 
 import dataclasses
+import re
 from dataclasses import dataclass, field, fields
 from typing import Any
 
@@ -153,10 +154,41 @@ class Card:
                 result[name] = value
         return result
 
-    def to_document(self) -> str:
-        """Build a document string for embedding / indexing this card."""
-        text: str = self.text if self.text.strip() else "(No rules text)"
-        return f"Name: {self.name}\nMana Cost: {self.mana_cost}\nType: {self.type_line}\nOracle Text: {text}"
+    def to_document(self, template: str) -> str:
+        """Build a document string by filling *template* with this card's fields."""
+        values = self.to_dict()
+        if not values["text"].strip():
+            values["text"] = "(No rules text)"
+        return template.format_map(values)
+
+    def normalize_oracle_text(self) -> str:
+        """Return oracle text normalized for RAG: card name in text replaced with 'this card'."""
+        raw = self.text.strip()
+        if not raw:
+            return "(Vanilla)"
+        if not self.name:
+            return raw
+        return re.sub(re.escape(self.name), "this card", raw, flags=re.IGNORECASE)
+
+    def to_rag_document(self) -> str:
+        """Build the document string for RAG indexing: type_line, mana_cost, color_identity,
+        power/toughness (creatures only), keywords, loyalty (planeswalkers only), oracle text.
+        """
+        lines: list[str] = [
+            f"Type: {self.type_line}",
+            f"Mana Cost: {self.mana_cost}",
+            f"Color Identity: {', '.join(self.color_identity) if self.color_identity else '(none)'}",
+        ]
+        if "Creature" in self.types:
+            lines.append(f"Power: {self.power}")
+            lines.append(f"Toughness: {self.toughness}")
+        if self.keywords:
+            lines.append(f"Keywords: {', '.join(self.keywords)}")
+        if "Planeswalker" in self.types and self.loyalty:
+            lines.append(f"Loyalty: {self.loyalty}")
+        text = self.normalize_oracle_text()
+        lines.append(f"Oracle Text: {text}")
+        return "\n".join(lines)
 
     def to_chroma_metadata(self) -> dict[str, str | float]:
         """Build a flat metadata dict for ChromaDB (lists are comma-joined).

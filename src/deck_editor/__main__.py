@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-"""Entry point for the MTG deck editor web server."""
+"""Entry point for the MTG deck editor web server. Run with: python -m src.deck_editor"""
 
 import threading
 import webbrowser

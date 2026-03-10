@@ -44,14 +44,11 @@ def _notify_deck_updated() -> None:
     """Broadcast current deck state to all SSE clients."""
     _broadcast("deck_updated", _deck_to_response(_current_deck))
 
-# Type-group keys used by the client (order for display)
+# Type-group keys used by the client (order for display): creatures, non-creatures (artifacts/enchantments/planeswalkers), spells (instants/sorceries), lands
 TYPE_KEYS: list[str] = [
     "creatures",
-    "artifacts",
-    "enchantments",
-    "planeswalkers",
-    "instants",
-    "sorceries",
+    "non_creatures",
+    "spells",
     "lands",
 ]
 
@@ -125,7 +122,7 @@ def _compute_deck_stats(deck: Deck) -> dict:
     for key in TYPE_KEYS:
         if key in ("lands", "creatures"):
             continue
-        lst = getattr(deck, key, None) or []
+        lst: list[str] = getattr(deck, key, None) or []
         if isinstance(lst, list):
             non_creature_non_land.extend(lst)
     for name in creature_names:
@@ -179,25 +176,19 @@ def _sanitize_filename(name: str) -> str:
 
 
 def _type_line_to_key(type_line: str) -> str:
-    """Map MTG type_line string to TYPE_KEYS section (e.g. 'Instant' -> 'instants')."""
+    """Map MTG type_line string to TYPE_KEYS section: non_creatures (artifact/enchantment/planeswalker) or spells (instant/sorcery)."""
     if not type_line or not isinstance(type_line, str):
-        return "sorceries"
+        return "spells"
     t: str = type_line.lower()
     if "land" in t:
         return "lands"
     if "creature" in t:
         return "creatures"
-    if "planeswalker" in t:
-        return "planeswalkers"
-    if "artifact" in t:
-        return "artifacts"
-    if "enchantment" in t:
-        return "enchantments"
-    if "instant" in t:
-        return "instants"
-    if "sorcery" in t:
-        return "sorceries"
-    return "sorceries"
+    if "planeswalker" in t or "artifact" in t or "enchantment" in t:
+        return "non_creatures"
+    if "instant" in t or "sorcery" in t:
+        return "spells"
+    return "spells"
 
 
 def _resolve_type_key(card_name: str) -> tuple[str, str]:
@@ -241,7 +232,10 @@ async def serve_search() -> FileResponse:
     if not search_path.is_file():
         LOGGER.error(0, "Deck editor static file not found: %s", search_path)
         raise FileNotFoundError(f"Static file not found: {search_path}")
-    return FileResponse(search_path)
+    return FileResponse(
+        search_path,
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"},
+    )
 
 
 @app.post("/api/search")
@@ -437,18 +431,11 @@ async def update_deck(body: dict) -> dict:
         description = body["description"]
 
     creatures: list[str] = body["creatures"] if "creatures" in body and isinstance(body["creatures"], list) else []
-    artifacts: list[str] = body["artifacts"] if "artifacts" in body and isinstance(body["artifacts"], list) else []
-    enchantments: list[str] = (
-        body["enchantments"] if "enchantments" in body and isinstance(body["enchantments"], list) else []
+    non_creatures: list[str] = (
+        body["non_creatures"] if "non_creatures" in body and isinstance(body["non_creatures"], list) else []
     )
-    planeswalkers: list[str] = (
-        body["planeswalkers"] if "planeswalkers" in body and isinstance(body["planeswalkers"], list) else []
-    )
+    spells: list[str] = body["spells"] if "spells" in body and isinstance(body["spells"], list) else []
     lands: list[str] = body["lands"] if "lands" in body and isinstance(body["lands"], list) else []
-    instants: list[str] = body["instants"] if "instants" in body and isinstance(body["instants"], list) else []
-    sorceries: list[str] = body["sorceries"] if "sorceries" in body and isinstance(body["sorceries"], list) else []
-    spells_legacy: list[str] = body["spells"] if "spells" in body and isinstance(body["spells"], list) else []
-    sorceries_merged: list[str] = sorceries + spells_legacy
 
     # Deck expects cards as list[Card] or list[dict]; editor only sends type lists (names). Leave cards empty.
     _current_deck = Deck(
@@ -457,12 +444,9 @@ async def update_deck(body: dict) -> dict:
         description=description,
         cards=None,
         creatures=creatures,
-        artifacts=artifacts,
-        enchantments=enchantments,
-        planeswalkers=planeswalkers,
+        non_creatures=non_creatures,
+        spells=spells,
         lands=lands,
-        instants=instants,
-        sorceries=sorceries_merged,
     )
     _notify_deck_updated()
     return _deck_to_response(_current_deck)

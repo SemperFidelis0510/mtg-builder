@@ -44,7 +44,7 @@ def do_build() -> None:
                 continue
             card: Card = Card.from_json_face(face, card_name)
             uid: str = make_id(card_name, i)
-            rows.append((uid, card.to_document(), card.to_chroma_metadata()))
+            rows.append((uid, card.to_rag_document(), card.to_chroma_metadata()))
 
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using device: {device}")
@@ -58,6 +58,7 @@ def do_build() -> None:
     )
 
     n: int = len(rows)
+    
     for start in tqdm(range(0, n, BATCH_SIZE), desc="Building index", unit="batch"):
         batch = rows[start : start + BATCH_SIZE]
         ids_batch: list[str] = [r[0] for r in batch]
