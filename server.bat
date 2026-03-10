@@ -31,7 +31,7 @@ exit /b 1
 :found_conda
 
 call "%_ACTIVATE%" %CONDA_ENV%
-python server.py
+python -m src.server
 if errorlevel 1 (
     echo Server exited with error.
     exit /b 1

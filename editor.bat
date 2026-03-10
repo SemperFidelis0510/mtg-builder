@@ -31,7 +31,7 @@ exit /b 1
 :found_conda
 
 call "%_ACTIVATE%" %CONDA_ENV%
-python deck_editor.py
+python -m src.deck_editor
 if errorlevel 1 (
     echo Deck editor exited with error.
     exit /b 1
