@@ -29,6 +29,57 @@ def _normalize_cards_arg(
     return out
 
 
+_TYPE_KEYS: list[str] = ["creatures", "non_creatures", "spells", "lands"]
+_TYPE_LABELS: dict[str, str] = {
+    "creatures": "Creatures",
+    "non_creatures": "Non-creatures",
+    "spells": "Spells",
+    "lands": "Lands",
+}
+# Reverse map for goldfish import: section label -> type key
+_TYPE_LABEL_TO_KEY: dict[str, str] = {v: k for k, v in _TYPE_LABELS.items()}
+
+
+def _type_line_to_key(type_line: str) -> str:
+    """Map MTG type_line to type key: lands, creatures, non_creatures, or spells."""
+    if not type_line or not isinstance(type_line, str):
+        return "spells"
+    t: str = type_line.lower()
+    if "land" in t:
+        return "lands"
+    if "creature" in t:
+        return "creatures"
+    if "planeswalker" in t or "artifact" in t or "enchantment" in t:
+        return "non_creatures"
+    if "instant" in t or "sorcery" in t:
+        return "spells"
+    return "spells"
+
+
+def _resolve_name_to_type_key(card_name: str) -> tuple[str, str]:
+    """Look up card_name in card data; return (canonical_name, type_key). Raises ValueError if not found."""
+    from src.lib.card_data import get_card_data
+    from src.utils.logger import LOGGER
+
+    name_clean: str = (card_name or "").strip()
+    if not name_clean:
+        raise ValueError("card name is empty")
+    data: list = get_card_data()
+    name_lower: str = name_clean.lower()
+    for c in data:
+        if c.name.lower() == name_lower:
+            key: str = _type_line_to_key(getattr(c, "type_line", "") or "")
+            return (c.name, key)
+    if " // " in name_clean:
+        first_part: str = name_clean.split(" // ", 1)[0].strip().lower()
+        for c in data:
+            if c.name.lower() == first_part:
+                key = _type_line_to_key(getattr(c, "type_line", "") or "")
+                return (c.name, key)
+    LOGGER.error(0, "from_export_text: card not found: %s", name_clean)
+    raise ValueError(f"card not found: {name_clean!r}")
+
+
 class Deck:
     """Manages an MTG deck: metadata and card lists by type.
 
@@ -42,6 +93,13 @@ class Deck:
         spells: Card names that are instants or sorceries.
         lands: Card names that are lands.
     """
+
+    # Import and export support the same formats (json, arena, goldfish).
+    EXPORT_FORMATS: dict[str, str] = {
+        "json": "JSON",
+        "arena": "MTG Arena",
+        "goldfish": "MTGGoldfish",
+    }
 
     def __init__(
         self,
@@ -99,36 +157,65 @@ class Deck:
                 raise ValueError(f"add_cards: card not found: {name_clean!r}")
             self.cards.append(name_lower_to_card[key])
 
+    def _all_card_names(self) -> list[str]:
+        """Return flat list of card names from type-based lists (used when self.cards is empty)."""
+        out: list[str] = []
+        for key in _TYPE_KEYS:
+            lst: list[str] = getattr(self, key, None) or []
+            if isinstance(lst, list):
+                out.extend(lst)
+        return out
+
     def export(self, format: str) -> str:
         """Export the deck as a string in the given format.
 
         Args:
-            format: One of "json" or "arena" (MTG Arena deck list format).
+            format: One of "json", "arena" (MTG Arena deck list), or "goldfish" (MTGGoldfish with section headers).
 
         Returns:
-            The deck as a string (JSON text or Arena-style lines).
+            The deck as a string (JSON text or decklist lines).
 
         Raises:
-            ValueError: If format is not "json" or "arena".
+            ValueError: If format is not "json", "arena", or "goldfish".
         """
         fmt: str = format.strip().lower()
         if fmt == "json":
             return json.dumps(self.to_dict(), indent=2)
         if fmt == "arena":
-            counts: Counter[str] = Counter(c.name for c in self.cards)
-            lines: list[str] = [f"{n} {name}" for name, n in sorted(counts.items(), key=lambda x: (-x[1], x[0]))]
+            if self.cards:
+                names: list[str] = [c.name for c in self.cards]
+            else:
+                names = self._all_card_names()
+            counts: Counter[str] = Counter(names)
+            lines: list[str] = [
+                f"{n} {name}" for name, n in sorted(counts.items(), key=lambda x: (-x[1], x[0]))
+            ]
             return "\n".join(lines) if lines else ""
-        raise ValueError(f"deck export: unsupported format {format!r}; use 'json' or 'arena'")
+        if fmt == "goldfish":
+            goldfish_lines: list[str] = []
+            for key in _TYPE_KEYS:
+                arr: list[str] = getattr(self, key, None) or []
+                if not isinstance(arr, list) or not arr:
+                    continue
+                counts_g: Counter[str] = Counter(arr)
+                goldfish_lines.append("// " + _TYPE_LABELS.get(key, key))
+                for name in sorted(counts_g.keys()):
+                    goldfish_lines.append(f"{counts_g[name]} {name}")
+                goldfish_lines.append("")
+            return "\n".join(goldfish_lines).rstrip("\n")
+        raise ValueError(
+            f"deck export: unsupported format {format!r}; use 'json', 'arena', or 'goldfish'"
+        )
 
     def save(self, format: str, path: Path | str) -> None:
         """Export the deck in the given format and write it to a file.
 
         Args:
-            format: One of "json" or "arena".
+            format: One of "json", "arena", or "goldfish".
             path: File path to write to (str or Path).
 
         Raises:
-            ValueError: If format is not "json" or "arena".
+            ValueError: If format is not "json", "arena", or "goldfish".
         """
         text: str = self.export(format)
         out_path: Path = Path(path) if isinstance(path, str) else path
@@ -188,4 +275,123 @@ class Deck:
             non_creatures=non_creatures,
             spells=spells,
             lands=data["lands"] if "lands" in data else None,
+        )
+
+    @classmethod
+    def from_export_text(cls, text: str, format: str) -> "Deck":
+        """Parse decklist text and return a new Deck. Supports same formats as export(): json, arena, goldfish.
+
+        Args:
+            text: Pasted decklist string.
+            format: One of "json", "arena", or "goldfish".
+
+        Returns:
+            A new Deck instance with type lists (and optionally cards for json) populated.
+
+        Raises:
+            ValueError: If format is unsupported, text is invalid, or a card name is not found (arena/goldfish).
+        """
+        fmt: str = (format or "").strip().lower()
+        if fmt not in cls.EXPORT_FORMATS:
+            raise ValueError(
+                f"unsupported import format {format!r}; use 'json', 'arena', or 'goldfish'"
+            )
+        raw: str = (text or "").strip()
+        if not raw and fmt != "json":
+            return cls()
+
+        if fmt == "json":
+            try:
+                data: dict = json.loads(raw)
+            except json.JSONDecodeError as e:
+                raise ValueError(f"invalid JSON: {e}") from e
+            if not isinstance(data, dict):
+                raise ValueError("JSON root must be an object")
+            return cls.from_dict(data)
+
+        if fmt == "arena":
+            creatures: list[str] = []
+            non_creatures: list[str] = []
+            spells: list[str] = []
+            lands: list[str] = []
+            for line in raw.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                parts = line.split(None, 1)
+                if len(parts) < 2:
+                    continue
+                try:
+                    count = int(parts[0])
+                except ValueError:
+                    continue
+                name_part: str = parts[1].strip()
+                if count <= 0:
+                    continue
+                canonical_name, type_key = _resolve_name_to_type_key(name_part)
+                target: list[str] = (
+                    creatures
+                    if type_key == "creatures"
+                    else non_creatures
+                    if type_key == "non_creatures"
+                    else spells
+                    if type_key == "spells"
+                    else lands
+                )
+                for _ in range(count):
+                    target.append(canonical_name)
+            return cls(
+                creatures=creatures,
+                non_creatures=non_creatures,
+                spells=spells,
+                lands=lands,
+            )
+
+        if fmt == "goldfish":
+            creatures_g: list[str] = []
+            non_creatures_g: list[str] = []
+            spells_g: list[str] = []
+            lands_g: list[str] = []
+            current_key: str | None = None
+            for line in raw.splitlines():
+                s: str = line.strip()
+                if not s:
+                    continue
+                if s.startswith("//"):
+                    label: str = s[2:].strip()
+                    current_key = _TYPE_LABEL_TO_KEY.get(label)
+                    continue
+                if current_key is None:
+                    continue
+                parts = s.split(None, 1)
+                if len(parts) < 2:
+                    continue
+                try:
+                    count_g = int(parts[0])
+                except ValueError:
+                    continue
+                name_g: str = parts[1].strip()
+                if count_g <= 0:
+                    continue
+                canonical_g, _ = _resolve_name_to_type_key(name_g)
+                target_g: list[str] = (
+                    creatures_g
+                    if current_key == "creatures"
+                    else non_creatures_g
+                    if current_key == "non_creatures"
+                    else spells_g
+                    if current_key == "spells"
+                    else lands_g
+                )
+                for _ in range(count_g):
+                    target_g.append(canonical_g)
+            return cls(
+                creatures=creatures_g,
+                non_creatures=non_creatures_g,
+                spells=spells_g,
+                lands=lands_g,
+            )
+
+        raise ValueError(
+            f"unsupported import format {format!r}; use 'json', 'arena', or 'goldfish'"
         )

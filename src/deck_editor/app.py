@@ -410,6 +410,51 @@ async def get_deck() -> dict:
     return _deck_to_response(_current_deck)
 
 
+@app.get("/api/export/formats")
+async def get_export_formats() -> dict:
+    """Return available export format keys and display names for the format picker."""
+    return {"formats": Deck.EXPORT_FORMATS}
+
+
+@app.get("/api/export")
+async def export_deck(format: str) -> dict:
+    """Export current deck in the given format. Returns {"text": "..."}. Use format from /api/export/formats."""
+    fmt: str = (format or "").strip().lower()
+    if fmt not in Deck.EXPORT_FORMATS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported format {format!r}; use one of: {list(Deck.EXPORT_FORMATS.keys())}",
+        )
+    try:
+        text: str = _current_deck.export(fmt)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return {"text": text}
+
+
+@app.post("/api/import")
+async def import_deck(body: dict) -> dict:
+    """Import a deck from pasted text. Body: {"text": str, "format": str}. Replaces current deck, clears removed."""
+    global _current_deck, _removed
+    if "text" not in body or "format" not in body:
+        raise HTTPException(status_code=400, detail="Body must include 'text' and 'format'")
+    text: str = body["text"] if isinstance(body["text"], str) else ""
+    fmt: str = (body["format"] or "").strip().lower()
+    if fmt not in Deck.EXPORT_FORMATS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported format {body['format']!r}; use one of: {list(Deck.EXPORT_FORMATS.keys())}",
+        )
+    try:
+        deck: Deck = Deck.from_export_text(text, fmt)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    _current_deck = deck
+    _removed = []
+    _notify_deck_updated()
+    return _deck_to_response(_current_deck)
+
+
 @app.put("/api/deck")
 async def update_deck(body: dict) -> dict:
     """Update deck and removed zone from client state."""
