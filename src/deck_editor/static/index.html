@@ -1041,7 +1041,7 @@
 
       var sideKeys = ['maybe', 'sideboard'];
       sideKeys.forEach(function (key) {
-        var names = Array.isArray(deck[key + '_names']) ? deck[key + '_names'] : [];
+        var names = Array.isArray(deck[key + '_names']) ? deck[key + '_names'] : (Array.isArray(deck[key]) ? deck[key] : []);
         var listEl = document.getElementById('list-' + key);
         if (listEl) {
           listEl.innerHTML = '';

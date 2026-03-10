@@ -36,6 +36,12 @@ _TYPE_LABELS: dict[str, str] = {
 }
 # Reverse map for goldfish import: section label -> type key
 _TYPE_LABEL_TO_KEY: dict[str, str] = {v: k for k, v in _TYPE_LABELS.items()}
+# Goldfish sideboard section header (label only, no type key)
+_GOLDFISH_SIDEBOARD_LABEL: str = "Sideboard"
+# Standalone sideboard line (no "//") for Moxfield-style pastes when Goldfish is selected
+_SIDEBOARD_LINE_LOWER: frozenset[str] = frozenset(
+    {"sideboard", "sideboard:", "side board", "side board:", "sb", "sb:"}
+)
 
 
 def _type_line_to_key(type_line: str) -> str:
@@ -124,11 +130,12 @@ class Deck:
         lands: (Read-only.) Card names that are lands.
     """
 
-    # Import and export support the same formats (json, arena, goldfish).
+    # Import and export support the same formats (arena first, json last).
     EXPORT_FORMATS: dict[str, str] = {
-        "json": "JSON",
         "arena": "MTG Arena",
         "goldfish": "MTGGoldfish",
+        "moxfield": "Moxfield",
+        "json": "JSON",
     }
 
     def __init__(
@@ -211,13 +218,13 @@ class Deck:
         """Export the deck as a string in the given format.
 
         Args:
-            format: One of "json", "arena" (MTG Arena deck list), or "goldfish" (MTGGoldfish with section headers).
+            format: One of "arena", "goldfish", "moxfield", or "json".
 
         Returns:
             The deck as a string (JSON text or decklist lines).
 
         Raises:
-            ValueError: If format is not "json", "arena", or "goldfish".
+            ValueError: If format is not "arena", "goldfish", "moxfield", or "json".
         """
         fmt: str = format.strip().lower()
         if fmt == "json":
@@ -228,6 +235,15 @@ class Deck:
             lines: list[str] = [
                 f"{n} {name}" for name, n in sorted(counts.items(), key=lambda x: (-x[1], x[0]))
             ]
+            if self.sideboard:
+                sb_names: list[str] = [c.name for c in self.sideboard]
+                sb_counts: Counter[str] = Counter(sb_names)
+                if lines:
+                    lines.append("")
+                lines.append("Sideboard")
+                lines.extend(
+                    f"{n} {name}" for name, n in sorted(sb_counts.items(), key=lambda x: (-x[1], x[0]))
+                )
             return "\n".join(lines) if lines else ""
         if fmt == "goldfish":
             goldfish_lines: list[str] = []
@@ -240,20 +256,38 @@ class Deck:
                 for name in sorted(counts_g.keys()):
                     goldfish_lines.append(f"{counts_g[name]} {name}")
                 goldfish_lines.append("")
+            if self.sideboard:
+                sb_counts_g: Counter[str] = Counter(c.name for c in self.sideboard)
+                goldfish_lines.append("// Sideboard")
+                for name in sorted(sb_counts_g.keys()):
+                    goldfish_lines.append(f"{sb_counts_g[name]} {name}")
+                goldfish_lines.append("")
             return "\n".join(goldfish_lines).rstrip("\n")
+        if fmt == "moxfield":
+            mox_lines: list[str] = ["Deck"]
+            main_counts: Counter[str] = Counter(self._all_card_names())
+            for name in sorted(main_counts.keys()):
+                mox_lines.append(f"{main_counts[name]} {name}")
+            if self.sideboard:
+                mox_lines.append("")
+                mox_lines.append("Sideboard")
+                sb_counts_m: Counter[str] = Counter(c.name for c in self.sideboard)
+                for name in sorted(sb_counts_m.keys()):
+                    mox_lines.append(f"{sb_counts_m[name]} {name}")
+            return "\n".join(mox_lines)
         raise ValueError(
-            f"deck export: unsupported format {format!r}; use 'json', 'arena', or 'goldfish'"
+            f"deck export: unsupported format {format!r}; use 'arena', 'goldfish', 'moxfield', or 'json'"
         )
 
     def save(self, format: str, path: Path | str) -> None:
         """Export the deck in the given format and write it to a file.
 
         Args:
-            format: One of "json", "arena", or "goldfish".
+            format: One of "arena", "goldfish", "moxfield", or "json".
             path: File path to write to (str or Path).
 
         Raises:
-            ValueError: If format is not "json", "arena", or "goldfish".
+            ValueError: If format is not "arena", "goldfish", "moxfield", or "json".
         """
         text: str = self.export(format)
         out_path: Path = Path(path) if isinstance(path, str) else path
@@ -330,24 +364,24 @@ class Deck:
 
     @classmethod
     def from_export_text(cls, text: str, format: str) -> "Deck":
-        """Parse decklist text and return a new Deck. Supports same formats as export(): json, arena, goldfish.
+        """Parse decklist text and return a new Deck. Supports same formats as export(): arena, goldfish, moxfield, json.
 
         Args:
             text: Pasted decklist string.
-            format: One of "json", "arena", or "goldfish".
+            format: One of "arena", "goldfish", "moxfield", or "json".
 
         Returns:
             A new Deck instance with type lists (and optionally cards for json) populated.
 
         Raises:
-            ValueError: If format is unsupported, text is invalid, or a card name is not found (arena/goldfish).
+            ValueError: If format is unsupported, text is invalid, or a card name is not found.
         """
         fmt: str = (format or "").strip().lower()
         raw: str = (text or "").strip()
         print("[Deck.from_export_text] fmt=%r raw_len=%d" % (fmt, len(raw)))
         if fmt not in cls.EXPORT_FORMATS:
             raise ValueError(
-                f"unsupported import format {format!r}; use 'json', 'arena', or 'goldfish'"
+                f"unsupported import format {format!r}; use 'arena', 'goldfish', 'moxfield', or 'json'"
             )
         if not raw and fmt != "json":
             print("[Deck.from_export_text] empty raw, returning empty Deck")
@@ -372,11 +406,20 @@ class Deck:
             non_creatures: list[str] = []
             spells: list[str] = []
             lands: list[str] = []
+            sideboard_names_arena: list[str] = []
+            parsing_sideboard: bool = False
             for line in raw.splitlines():
-                line = line.strip()
-                if not line:
+                s_line: str = line.strip()
+                if not s_line:
                     continue
-                parts = line.split(None, 1)
+                # Optional "Deck" header: skip. "Sideboard" or "Sideboard:" starts sideboard.
+                head_lower: str = s_line.split(None, 1)[0].lower() if s_line else ""
+                if head_lower in ("sideboard", "sideboard:"):
+                    parsing_sideboard = True
+                    continue
+                if head_lower == "deck":
+                    continue
+                parts = s_line.split(None, 1)
                 if len(parts) < 2:
                     continue
                 try:
@@ -387,22 +430,27 @@ class Deck:
                 if count <= 0:
                     continue
                 canonical_name, type_key = _resolve_name_to_type_key(name_part)
-                target: list[str] = (
-                    creatures
-                    if type_key == "creatures"
-                    else non_creatures
-                    if type_key == "non_creatures"
-                    else spells
-                    if type_key == "spells"
-                    else lands
-                )
-                for _ in range(count):
-                    target.append(canonical_name)
+                if parsing_sideboard:
+                    for _ in range(count):
+                        sideboard_names_arena.append(canonical_name)
+                else:
+                    target: list[str] = (
+                        creatures
+                        if type_key == "creatures"
+                        else non_creatures
+                        if type_key == "non_creatures"
+                        else spells
+                        if type_key == "spells"
+                        else lands
+                    )
+                    for _ in range(count):
+                        target.append(canonical_name)
             all_names_arena: list[str] = creatures + non_creatures + spells + lands
-            print("[Deck.from_export_text] arena names count=%d" % len(all_names_arena))
+            print("[Deck.from_export_text] arena names count=%d sideboard=%d" % (len(all_names_arena), len(sideboard_names_arena)))
             cards_arena: list["Card"] = _cards_from_names(all_names_arena) if all_names_arena else []
+            sb_cards_arena: list["Card"] = _cards_from_names(sideboard_names_arena) if sideboard_names_arena else []
             print("[Deck.from_export_text] arena ok; cards=%d" % len(cards_arena))
-            return cls(cards=cards_arena)
+            return cls(cards=cards_arena, sideboard=sb_cards_arena)
 
         if fmt == "goldfish":
             print("[Deck.from_export_text] parsing goldfish; lines=%d" % len(raw.splitlines()))
@@ -410,6 +458,7 @@ class Deck:
             non_creatures_g: list[str] = []
             spells_g: list[str] = []
             lands_g: list[str] = []
+            sideboard_names_g: list[str] = []
             current_key: str | None = None
             for line in raw.splitlines():
                 s: str = line.strip()
@@ -417,7 +466,14 @@ class Deck:
                     continue
                 if s.startswith("//"):
                     label: str = s[2:].strip()
-                    current_key = _TYPE_LABEL_TO_KEY.get(label)
+                    if label == _GOLDFISH_SIDEBOARD_LABEL:
+                        current_key = "sideboard"
+                    else:
+                        current_key = _TYPE_LABEL_TO_KEY.get(label)
+                    continue
+                # Standalone "Sideboard" line (no "//") e.g. from Moxfield-style paste
+                if s.lower() in _SIDEBOARD_LINE_LOWER:
+                    current_key = "sideboard"
                     continue
                 parts = s.split(None, 1)
                 if len(parts) < 2:
@@ -429,9 +485,11 @@ class Deck:
                 name_g: str = parts[1].strip()
                 if count_g <= 0:
                     continue
-                # If no section header yet, resolve card to get type (arena-style); else use current section
-                if current_key is None:
-                    canonical_g, type_key_g = _resolve_name_to_type_key(name_g)
+                canonical_g, type_key_g = _resolve_name_to_type_key(name_g)
+                if current_key == "sideboard":
+                    for _ in range(count_g):
+                        sideboard_names_g.append(canonical_g)
+                elif current_key is None:
                     target_g = (
                         creatures_g
                         if type_key_g == "creatures"
@@ -441,8 +499,9 @@ class Deck:
                         if type_key_g == "spells"
                         else lands_g
                     )
+                    for _ in range(count_g):
+                        target_g.append(canonical_g)
                 else:
-                    canonical_g, _ = _resolve_name_to_type_key(name_g)
                     target_g = (
                         creatures_g
                         if current_key == "creatures"
@@ -452,14 +511,64 @@ class Deck:
                         if current_key == "spells"
                         else lands_g
                     )
-                for _ in range(count_g):
-                    target_g.append(canonical_g)
+                    for _ in range(count_g):
+                        target_g.append(canonical_g)
             all_names_g: list[str] = creatures_g + non_creatures_g + spells_g + lands_g
-            print("[Deck.from_export_text] goldfish names count=%d" % len(all_names_g))
+            print("[Deck.from_export_text] goldfish names count=%d sideboard=%d" % (len(all_names_g), len(sideboard_names_g)))
             cards_g: list["Card"] = _cards_from_names(all_names_g) if all_names_g else []
+            sb_cards_g: list["Card"] = _cards_from_names(sideboard_names_g) if sideboard_names_g else []
             print("[Deck.from_export_text] goldfish ok; cards=%d" % len(cards_g))
-            return cls(cards=cards_g)
+            return cls(cards=cards_g, sideboard=sb_cards_g)
+
+        if fmt == "moxfield":
+            print("[Deck.from_export_text] parsing moxfield; lines=%d" % len(raw.splitlines()))
+            main_names_m: list[str] = []
+            sideboard_names_m: list[str] = []
+            in_sideboard: bool = False
+            for line in raw.splitlines():
+                s_m: str = line.strip()
+                if not s_m:
+                    continue
+                # Section headers (case-insensitive)
+                first_word: str = s_m.split(None, 1)[0].lower() if s_m else ""
+                if first_word == "sideboard" or first_word == "sideboard:":
+                    in_sideboard = True
+                    continue
+                if s_m.lower() == "deck":
+                    continue
+                # Card line: "N Name" or "Nx Name" with optional " (SET) 123" and " *F*" or " F"
+                parts_m: list[str] = s_m.split(None, 1)
+                if len(parts_m) < 2:
+                    continue
+                count_str: str = parts_m[0].rstrip("xX")
+                try:
+                    count_m: int = int(count_str)
+                except ValueError:
+                    continue
+                if count_m <= 0:
+                    continue
+                name_rest: str = parts_m[1].strip()
+                # Strip optional " (SET) number" and foil markers
+                if " (" in name_rest:
+                    name_rest = name_rest.rsplit(" (", 1)[0].strip()
+                if name_rest.endswith(" *F*"):
+                    name_rest = name_rest[:-4].strip()
+                if name_rest.endswith(" F"):
+                    name_rest = name_rest[:-2].strip()
+                if not name_rest:
+                    continue
+                canonical_m, _ = _resolve_name_to_type_key(name_rest)
+                if in_sideboard:
+                    for _ in range(count_m):
+                        sideboard_names_m.append(canonical_m)
+                else:
+                    for _ in range(count_m):
+                        main_names_m.append(canonical_m)
+            cards_m: list["Card"] = _cards_from_names(main_names_m) if main_names_m else []
+            sb_cards_m: list["Card"] = _cards_from_names(sideboard_names_m) if sideboard_names_m else []
+            print("[Deck.from_export_text] moxfield ok; cards=%d sideboard=%d" % (len(cards_m), len(sb_cards_m)))
+            return cls(cards=cards_m, sideboard=sb_cards_m)
 
         raise ValueError(
-            f"unsupported import format {format!r}; use 'json', 'arena', or 'goldfish'"
+            f"unsupported import format {format!r}; use 'arena', 'goldfish', 'moxfield', or 'json'"
         )
