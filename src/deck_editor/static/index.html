@@ -397,7 +397,19 @@
       font-weight: 600;
       font-size: 0.9rem;
       user-select: none;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
     }
+    .section-header::before {
+      content: '▾';
+      font-size: 0.85rem;
+      transition: transform 0.15s;
+      flex-shrink: 0;
+    }
+    .section.collapsed .section-header { border-radius: 4px; }
+    .section.collapsed .section-header::before { transform: rotate(-90deg); }
+    .section.collapsed .section-body { display: none; }
     .section-header:hover { background: #1a4a7a; }
     .section-body {
       padding: 0.5rem;
@@ -407,6 +419,22 @@
       border-radius: 0 0 4px 4px;
       min-height: 44px;
     }
+    .deck-section-controls {
+      display: flex;
+      gap: 0.4rem;
+      margin-bottom: 0.5rem;
+    }
+    .deck-section-controls button {
+      padding: 0.25rem 0.7rem;
+      background: var(--border);
+      color: var(--text);
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+    .deck-section-controls button:hover { background: #1a4a7a; }
     .section-body.sortable-ghost { opacity: 0.4; }
     .section-statistics .section-body {
       display: flex;
@@ -634,6 +662,10 @@
       </div>
       <main class="main">
         <div class="deck-column">
+          <div class="deck-section-controls">
+            <button type="button" id="collapseAllBtn">Collapse All</button>
+            <button type="button" id="expandAllBtn">Expand All</button>
+          </div>
           <div id="deckSections"></div>
         </div>
         <div class="removed-column">
@@ -718,23 +750,36 @@
       }
     }
     document.addEventListener('mouseover', function (e) {
-      var stack = e.target.closest('.card-stack');
-      if (stack && stack.dataset.name) showCardPreview(stack.dataset.name, e.clientX, e.clientY);
       var preview = document.getElementById('cardPreview');
       if (e.target === preview || (preview && preview.contains(e.target))) return;
+      var img = e.target.closest('.card-img');
+      if (img) {
+        var stack = img.closest('.card-stack');
+        if (stack && stack.dataset.name) showCardPreview(stack.dataset.name, e.clientX, e.clientY);
+      }
     });
     document.addEventListener('mouseout', function (e) {
-      var stack = e.target.closest('.card-stack');
+      var img = e.target.closest('.card-img');
       var related = e.relatedTarget;
       var preview = document.getElementById('cardPreview');
-      if (stack && stack.dataset.name && (!related || !stack.contains(related)) && (!preview || !preview.contains(related))) hideCardPreview();
+      if (img && (!related || !img.contains(related)) && (!preview || !preview.contains(related))) hideCardPreview();
       if (preview && (e.target === preview || preview.contains(e.target)) && (!related || !preview.contains(related))) hideCardPreview();
     });
     document.addEventListener('mousemove', function (e) {
       var preview = document.getElementById('cardPreview');
       if (preview && preview.classList.contains('visible')) {
-        preview.style.left = (e.clientX + 16) + 'px';
-        preview.style.top = (e.clientY + 16) + 'px';
+        var pw = preview.offsetWidth || 248;
+        var ph = preview.offsetHeight || 344;
+        var vw = window.innerWidth;
+        var vh = window.innerHeight;
+        var left = e.clientX + 16;
+        var top = e.clientY + 16;
+        if (left + pw > vw) left = e.clientX - pw - 8;
+        if (top + ph > vh) top = e.clientY - ph - 8;
+        if (left < 0) left = 0;
+        if (top < 0) top = 0;
+        preview.style.left = left + 'px';
+        preview.style.top = top + 'px';
       }
     });
 
@@ -1363,6 +1408,20 @@
       var s = String(d.getSeconds()).padStart(2, '0');
       return 'deck_' + y + m + day + '_' + h + min + s + '.json';
     }
+
+    document.getElementById('deckSections').addEventListener('click', function (e) {
+      var header = e.target.closest('.section-header');
+      if (header) {
+        var section = header.closest('.section');
+        if (section) section.classList.toggle('collapsed');
+      }
+    });
+    document.getElementById('collapseAllBtn').addEventListener('click', function () {
+      document.querySelectorAll('#deckSections .section').forEach(function (s) { s.classList.add('collapsed'); });
+    });
+    document.getElementById('expandAllBtn').addEventListener('click', function () {
+      document.querySelectorAll('#deckSections .section').forEach(function (s) { s.classList.remove('collapsed'); });
+    });
 
     document.getElementById('saveBtn').addEventListener('click', function () {
       var resultEl = document.getElementById('saveResult');
