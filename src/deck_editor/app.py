@@ -22,7 +22,6 @@ app = FastAPI(title="MTG Deck Editor")
 # In-memory state (always a deck; starts empty; POST replaces it)
 # ---------------------------------------------------------------------------
 _current_deck: Deck = Deck()
-_removed: list[str] = []
 
 # ---------------------------------------------------------------------------
 # SSE event bus
@@ -164,18 +163,19 @@ def _compute_deck_stats(deck: Deck) -> dict:
 
 
 def _deck_to_response(deck: Deck) -> dict:
-    """Build API response with deck dict, removed list, and stats.
+    """Build API response with deck dict and stats.
 
     The deck dict includes the computed type lists (creatures, non_creatures, spells, lands)
-    in addition to the stored fields so the frontend can render sections by type.
+    and flat name lists for maybe/sideboard in addition to the stored fields.
     """
     out: dict = deck.to_dict()
     out["creatures"] = list(deck.creatures)
     out["non_creatures"] = list(deck.non_creatures)
     out["spells"] = list(deck.spells)
     out["lands"] = list(deck.lands)
-    out["removed"] = list(_removed)
-    resp: dict = {"deck": out, "removed": _removed, "stats": _compute_deck_stats(deck)}
+    out["maybe_names"] = [c.name for c in deck.maybe]
+    out["sideboard_names"] = [c.name for c in deck.sideboard]
+    resp: dict = {"deck": out, "stats": _compute_deck_stats(deck)}
     return resp
 
 
@@ -329,8 +329,8 @@ def _names_from_cards_array(cards: list) -> list[str]:
 
 @app.post("/api/deck")
 async def load_deck(body: dict) -> dict:
-    """Load a deck from JSON. Replaces current deck and clears removed zone."""
-    global _current_deck, _removed
+    """Load a deck from JSON. Replaces current deck."""
+    global _current_deck
     if "deck" in body:
         body = body["deck"]
     try:
@@ -338,7 +338,6 @@ async def load_deck(body: dict) -> dict:
     except (KeyError, TypeError) as e:
         LOGGER.error(0, "load_deck: invalid deck payload: %s", e)
         raise HTTPException(status_code=400, detail=f"Invalid deck payload: {e}") from e
-    _removed = []
     _notify_deck_updated()
     return _deck_to_response(_current_deck)
 
@@ -429,8 +428,8 @@ async def export_deck(format: str) -> dict:
 
 @app.post("/api/import")
 async def import_deck(request: Request) -> dict:
-    """Import a deck from pasted text. Body: {"text": str, "format": str}. Replaces current deck, clears removed."""
-    global _current_deck, _removed
+    """Import a deck from pasted text. Body: {"text": str, "format": str}. Replaces current deck."""
+    global _current_deck
     print("[import] POST /api/import received")
     try:
         body: dict = await request.json()
@@ -461,7 +460,6 @@ async def import_deck(request: Request) -> dict:
         print("[import] from_export_text unexpected:", type(e).__name__, e)
         raise
     _current_deck = deck
-    _removed = []
     _notify_deck_updated()
     resp = _deck_to_response(_current_deck)
     print("[import] returning response; deck keys in out:", list(resp.get("deck", {}).keys())[:10])
@@ -470,13 +468,8 @@ async def import_deck(request: Request) -> dict:
 
 @app.put("/api/deck")
 async def update_deck(body: dict) -> dict:
-    """Update deck and removed zone from client state."""
-    global _current_deck, _removed
-
-    if "removed" in body and isinstance(body["removed"], list):
-        _removed = list(body["removed"])
-    else:
-        _removed = []
+    """Update deck from client state."""
+    global _current_deck
 
     name: str = _current_deck.name
     if "name" in body and isinstance(body["name"], str):
@@ -501,14 +494,13 @@ async def update_deck(body: dict) -> dict:
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
-    maybe_cards: list[Card] = _normalize_cards_arg(
-        body["maybe"] if "maybe" in body and isinstance(body["maybe"], list) else None,
-        Card,
-    )
-    sideboard_cards: list[Card] = _normalize_cards_arg(
-        body["sideboard"] if "sideboard" in body and isinstance(body["sideboard"], list) else None,
-        Card,
-    )
+    maybe_names: list[str] = body["maybe"] if "maybe" in body and isinstance(body["maybe"], list) else []
+    sideboard_names: list[str] = body["sideboard"] if "sideboard" in body and isinstance(body["sideboard"], list) else []
+    try:
+        maybe_cards: list[Card] = _cards_from_names(maybe_names)
+        sideboard_cards: list[Card] = _cards_from_names(sideboard_names)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
     _current_deck = Deck(
         name=name,

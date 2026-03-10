@@ -303,14 +303,17 @@ class Deck:
             if all_names:
                 cards_arg = _cards_from_names(all_names)
 
-        maybe_arg: list["Card"] = _normalize_cards_arg(
-            data["maybe"] if "maybe" in data and isinstance(data["maybe"], list) else None,
-            Card,
-        )
-        sideboard_arg: list["Card"] = _normalize_cards_arg(
-            data["sideboard"] if "sideboard" in data and isinstance(data["sideboard"], list) else None,
-            Card,
-        )
+        maybe_raw = data["maybe"] if "maybe" in data and isinstance(data["maybe"], list) else None
+        if maybe_raw and isinstance(maybe_raw[0], str):
+            maybe_arg: list["Card"] = _cards_from_names(maybe_raw)
+        else:
+            maybe_arg = _normalize_cards_arg(maybe_raw, Card)
+
+        sideboard_raw = data["sideboard"] if "sideboard" in data and isinstance(data["sideboard"], list) else None
+        if sideboard_raw and isinstance(sideboard_raw[0], str):
+            sideboard_arg: list["Card"] = _cards_from_names(sideboard_raw)
+        else:
+            sideboard_arg = _normalize_cards_arg(sideboard_raw, Card)
 
         return cls(
             name=data["name"] if "name" in data else "",

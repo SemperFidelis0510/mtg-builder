@@ -381,11 +381,6 @@
       padding: 1rem;
       background: var(--panel);
     }
-    .removed-column h2 {
-      margin: 0 0 0.75rem 0;
-      font-size: 1rem;
-      color: #a0a0a0;
-    }
     .section {
       margin-bottom: 1rem;
     }
@@ -559,17 +554,13 @@
     .removed-list {
       list-style: none;
       margin: 0;
-      padding: 0;
+      padding: 4px;
       display: flex;
       flex-direction: column;
       flex-wrap: wrap;
       gap: 4px;
       min-height: 80px;
-      border: 2px dashed var(--border);
-      border-radius: 8px;
-      padding: 4px;
     }
-    .removed-list:not(:empty) { border-color: transparent; }
     .removed-list li { margin: 0; padding: 0; }
     .removed-list .card-img { display: none !important; }
     .removed-list .card-stack:not(.maybe-board-item) {
@@ -669,8 +660,14 @@
           <div id="deckSections"></div>
         </div>
         <div class="removed-column">
-          <h2>Maybe Board</h2>
-          <ul class="removed-list" id="removedZone"></ul>
+          <div class="section" id="section-maybe" data-type="maybe">
+            <div class="section-header">Maybe Board (0)</div>
+            <div class="section-body"><ul class="removed-list" id="list-maybe"></ul></div>
+          </div>
+          <div class="section" id="section-sideboard" data-type="sideboard">
+            <div class="section-header">Sideboard (0)</div>
+            <div class="section-body"><ul class="removed-list" id="list-sideboard"></ul></div>
+          </div>
         </div>
       </main>
     </div>
@@ -816,7 +813,8 @@
             non_creatures: state.non_creatures,
             spells: state.spells,
             lands: state.lands,
-            removed: state.removed
+            maybe: state.maybe,
+            sideboard: state.sideboard
           };
           return fetch('/api/deck', {
             method: 'PUT',
@@ -829,6 +827,8 @@
       }, 400);
     }
 
+    var SIDE_LABELS = { maybe: 'Maybe Board', sideboard: 'Sideboard' };
+
     function updateSectionHeaderTotal(listEl) {
       if (!listEl) return;
       var section = listEl.closest('.section');
@@ -838,8 +838,9 @@
         total += parseInt(el.getAttribute('data-count') || '1', 10);
       });
       if (section && typeKey) {
+        var label = TYPE_LABELS[typeKey] || SIDE_LABELS[typeKey] || typeKey;
         var header = section.querySelector('.section-header');
-        if (header) header.textContent = (TYPE_LABELS[typeKey] || typeKey) + ' (' + total + ')';
+        if (header) header.textContent = label + ' (' + total + ')';
       }
       updateTotalsPanel();
       syncDeckToServer();
@@ -1038,10 +1039,21 @@
       if (statsContainer) statsContainer.appendChild(statsSection);
       renderStatsCharts(stats);
 
-      const removedZone = document.getElementById('removedZone');
-      removedZone.innerHTML = '';
-      collapseToStacks(removed).forEach(function (s) {
-        removedZone.appendChild(makeMaybeBoardCardEl(s.name, s.count));
+      var sideKeys = ['maybe', 'sideboard'];
+      sideKeys.forEach(function (key) {
+        var names = Array.isArray(deck[key + '_names']) ? deck[key + '_names'] : [];
+        var listEl = document.getElementById('list-' + key);
+        if (listEl) {
+          listEl.innerHTML = '';
+          collapseToStacks(names).forEach(function (s) {
+            listEl.appendChild(makeMaybeBoardCardEl(s.name, s.count));
+          });
+          var sectionEl = document.getElementById('section-' + key);
+          if (sectionEl) {
+            var hdr = sectionEl.querySelector('.section-header');
+            if (hdr) hdr.textContent = SIDE_LABELS[key] + ' (' + names.length + ')';
+          }
+        }
       });
 
       document.getElementById('saveBtn').disabled = false;
@@ -1328,43 +1340,48 @@
         const el = document.getElementById('list-' + key);
         if (el) sortables.push(Sortable.create(el, options));
       });
-      const removedEl = document.getElementById('removedZone');
-      if (removedEl) {
-        function convertFullCardsToMaybeBoard() {
-          var zone = document.getElementById('removedZone');
-          if (!zone) return;
-          var toReplace = [];
-          for (var i = 0; i < zone.children.length; i++) {
-            var li = zone.children[i];
-            var stack = li.querySelector('.card-stack');
-            var hasImg = li.querySelector('.card-img');
-            if (stack && hasImg && !stack.classList.contains('maybe-board-item')) {
-              var name = stack.getAttribute('data-name');
-              var count = parseInt(stack.getAttribute('data-count'), 10) || 1;
-              toReplace.push({ li: li, name: name, count: count });
-            }
+
+      function convertFullCardsInZone(zoneId) {
+        var zone = document.getElementById(zoneId);
+        if (!zone) return;
+        var toReplace = [];
+        for (var i = 0; i < zone.children.length; i++) {
+          var li = zone.children[i];
+          var stack = li.querySelector('.card-stack');
+          var hasImg = li.querySelector('.card-img');
+          if (stack && hasImg && !stack.classList.contains('maybe-board-item')) {
+            var name = stack.getAttribute('data-name');
+            var count = parseInt(stack.getAttribute('data-count'), 10) || 1;
+            toReplace.push({ li: li, name: name, count: count });
           }
-          toReplace.forEach(function (r) {
-            var newLi = makeMaybeBoardCardEl(r.name, r.count);
-            r.li.parentNode.replaceChild(newLi, r.li);
-          });
         }
-        sortables.push(Sortable.create(removedEl, {
-          group: { name: 'cards', pull: true, put: true },
-          handle: '.card-img, .maybe-board-name',
-          animation: 150,
-          ghostClass: 'sortable-ghost',
-          dragClass: 'sortable-drag',
-          onEnd: function () {
-            setTimeout(convertFullCardsToMaybeBoard, 0);
-          }
-        }));
-        setTimeout(convertFullCardsToMaybeBoard, 50);
+        toReplace.forEach(function (r) {
+          var newLi = makeMaybeBoardCardEl(r.name, r.count);
+          r.li.parentNode.replaceChild(newLi, r.li);
+        });
       }
+
+      var sideZoneIds = ['list-maybe', 'list-sideboard'];
+      sideZoneIds.forEach(function (zoneId) {
+        var el = document.getElementById(zoneId);
+        if (el) {
+          sortables.push(Sortable.create(el, {
+            group: { name: 'cards', pull: true, put: true },
+            handle: '.card-img, .maybe-board-name',
+            animation: 150,
+            ghostClass: 'sortable-ghost',
+            dragClass: 'sortable-drag',
+            onEnd: function () {
+              setTimeout(function () { convertFullCardsInZone(zoneId); }, 0);
+            }
+          }));
+          setTimeout(function () { convertFullCardsInZone(zoneId); }, 50);
+        }
+      });
     }
 
     function collectState() {
-      const deck = { name: '', colors: [], description: '', removed: [] };
+      const deck = { name: '', colors: [], description: '' };
       function expandList(listEl) {
         var arr = [];
         if (!listEl) return arr;
@@ -1378,7 +1395,8 @@
       TYPE_KEYS.forEach(function (key) {
         deck[key] = expandList(document.getElementById('list-' + key));
       });
-      deck.removed = expandList(document.getElementById('removedZone'));
+      deck.maybe = expandList(document.getElementById('list-maybe'));
+      deck.sideboard = expandList(document.getElementById('list-sideboard'));
       return deck;
     }
 
@@ -1416,6 +1434,13 @@
         if (section) section.classList.toggle('collapsed');
       }
     });
+    document.querySelector('.removed-column').addEventListener('click', function (e) {
+      var header = e.target.closest('.section-header');
+      if (header) {
+        var section = header.closest('.section');
+        if (section) section.classList.toggle('collapsed');
+      }
+    });
     document.getElementById('collapseAllBtn').addEventListener('click', function () {
       document.querySelectorAll('#deckSections .section').forEach(function (s) { s.classList.add('collapsed'); });
     });
@@ -1426,19 +1451,14 @@
     document.getElementById('saveBtn').addEventListener('click', function () {
       var resultEl = document.getElementById('saveResult');
       resultEl.textContent = '';
-      var state = collectState();
-      getDeckMeta().then(function (meta) {
-        var deck = {
-          name: meta.name,
-          colors: meta.colors,
-          description: meta.description,
-          creatures: state.creatures,
-          non_creatures: state.non_creatures,
-          spells: state.spells,
-          lands: state.lands
-        };
-        var blob = new Blob([JSON.stringify(deck, null, 2)], { type: 'application/json' });
-        if (typeof window.showSaveFilePicker === 'function') {
+      fetch('/api/export?format=json')
+        .then(function (r) {
+          if (!r.ok) return r.json().then(function (err) { throw new Error(err.detail || 'Export failed'); });
+          return r.json();
+        })
+        .then(function (data) {
+          var blob = new Blob([data.text], { type: 'application/json' });
+          if (typeof window.showSaveFilePicker === 'function') {
           window.showSaveFilePicker({
             suggestedName: suggestedSaveName(),
             types: [{ description: 'JSON deck', accept: { 'application/json': ['.json'] } }]
