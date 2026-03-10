@@ -652,12 +652,12 @@
           <span class="search-msg" id="searchMsg"></span>
         </div>
         <div class="deck-actions">
+          <span class="save-result" id="saveResult"></span>
+          <button type="button" class="save-btn" id="exportDecklistBtn" title="Export deck to clipboard (choose format)">Export</button>
+          <button type="button" class="save-btn" id="importDeckBtn" title="Import deck from pasted list (choose format)">Import</button>
           <button type="button" class="save-btn" id="loadBtn">Load</button>
           <input type="file" id="loadFileInput" accept=".json" style="display: none">
-          <button type="button" class="save-btn" id="importDeckBtn" title="Import deck from pasted list (choose format)">Import</button>
           <button class="save-btn" id="saveBtn" disabled title="Opens save dialog (suggested name: deck_&lt;timestamp&gt;.json). Choose the decks folder in your repo to save there.">Save</button>
-          <button type="button" class="save-btn" id="exportDecklistBtn" title="Export deck to clipboard (choose format)">Export</button>
-          <span class="save-result" id="saveResult"></span>
         </div>
       </div>
       <main class="main">
@@ -1594,26 +1594,40 @@
         var text = textarea.value.trim();
         var format = selectEl.value;
         errorEl.textContent = '';
+        console.log('[import] Submit clicked; format=', format, 'text length=', text.length, 'preview=', text.substring(0, 60) + (text.length > 60 ? '...' : ''));
         if (!format) {
           errorEl.textContent = 'Select a format.';
           return;
         }
+        var payload = { text: text, format: format };
+        console.log('[import] Sending POST /api/import', payload.format);
         fetch('/api/import', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: text, format: format })
+          body: JSON.stringify(payload)
         })
           .then(function (r) {
-            if (!r.ok) return r.json().then(function (err) { throw new Error(err.detail || 'Import failed'); });
+            console.log('[import] Response status=', r.status, 'ok=', r.ok, 'content-type=', r.headers.get('content-type'));
+            if (!r.ok) {
+              return r.json().then(function (err) {
+                console.log('[import] Error body:', err);
+                var msg = 'Import failed.';
+                if (typeof err.detail === 'string') msg = err.detail;
+                else if (Array.isArray(err.detail) && err.detail[0] && err.detail[0].msg) msg = err.detail[0].msg;
+                throw new Error(msg);
+              });
+            }
             return r.json();
           })
           .then(function (data) {
+            console.log('[import] Success; data keys=', data ? Object.keys(data) : 'null', 'deck keys=', data && data.deck ? Object.keys(data.deck) : 'n/a');
             renderDeck(data);
             closeImportModal();
             resultEl.textContent = 'Deck imported.';
             resultEl.style.color = '';
           })
           .catch(function (err) {
+            console.log('[import] Catch:', err && err.message, err);
             errorEl.textContent = err.message || 'Import failed.';
           });
       });

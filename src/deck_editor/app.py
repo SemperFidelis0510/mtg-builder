@@ -7,12 +7,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
 
 from src.lib.card_data import filter_cards_list
 from src.lib.config import DECK_EDITOR_SAVE_DIR
-from src.obj.deck import Deck
+from src.obj.card import Card
+from src.obj.deck import Deck, _cards_from_names, _normalize_cards_arg
 from src.utils.logger import LOGGER
 
 app = FastAPI(title="MTG Deck Editor")
@@ -163,8 +164,16 @@ def _compute_deck_stats(deck: Deck) -> dict:
 
 
 def _deck_to_response(deck: Deck) -> dict:
-    """Build API response with deck dict, removed list, and stats."""
+    """Build API response with deck dict, removed list, and stats.
+
+    The deck dict includes the computed type lists (creatures, non_creatures, spells, lands)
+    in addition to the stored fields so the frontend can render sections by type.
+    """
     out: dict = deck.to_dict()
+    out["creatures"] = list(deck.creatures)
+    out["non_creatures"] = list(deck.non_creatures)
+    out["spells"] = list(deck.spells)
+    out["lands"] = list(deck.lands)
     out["removed"] = list(_removed)
     resp: dict = {"deck": out, "removed": _removed, "stats": _compute_deck_stats(deck)}
     return resp
@@ -329,19 +338,6 @@ async def load_deck(body: dict) -> dict:
     except (KeyError, TypeError) as e:
         LOGGER.error(0, "load_deck: invalid deck payload: %s", e)
         raise HTTPException(status_code=400, detail=f"Invalid deck payload: {e}") from e
-    # If type lists are empty but body has "cards", populate type lists from cards (e.g. Arena/other export)
-    total_in_types: int = sum(
-        len(getattr(_current_deck, k, None) or [])
-        for k in TYPE_KEYS
-    )
-    if total_in_types == 0 and "cards" in body and isinstance(body["cards"], list):
-        for raw_name in _names_from_cards_array(body["cards"]):
-            try:
-                canonical_name, type_key = _resolve_type_key(raw_name)
-                list_attr: list[str] = getattr(_current_deck, type_key)
-                list_attr.append(canonical_name)
-            except ValueError:
-                pass
     _removed = []
     _notify_deck_updated()
     return _deck_to_response(_current_deck)
@@ -390,16 +386,15 @@ def _parse_add_card_names(body: dict) -> list[str]:
 
 @app.post("/api/add_card")
 async def add_card(body: dict) -> dict:
-    """Add one or more cards by name. Resolves type from local card data. Broadcasts deck_updated via SSE."""
+    """Add one or more cards by name. Resolves to Card from local card data and appends to deck.cards. Broadcasts deck_updated via SSE."""
     global _current_deck
     names_to_add: list[str] = _parse_add_card_names(body)
-    for raw_name in names_to_add:
-        try:
-            canonical_name, type_key = _resolve_type_key(raw_name)
-        except ValueError as e:
-            raise HTTPException(status_code=404, detail=str(e)) from e
-        list_attr: list[str] = getattr(_current_deck, type_key)
-        list_attr.append(canonical_name)
+    try:
+        cards_to_append: list[Card] = _cards_from_names(names_to_add)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    for card in cards_to_append:
+        _current_deck.cards.append(card)
     _notify_deck_updated()
     return _deck_to_response(_current_deck)
 
@@ -433,26 +428,44 @@ async def export_deck(format: str) -> dict:
 
 
 @app.post("/api/import")
-async def import_deck(body: dict) -> dict:
+async def import_deck(request: Request) -> dict:
     """Import a deck from pasted text. Body: {"text": str, "format": str}. Replaces current deck, clears removed."""
     global _current_deck, _removed
-    if "text" not in body or "format" not in body:
+    print("[import] POST /api/import received")
+    try:
+        body: dict = await request.json()
+        print("[import] body keys:", list(body.keys()) if isinstance(body, dict) else type(body))
+    except Exception as e:
+        print("[import] request.json() failed:", type(e).__name__, e)
+        raise HTTPException(status_code=400, detail="Invalid JSON body") from None
+    if not isinstance(body, dict) or "text" not in body or "format" not in body:
+        print("[import] body missing text or format; body type:", type(body), "keys:", list(body.keys()) if isinstance(body, dict) else "n/a")
         raise HTTPException(status_code=400, detail="Body must include 'text' and 'format'")
     text: str = body["text"] if isinstance(body["text"], str) else ""
     fmt: str = (body["format"] or "").strip().lower()
+    print("[import] format=%r text_len=%d text_preview=%r" % (fmt, len(text), (text[:80] + "..." if len(text) > 80 else text)))
     if fmt not in Deck.EXPORT_FORMATS:
+        print("[import] unsupported format:", repr(fmt), "allowed:", list(Deck.EXPORT_FORMATS.keys()))
         raise HTTPException(
             status_code=400,
             detail=f"Unsupported format {body['format']!r}; use one of: {list(Deck.EXPORT_FORMATS.keys())}",
         )
     try:
+        print("[import] calling Deck.from_export_text(...)")
         deck: Deck = Deck.from_export_text(text, fmt)
+        print("[import] from_export_text ok; deck.cards len=%d" % len(deck.cards))
     except ValueError as e:
+        print("[import] from_export_text ValueError:", e)
         raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        print("[import] from_export_text unexpected:", type(e).__name__, e)
+        raise
     _current_deck = deck
     _removed = []
     _notify_deck_updated()
-    return _deck_to_response(_current_deck)
+    resp = _deck_to_response(_current_deck)
+    print("[import] returning response; deck keys in out:", list(resp.get("deck", {}).keys())[:10])
+    return resp
 
 
 @app.put("/api/deck")
@@ -482,16 +495,28 @@ async def update_deck(body: dict) -> dict:
     spells: list[str] = body["spells"] if "spells" in body and isinstance(body["spells"], list) else []
     lands: list[str] = body["lands"] if "lands" in body and isinstance(body["lands"], list) else []
 
-    # Deck expects cards as list[Card] or list[dict]; editor only sends type lists (names). Leave cards empty.
+    all_names: list[str] = creatures + non_creatures + spells + lands
+    try:
+        cards_list: list[Card] = _cards_from_names(all_names)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    maybe_cards: list[Card] = _normalize_cards_arg(
+        body["maybe"] if "maybe" in body and isinstance(body["maybe"], list) else None,
+        Card,
+    )
+    sideboard_cards: list[Card] = _normalize_cards_arg(
+        body["sideboard"] if "sideboard" in body and isinstance(body["sideboard"], list) else None,
+        Card,
+    )
+
     _current_deck = Deck(
         name=name,
         colors=colors,
         description=description,
-        cards=None,
-        creatures=creatures,
-        non_creatures=non_creatures,
-        spells=spells,
-        lands=lands,
+        cards=cards_list,
+        maybe=maybe_cards,
+        sideboard=sideboard_cards,
     )
     _notify_deck_updated()
     return _deck_to_response(_current_deck)
