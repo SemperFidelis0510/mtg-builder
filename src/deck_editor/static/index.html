@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MTG Deck Editor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <style>
@@ -23,16 +26,19 @@
       min-height: 100vh;
     }
     .header {
-      padding: 0.75rem 1rem;
+      padding: 0.6rem 1rem;
       background: var(--panel);
       border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 0.5rem;
+      text-align: center;
     }
-    .header h1 { margin: 0; font-size: 1.25rem; }
+    .header h1 {
+      margin: 0;
+      font-family: 'Cinzel', serif;
+      font-size: 1.85rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: var(--text);
+    }
     .save-btn {
       padding: 0.5rem 1rem;
       background: var(--accent);
@@ -49,20 +55,32 @@
       color: #8f8;
       margin-left: 0.5rem;
     }
-    .sse-status {
-      font-size: 0.75rem;
-      margin-left: 0.5rem;
-    }
-    .sse-status.connected { color: #6f6; }
-    .sse-status.disconnected { color: #f66; }
     .search-bar {
       display: flex;
+      flex-direction: row;
       align-items: center;
+      justify-content: space-between;
       gap: 0.5rem;
       padding: 0.5rem 1rem;
       background: var(--panel);
       border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      flex-wrap: wrap;
     }
+    .search-bar .search-group {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+    .search-bar .deck-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-left: auto;
+      flex-shrink: 0;
+    }
+    .search-bar .deck-actions .save-btn { flex-shrink: 0; }
     .search-bar input {
       flex: 1;
       max-width: 280px;
@@ -160,10 +178,45 @@
       border: none;
       display: block;
     }
+    .tabs { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+    .tab-buttons {
+      display: flex;
+      gap: 0;
+      padding: 0 1rem;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+    }
+    .tab-btn {
+      padding: 0.5rem 1rem;
+      background: transparent;
+      border: none;
+      border-bottom: 3px solid transparent;
+      color: #a0a0a0;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+    .tab-panel {
+      display: none;
+      flex: 1;
+      flex-direction: column;
+      min-height: calc(100vh - 220px);
+      overflow: auto;
+    }
+    .tab-panel.active { display: flex; }
+    .tab-panel#statisticsTab {
+      padding: 1rem;
+      background: var(--bg);
+    }
     .main {
       display: flex;
       flex: 1;
-      min-height: calc(100vh - 120px);
+      min-height: calc(100vh - 220px);
     }
     .deck-column {
       flex: 1;
@@ -339,6 +392,26 @@
     }
     .removed-list:not(:empty) { border-color: transparent; }
     .removed-list li { margin: 0; padding: 0; }
+    .removed-list .card-img { display: none !important; }
+    .removed-list .card-stack:not(.maybe-board-item) {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      min-height: auto;
+    }
+    .removed-list .card-stack:not(.maybe-board-item)::before {
+      content: attr(data-name);
+      flex: 1;
+      min-width: 0;
+      font-size: 0.9rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
     .card-stack.maybe-board-item {
       display: flex;
       align-items: center;
@@ -382,33 +455,45 @@
 <body>
   <header class="header">
     <h1>MTG Deck Editor</h1>
-    <div>
-      <button type="button" class="save-btn" id="loadBtn">Load deck</button>
-      <input type="file" id="loadFileInput" accept=".json" style="display: none">
-      <button class="save-btn" id="saveBtn" disabled title="Opens save dialog (suggested name: deck_&lt;timestamp&gt;.json). Choose the decks folder in your repo to save there.">Save Deck</button>
-      <button type="button" class="save-btn" id="exportDecklistBtn" title="Copy decklist in MTGGoldfish-compatible format (quantity + card name per line)">Export Decklist</button>
-      <span class="save-result" id="saveResult"></span>
-      <span class="sse-status disconnected" id="sseStatus" title="Live updates from server">SSE: —</span>
-    </div>
   </header>
-  <div class="search-bar">
-    <div class="search-wrap">
-      <input type="text" id="cardSearch" placeholder="Search card by name..." title="Type a card name and click Add or press Enter" autocomplete="off">
-      <ul class="autocomplete-dropdown" id="autocompleteDropdown" style="display: none;"></ul>
+  <div class="tabs">
+    <div class="tab-buttons">
+      <button type="button" class="tab-btn active" data-tab="board" id="tabBoard">Board</button>
+      <button type="button" class="tab-btn" data-tab="statistics" id="tabStatistics">Statistics</button>
     </div>
-    <button type="button" class="add-card-btn" id="addCardBtn" title="Add the searched card to the deck">Add to deck</button>
-    <button type="button" class="add-card-btn" id="advancedSearchBtn" title="Open advanced search by criteria">Advanced Search</button>
-    <span class="search-msg" id="searchMsg"></span>
+    <div class="tab-panel active" id="boardTab">
+      <div class="search-bar">
+        <div class="search-group">
+          <div class="search-wrap">
+            <input type="text" id="cardSearch" placeholder="Search card by name..." title="Type a card name and click Add or press Enter" autocomplete="off">
+            <ul class="autocomplete-dropdown" id="autocompleteDropdown" style="display: none;"></ul>
+          </div>
+          <button type="button" class="add-card-btn" id="addCardBtn" title="Add the searched card to the deck">Add to deck</button>
+          <button type="button" class="add-card-btn" id="advancedSearchBtn" title="Open advanced search by criteria">Advanced Search</button>
+          <span class="search-msg" id="searchMsg"></span>
+        </div>
+        <div class="deck-actions">
+          <button type="button" class="save-btn" id="loadBtn">Load</button>
+          <input type="file" id="loadFileInput" accept=".json" style="display: none">
+          <button class="save-btn" id="saveBtn" disabled title="Opens save dialog (suggested name: deck_&lt;timestamp&gt;.json). Choose the decks folder in your repo to save there.">Save</button>
+          <button type="button" class="save-btn" id="exportDecklistBtn" title="Copy decklist in MTGGoldfish-compatible format (quantity + card name per line)">Export</button>
+          <span class="save-result" id="saveResult"></span>
+        </div>
+      </div>
+      <main class="main">
+        <div class="deck-column">
+          <div id="deckSections"></div>
+        </div>
+        <div class="removed-column">
+          <h2>Maybe Board</h2>
+          <ul class="removed-list" id="removedZone"></ul>
+        </div>
+      </main>
+    </div>
+    <div class="tab-panel" id="statisticsTab">
+      <div id="statisticsContainer"></div>
+    </div>
   </div>
-  <main class="main">
-    <div class="deck-column">
-      <div id="deckSections"></div>
-    </div>
-    <div class="removed-column">
-      <h2>Maybe Board</h2>
-      <ul class="removed-list" id="removedZone"></ul>
-    </div>
-  </main>
   <div id="cardPreview" class="card-preview" aria-hidden="true"><img src="" alt=""></div>
 
   <div class="adv-search-modal" id="advSearchModal" aria-hidden="true">
@@ -685,9 +770,11 @@
 
     function renderDeck(data) {
       const container = document.getElementById('deckSections');
+      const statsContainer = document.getElementById('statisticsContainer');
       if (statsPieChartInstance) { statsPieChartInstance.destroy(); statsPieChartInstance = null; }
       if (statsMvChartInstance) { statsMvChartInstance.destroy(); statsMvChartInstance = null; }
       container.innerHTML = '';
+      if (statsContainer) statsContainer.innerHTML = '';
       const deck = data.deck || {};
       const removed = data.removed || [];
       const stats = data.stats || {};
@@ -727,7 +814,7 @@
             '<div class="deck-stats-chart-wrap"><h4>Mana value (non-land)</h4><canvas id="statsMvChart" aria-label="Histogram of mana values"></canvas></div>' +
           '</div>' +
         '</div>';
-      container.appendChild(statsSection);
+      if (statsContainer) statsContainer.appendChild(statsSection);
       renderStatsCharts(stats);
 
       const removedZone = document.getElementById('removedZone');
@@ -1022,6 +1109,25 @@
       });
       const removedEl = document.getElementById('removedZone');
       if (removedEl) {
+        function convertFullCardsToMaybeBoard() {
+          var zone = document.getElementById('removedZone');
+          if (!zone) return;
+          var toReplace = [];
+          for (var i = 0; i < zone.children.length; i++) {
+            var li = zone.children[i];
+            var stack = li.querySelector('.card-stack');
+            var hasImg = li.querySelector('.card-img');
+            if (stack && hasImg && !stack.classList.contains('maybe-board-item')) {
+              var name = stack.getAttribute('data-name');
+              var count = parseInt(stack.getAttribute('data-count'), 10) || 1;
+              toReplace.push({ li: li, name: name, count: count });
+            }
+          }
+          toReplace.forEach(function (r) {
+            var newLi = makeMaybeBoardCardEl(r.name, r.count);
+            r.li.parentNode.replaceChild(newLi, r.li);
+          });
+        }
         sortables.push(Sortable.create(removedEl, {
           group: { name: 'cards', pull: true, put: true },
           handle: '.card-img, .maybe-board-name',
@@ -1029,24 +1135,10 @@
           ghostClass: 'sortable-ghost',
           dragClass: 'sortable-drag',
           onEnd: function () {
-            var zone = document.getElementById('removedZone');
-            if (!zone) return;
-            var toReplace = [];
-            for (var i = 0; i < zone.children.length; i++) {
-              var li = zone.children[i];
-              var stack = li.querySelector('.card-stack');
-              if (stack && stack.querySelector('.card-img') && !stack.classList.contains('maybe-board-item')) {
-                var name = stack.getAttribute('data-name');
-                var count = parseInt(stack.getAttribute('data-count'), 10) || 1;
-                toReplace.push({ li: li, name: name, count: count });
-              }
-            }
-            toReplace.forEach(function (r) {
-              var newLi = makeMaybeBoardCardEl(r.name, r.count);
-              r.li.parentNode.replaceChild(newLi, r.li);
-            });
+            setTimeout(convertFullCardsToMaybeBoard, 0);
           }
         }));
+        setTimeout(convertFullCardsToMaybeBoard, 50);
       }
     }
 
@@ -1220,21 +1312,27 @@
       this.value = '';
     });
 
+    (function initTabs() {
+      var buttons = document.querySelectorAll('.tab-btn');
+      var panels = document.querySelectorAll('.tab-panel');
+      buttons.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var tab = btn.getAttribute('data-tab');
+          buttons.forEach(function (b) { b.classList.remove('active'); });
+          panels.forEach(function (p) {
+            p.classList.toggle('active', p.id === tab + 'Tab');
+          });
+          btn.classList.add('active');
+        });
+      });
+    })();
+
     (function initSSE() {
-      var statusEl = document.getElementById('sseStatus');
       var evtSource = new EventSource('/api/events');
       evtSource.addEventListener('deck_updated', function (e) {
         var data = JSON.parse(e.data);
         renderDeck(data);
       });
-      evtSource.onopen = function () {
-        statusEl.textContent = 'SSE: Connected';
-        statusEl.className = 'sse-status connected';
-      };
-      evtSource.onerror = function () {
-        statusEl.textContent = 'SSE: Disconnected';
-        statusEl.className = 'sse-status disconnected';
-      };
     })();
   </script>
 </body>
