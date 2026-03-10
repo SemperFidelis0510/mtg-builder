@@ -430,6 +430,21 @@
       font-weight: 600;
     }
     .deck-section-controls button:hover { background: #1a4a7a; }
+    .deck-section-controls .clear-btn { background: #5a1a2a; color: #ff8a8a; margin-left: auto; }
+    .deck-section-controls .clear-btn:hover { background: #7a1a2a; }
+    .section-header-label { flex: 1; }
+    .section-clear-btn {
+      background: transparent;
+      border: none;
+      color: #ff8a8a;
+      cursor: pointer;
+      font-size: 0.8rem;
+      line-height: 1;
+      padding: 0 0.2rem;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+    .section-clear-btn:hover { background: rgba(255,100,100,0.2); }
     .section-body.sortable-ghost { opacity: 0.4; }
     .section-statistics .section-body {
       display: flex;
@@ -656,12 +671,13 @@
           <div class="deck-section-controls">
             <button type="button" id="collapseAllBtn">Collapse All</button>
             <button type="button" id="expandAllBtn">Expand All</button>
+            <button type="button" id="clearAllBtn" class="clear-btn">Clear</button>
           </div>
           <div id="deckSections"></div>
         </div>
         <div class="removed-column">
           <div class="section" id="section-maybe" data-type="maybe">
-            <div class="section-header">Maybe Board (0)</div>
+            <div class="section-header"><span class="section-header-label">Maybe Board (0)</span><button type="button" class="section-clear-btn" id="clearMaybeBtn" title="Clear maybe board">✕</button></div>
             <div class="section-body"><ul class="removed-list" id="list-maybe"></ul></div>
           </div>
           <div class="section" id="section-sideboard" data-type="sideboard">
@@ -840,7 +856,11 @@
       if (section && typeKey) {
         var label = TYPE_LABELS[typeKey] || SIDE_LABELS[typeKey] || typeKey;
         var header = section.querySelector('.section-header');
-        if (header) header.textContent = label + ' (' + total + ')';
+        if (header) {
+          var labelSpan = header.querySelector('.section-header-label');
+          if (labelSpan) labelSpan.textContent = label + ' (' + total + ')';
+          else header.textContent = label + ' (' + total + ')';
+        }
       }
       updateTotalsPanel();
       syncDeckToServer();
@@ -1051,7 +1071,11 @@
           var sectionEl = document.getElementById('section-' + key);
           if (sectionEl) {
             var hdr = sectionEl.querySelector('.section-header');
-            if (hdr) hdr.textContent = SIDE_LABELS[key] + ' (' + names.length + ')';
+            if (hdr) {
+              var labelSpan = hdr.querySelector('.section-header-label');
+              if (labelSpan) labelSpan.textContent = SIDE_LABELS[key] + ' (' + names.length + ')';
+              else hdr.textContent = SIDE_LABELS[key] + ' (' + names.length + ')';
+            }
           }
         }
       });
@@ -1446,6 +1470,25 @@
     });
     document.getElementById('expandAllBtn').addEventListener('click', function () {
       document.querySelectorAll('#deckSections .section').forEach(function (s) { s.classList.remove('collapsed'); });
+    });
+
+    document.getElementById('clearAllBtn').addEventListener('click', function () {
+      if (!confirm('Clear all cards from the deck (including sideboard and maybe board)?')) return;
+      TYPE_KEYS.forEach(function (key) {
+        var listEl = document.getElementById('list-' + key);
+        if (listEl) { listEl.innerHTML = ''; updateSectionHeaderTotal(listEl); }
+      });
+      ['maybe', 'sideboard'].forEach(function (key) {
+        var listEl = document.getElementById('list-' + key);
+        if (listEl) { listEl.innerHTML = ''; updateSectionHeaderTotal(listEl); }
+      });
+    });
+
+    document.getElementById('clearMaybeBtn').addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (!confirm('Clear all cards from the maybe board?')) return;
+      var listEl = document.getElementById('list-maybe');
+      if (listEl) { listEl.innerHTML = ''; updateSectionHeaderTotal(listEl); }
     });
 
     document.getElementById('saveBtn').addEventListener('click', function () {
