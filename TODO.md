@@ -4,3 +4,4 @@
 - add proper rules for deck building
 - add scanning triggers and effect
 - add rag to match triggers to effects
+- integregrate logger properly
