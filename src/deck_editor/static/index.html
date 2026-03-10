@@ -1451,11 +1451,32 @@
     document.getElementById('saveBtn').addEventListener('click', function () {
       var resultEl = document.getElementById('saveResult');
       resultEl.textContent = '';
-      fetch('/api/export?format=json')
-        .then(function (r) {
-          if (!r.ok) return r.json().then(function (err) { throw new Error(err.detail || 'Export failed'); });
-          return r.json();
-        })
+      // Sync current client state (including maybe/sideboard) to server before export so saved file is up to date
+      getDeckMeta().then(function (meta) {
+        var state = collectState();
+        var body = {
+          name: meta.name,
+          colors: meta.colors,
+          description: meta.description,
+          creatures: state.creatures,
+          non_creatures: state.non_creatures,
+          spells: state.spells,
+          lands: state.lands,
+          maybe: state.maybe,
+          sideboard: state.sideboard
+        };
+        return fetch('/api/deck', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+      }).then(function (r) {
+        if (!r.ok) return r.json().then(function (err) { throw new Error(err.detail || 'Sync failed'); });
+        return fetch('/api/export?format=json');
+      }).then(function (r) {
+        if (!r.ok) return r.json().then(function (err) { throw new Error(err.detail || 'Export failed'); });
+        return r.json();
+      })
         .then(function (data) {
           var blob = new Blob([data.text], { type: 'application/json' });
           if (typeof window.showSaveFilePicker === 'function') {
