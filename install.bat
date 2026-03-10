@@ -100,7 +100,7 @@ if !errorlevel!==0 (
 
 call conda activate %CONDA_ENV%
 echo === Installing Python dependencies (CUDA=%CUDA%) ===
-python -m src.lib.build_rag --install --cuda %CUDA%
+python -m src.lib.setup --install --cuda %CUDA%
 if errorlevel 1 (
     echo ERROR: Dependency installation failed.
     exit /b 1
@@ -113,9 +113,9 @@ echo.
 echo === [download] Downloading AtomicCards.json ===
 call "%_ACTIVATE%" %CONDA_ENV%
 if "%FORCE%"=="1" (
-    python -m src.lib.build_rag --download --force
+    python -m src.lib.setup --download --force
 ) else (
-    python -m src.lib.build_rag --download
+    python -m src.lib.setup --download
 )
 if errorlevel 1 (
     echo ERROR: Download failed.

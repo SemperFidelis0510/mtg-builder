@@ -2,7 +2,7 @@
 """
 MTG RAG MCP Server: semantic search over the Magic: The Gathering card database.
 Run the server via: python -m src.server (or server.bat).
-Build the RAG index first using build_rag.py (or install.bat install / download / build).
+Build the RAG index first using install.bat (install / download / build) or python -m src.lib.build_rag after setup.
 """
 
 import os
