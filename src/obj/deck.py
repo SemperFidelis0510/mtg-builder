@@ -44,7 +44,6 @@ class Deck:
         lands: Card names that are lands.
         instants: Card names that are instants.
         sorceries: Card names that are sorceries.
-        spells: Card names classified as spells (e.g. instant + sorcery or other non-permanents).
     """
 
     def __init__(
@@ -60,7 +59,6 @@ class Deck:
         lands: list[str] | None = None,
         instants: list[str] | None = None,
         sorceries: list[str] | None = None,
-        spells: list[str] | None = None,
     ) -> None:
         from src.obj.card import Card as CardCls
 
@@ -75,7 +73,6 @@ class Deck:
         self.lands: list[str] = list(lands) if lands is not None else []
         self.instants: list[str] = list(instants) if instants is not None else []
         self.sorceries: list[str] = list(sorceries) if sorceries is not None else []
-        self.spells: list[str] = list(spells) if spells is not None else []
 
     def add_cards(self, names: list[str]) -> None:
         """Resolve card names to Card objects from the card database and append them to this deck.
@@ -160,7 +157,6 @@ class Deck:
             "lands": list(self.lands),
             "instants": list(self.instants),
             "sorceries": list(self.sorceries),
-            "spells": list(self.spells),
         }
 
     @classmethod
@@ -183,6 +179,9 @@ class Deck:
             planeswalkers=data["planeswalkers"] if "planeswalkers" in data else None,
             lands=data["lands"] if "lands" in data else None,
             instants=data["instants"] if "instants" in data else None,
-            sorceries=data["sorceries"] if "sorceries" in data else None,
-            spells=data["spells"] if "spells" in data else None,
+            sorceries=(
+                (data["sorceries"] if "sorceries" in data else [])
+                + (data["spells"] if "spells" in data else [])
+            )
+            or None,
         )
