@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "mtg-cards": {
-      "command": "main.bat",
-      "args": ["serve"],
+      "command": "server.bat",
+      "args": [],
       "env": {
         "MTG_LOG_LEVEL": "DEBUG"
       }
