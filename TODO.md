@@ -1,0 +1,6 @@
+- add prices (to search, to representation and to deck total)
+- add embedded agent to edit decks
+- add mixed basic and semantic search
+- add proper rules for deck building
+- add scanning triggers and effect
+- add rag to match triggers to effects
