@@ -5,6 +5,7 @@ import json
 import re
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
@@ -51,16 +52,125 @@ TYPE_KEYS: list[str] = [
     "planeswalkers",
     "instants",
     "sorceries",
-    "spells",
     "lands",
 ]
 
 
+_COLOR_SYMBOLS: str = "WUBRG"
+_MANA_SYMBOL_RE = re.compile(r"\{([^}]+)\}")
+
+
+def _count_colored_mana_in_cost(mana_cost: str) -> dict[str, int]:
+    """Parse mana cost string and count W, U, B, R, G (only colored symbols). Hybrid counts for each color."""
+    counts: dict[str, int] = {c: 0 for c in _COLOR_SYMBOLS}
+    if not mana_cost or not isinstance(mana_cost, str):
+        return counts
+    for sym_match in _MANA_SYMBOL_RE.finditer(mana_cost):
+        inner: str = sym_match.group(1)
+        for c in _COLOR_SYMBOLS:
+            if c in inner.upper():
+                counts[c] += 1
+    return counts
+
+
+def _compute_deck_stats(deck: Deck) -> dict:
+    """Compute total cards, non_land, lands, and W/U/B/R/G symbol distribution as percentages."""
+    from src.lib.card_data import get_card_data
+
+    total_cards: int = 0
+    land_count: int = 0
+    all_names: list[str] = []
+    for key in TYPE_KEYS:
+        lst: list[str] = getattr(deck, key, None) or []
+        if not isinstance(lst, list):
+            continue
+        total_cards += len(lst)
+        if key == "lands":
+            land_count = len(lst)
+        all_names.extend(lst)
+    non_land: int = total_cards - land_count
+
+    color_counts: dict[str, int] = {c: 0 for c in _COLOR_SYMBOLS}
+    data: list = get_card_data()
+    name_lower_to_card: dict[str, Any] = {}
+    for c in data:
+        k: str = c.name.lower()
+        existing = name_lower_to_card.get(k)
+        if existing is None or (
+            (c.mana_cost or "").strip() and not (getattr(existing, "mana_cost", None) or "").strip()
+        ):
+            name_lower_to_card[k] = c
+    for name in all_names:
+        key: str = (name or "").strip().lower()
+        card = name_lower_to_card.get(key)
+        if card is None and " // " in name:
+            key = name.split(" // ", 1)[0].strip().lower()
+            card = name_lower_to_card.get(key)
+        if card is None:
+            continue
+        cost_counts: dict[str, int] = _count_colored_mana_in_cost(card.mana_cost)
+        for c in _COLOR_SYMBOLS:
+            color_counts[c] += cost_counts[c]
+    total_colored: int = sum(color_counts.values())
+    if total_colored == 0:
+        color_distribution: dict[str, float] = {c: 0.0 for c in _COLOR_SYMBOLS}
+    else:
+        color_distribution = {c: round(100.0 * color_counts[c] / total_colored, 1) for c in _COLOR_SYMBOLS}
+
+    # Mana value histogram for non-land cards: creatures vs non-creatures (buckets 0..6, 7+)
+    mv_creatures: list[int] = [0] * 8
+    mv_non_creatures: list[int] = [0] * 8
+    creature_names: list[str] = list(getattr(deck, "creatures", None) or [])
+    non_creature_non_land: list[str] = []
+    for key in TYPE_KEYS:
+        if key in ("lands", "creatures"):
+            continue
+        lst = getattr(deck, key, None) or []
+        if isinstance(lst, list):
+            non_creature_non_land.extend(lst)
+    for name in creature_names:
+        key = (name or "").strip().lower()
+        card = name_lower_to_card.get(key)
+        if card is None and " // " in name:
+            key = name.split(" // ", 1)[0].strip().lower()
+            card = name_lower_to_card.get(key)
+        if card is None:
+            continue
+        mv: float = getattr(card, "mana_value", -1.0) if hasattr(card, "mana_value") else -1.0
+        if mv < 0:
+            mv = 0.0
+        idx = min(7, int(mv))
+        mv_creatures[idx] += 1
+    for name in non_creature_non_land:
+        key = (name or "").strip().lower()
+        card = name_lower_to_card.get(key)
+        if card is None and " // " in name:
+            key = name.split(" // ", 1)[0].strip().lower()
+            card = name_lower_to_card.get(key)
+        if card is None:
+            continue
+        mv = getattr(card, "mana_value", -1.0) if hasattr(card, "mana_value") else -1.0
+        if mv < 0:
+            mv = 0.0
+        idx = min(7, int(mv))
+        mv_non_creatures[idx] += 1
+    mana_value_distribution = {"creatures": mv_creatures, "non_creatures": mv_non_creatures}
+
+    return {
+        "total_cards": total_cards,
+        "non_land": non_land,
+        "lands": land_count,
+        "color_distribution": color_distribution,
+        "mana_value_distribution": mana_value_distribution,
+    }
+
+
 def _deck_to_response(deck: Deck) -> dict:
-    """Build API response with deck dict and removed list."""
+    """Build API response with deck dict, removed list, and stats."""
     out: dict = deck.to_dict()
     out["removed"] = list(_removed)
-    return {"deck": out, "removed": _removed}
+    resp: dict = {"deck": out, "removed": _removed, "stats": _compute_deck_stats(deck)}
+    return resp
 
 
 def _sanitize_filename(name: str) -> str:
@@ -71,7 +181,7 @@ def _sanitize_filename(name: str) -> str:
 def _type_line_to_key(type_line: str) -> str:
     """Map MTG type_line string to TYPE_KEYS section (e.g. 'Instant' -> 'instants')."""
     if not type_line or not isinstance(type_line, str):
-        return "spells"
+        return "sorceries"
     t: str = type_line.lower()
     if "land" in t:
         return "lands"
@@ -87,7 +197,7 @@ def _type_line_to_key(type_line: str) -> str:
         return "instants"
     if "sorcery" in t:
         return "sorceries"
-    return "spells"
+    return "sorceries"
 
 
 def _resolve_type_key(card_name: str) -> tuple[str, str]:
@@ -201,6 +311,19 @@ async def search_cards_api(body: dict) -> dict:
     return {"results": [c.to_dict() for c in results]}
 
 
+def _names_from_cards_array(cards: list) -> list[str]:
+    """Extract card names from a 'cards' array (items may be strings or dicts with 'name')."""
+    names: list[str] = []
+    for item in cards:
+        if isinstance(item, str) and (item or "").strip():
+            names.append((item or "").strip())
+        elif isinstance(item, dict) and "name" in item and isinstance(item["name"], str):
+            n = (item["name"] or "").strip()
+            if n:
+                names.append(n)
+    return names
+
+
 @app.post("/api/deck")
 async def load_deck(body: dict) -> dict:
     """Load a deck from JSON. Replaces current deck and clears removed zone."""
@@ -212,6 +335,19 @@ async def load_deck(body: dict) -> dict:
     except (KeyError, TypeError) as e:
         LOGGER.error(0, "load_deck: invalid deck payload: %s", e)
         raise HTTPException(status_code=400, detail=f"Invalid deck payload: {e}") from e
+    # If type lists are empty but body has "cards", populate type lists from cards (e.g. Arena/other export)
+    total_in_types: int = sum(
+        len(getattr(_current_deck, k, None) or [])
+        for k in TYPE_KEYS
+    )
+    if total_in_types == 0 and "cards" in body and isinstance(body["cards"], list):
+        for raw_name in _names_from_cards_array(body["cards"]):
+            try:
+                canonical_name, type_key = _resolve_type_key(raw_name)
+                list_attr: list[str] = getattr(_current_deck, type_key)
+                list_attr.append(canonical_name)
+            except ValueError:
+                pass
     _removed = []
     _notify_deck_updated()
     return _deck_to_response(_current_deck)
@@ -311,7 +447,8 @@ async def update_deck(body: dict) -> dict:
     lands: list[str] = body["lands"] if "lands" in body and isinstance(body["lands"], list) else []
     instants: list[str] = body["instants"] if "instants" in body and isinstance(body["instants"], list) else []
     sorceries: list[str] = body["sorceries"] if "sorceries" in body and isinstance(body["sorceries"], list) else []
-    spells: list[str] = body["spells"] if "spells" in body and isinstance(body["spells"], list) else []
+    spells_legacy: list[str] = body["spells"] if "spells" in body and isinstance(body["spells"], list) else []
+    sorceries_merged: list[str] = sorceries + spells_legacy
 
     # Deck expects cards as list[Card] or list[dict]; editor only sends type lists (names). Leave cards empty.
     _current_deck = Deck(
@@ -325,8 +462,7 @@ async def update_deck(body: dict) -> dict:
         planeswalkers=planeswalkers,
         lands=lands,
         instants=instants,
-        sorceries=sorceries,
-        spells=spells,
+        sorceries=sorceries_merged,
     )
     _notify_deck_updated()
     return _deck_to_response(_current_deck)

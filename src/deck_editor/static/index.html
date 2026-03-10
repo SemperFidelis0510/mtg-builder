@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MTG Deck Editor</title>
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <style>
     :root {
       --bg: #1a1a2e;
@@ -203,6 +204,56 @@
       min-height: 44px;
     }
     .section-body.sortable-ghost { opacity: 0.4; }
+    .section-statistics .section-body {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      padding: 0.75rem 1rem;
+    }
+    .section-statistics .deck-stats-totals {
+      display: flex;
+      gap: 2.5rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .section-statistics .deck-total-item {
+      font-size: 0.95rem;
+      color: var(--text);
+      padding: 0.25rem 0.5rem;
+    }
+    .section-statistics .deck-total-item strong {
+      color: var(--accent);
+    }
+    .section-statistics .deck-stats-colors {
+      font-size: 0.9rem;
+      color: var(--text);
+    }
+    .section-statistics .deck-stats-colors strong {
+      color: var(--accent);
+    }
+    .section-statistics .deck-stats-color-line {
+      font-family: var(--mono);
+    }
+    .deck-stats-charts {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1.5rem;
+      margin-top: 1rem;
+      align-items: flex-start;
+    }
+    .deck-stats-chart-wrap {
+      flex: 1 1 200px;
+      min-width: 200px;
+      max-width: 280px;
+    }
+    .deck-stats-chart-wrap canvas {
+      max-height: 200px;
+    }
+    .deck-stats-chart-wrap h4 {
+      margin: 0 0 0.5rem 0;
+      font-size: 0.95rem;
+      color: #fff;
+    }
     .card-list {
       display: flex;
       flex-wrap: wrap;
@@ -314,6 +365,7 @@
       <button type="button" class="save-btn" id="loadBtn">Load deck</button>
       <input type="file" id="loadFileInput" accept=".json" style="display: none">
       <button class="save-btn" id="saveBtn" disabled title="Opens save dialog (suggested name: deck_&lt;timestamp&gt;.json). Choose the decks folder in your repo to save there.">Save Deck</button>
+      <button type="button" class="save-btn" id="exportDecklistBtn" title="Copy decklist in MTGGoldfish-compatible format (quantity + card name per line)">Export Decklist</button>
       <span class="save-result" id="saveResult"></span>
       <span class="sse-status disconnected" id="sseStatus" title="Live updates from server">SSE: —</span>
     </div>
@@ -346,9 +398,12 @@
   </div>
 
   <script>
+    var statsPieChartInstance = null;
+    var statsMvChartInstance = null;
+
     const TYPE_KEYS = [
       'creatures', 'artifacts', 'enchantments', 'planeswalkers',
-      'instants', 'sorceries', 'spells', 'lands'
+      'instants', 'sorceries', 'lands'
     ];
     const TYPE_LABELS = {
       creatures: 'Creatures',
@@ -357,7 +412,6 @@
       planeswalkers: 'Planeswalkers',
       instants: 'Instants',
       sorceries: 'Sorceries',
-      spells: 'Spells',
       lands: 'Lands'
     };
 
@@ -424,6 +478,37 @@
       return out;
     }
 
+    var syncToServerTimer = null;
+    function syncDeckToServer() {
+      if (syncToServerTimer) clearTimeout(syncToServerTimer);
+      syncToServerTimer = setTimeout(function () {
+        syncToServerTimer = null;
+        getDeckMeta().then(function (meta) {
+          var state = collectState();
+          var body = {
+            name: meta.name,
+            colors: meta.colors,
+            description: meta.description,
+            creatures: state.creatures,
+            artifacts: state.artifacts,
+            enchantments: state.enchantments,
+            planeswalkers: state.planeswalkers,
+            instants: state.instants,
+            sorceries: state.sorceries,
+            lands: state.lands,
+            removed: state.removed
+          };
+          return fetch('/api/deck', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+          });
+        }).then(function (r) {
+          if (r.ok) return r.json();
+        }).catch(function () {});
+      }, 400);
+    }
+
     function updateSectionHeaderTotal(listEl) {
       if (!listEl) return;
       var section = listEl.closest('.section');
@@ -435,6 +520,8 @@
       });
       var header = section.querySelector('.section-header');
       if (header) header.textContent = (TYPE_LABELS[typeKey] || typeKey) + ' (' + total + ')';
+      updateTotalsPanel();
+      syncDeckToServer();
     }
 
     function makeCardStackEl(name, count) {
@@ -499,11 +586,40 @@
       return li;
     }
 
+    function updateTotalsPanel() {
+      var statsSection = document.getElementById('deckStatisticsSection');
+      if (!statsSection) return;
+      var total = 0;
+      var landCount = 0;
+      TYPE_KEYS.forEach(function (key) {
+        var list = document.getElementById('list-' + key);
+        if (list) {
+          var n = 0;
+          list.querySelectorAll('.card-stack[data-count]').forEach(function (el) {
+            n += parseInt(el.getAttribute('data-count') || '1', 10);
+          });
+          total += n;
+          if (key === 'lands') landCount = n;
+        }
+      });
+      var nonLand = total - landCount;
+      var totalsEl = statsSection.querySelector('.deck-stats-totals');
+      if (totalsEl) {
+        totalsEl.innerHTML =
+          '<span class="deck-total-item"><strong>Total cards:</strong> ' + total + '</span>' +
+          '<span class="deck-total-item"><strong>Non-land:</strong> ' + nonLand + '</span>' +
+          '<span class="deck-total-item"><strong>Lands:</strong> ' + landCount + '</span>';
+      }
+    }
+
     function renderDeck(data) {
       const container = document.getElementById('deckSections');
+      if (statsPieChartInstance) { statsPieChartInstance.destroy(); statsPieChartInstance = null; }
+      if (statsMvChartInstance) { statsMvChartInstance.destroy(); statsMvChartInstance = null; }
       container.innerHTML = '';
       const deck = data.deck || {};
       const removed = data.removed || [];
+      const stats = data.stats || {};
 
       TYPE_KEYS.forEach(function (key) {
         const cards = Array.isArray(deck[key]) ? deck[key] : [];
@@ -522,6 +638,27 @@
         container.appendChild(section);
       });
 
+      var statsSection = document.createElement('div');
+      statsSection.id = 'deckStatisticsSection';
+      statsSection.className = 'section section-statistics';
+      var dist = stats.color_distribution || {};
+      var colorLine = ['W', 'U', 'B', 'R', 'G'].map(function (c) {
+        var pct = dist[c] != null ? dist[c] : 0;
+        return c + ' ' + pct + '%';
+      }).join(' · ');
+      statsSection.innerHTML =
+        '<div class="section-header">Statistics</div>' +
+        '<div class="section-body">' +
+          '<div class="deck-stats-totals"></div>' +
+          '<div class="deck-stats-colors"><strong>Color distribution</strong> (colored mana in costs):<br><span class="deck-stats-color-line">' + colorLine + '</span></div>' +
+          '<div class="deck-stats-charts">' +
+            '<div class="deck-stats-chart-wrap"><h4>Color distribution</h4><canvas id="statsPieChart" aria-label="Pie chart of colored mana symbols"></canvas></div>' +
+            '<div class="deck-stats-chart-wrap"><h4>Mana value (non-land)</h4><canvas id="statsMvChart" aria-label="Histogram of mana values"></canvas></div>' +
+          '</div>' +
+        '</div>';
+      container.appendChild(statsSection);
+      renderStatsCharts(stats);
+
       const removedZone = document.getElementById('removedZone');
       removedZone.innerHTML = '';
       collapseToStacks(removed).forEach(function (s) {
@@ -529,11 +666,67 @@
       });
 
       document.getElementById('saveBtn').disabled = false;
+      updateTotalsPanel();
       initSortable();
     }
 
+    function renderStatsCharts(stats) {
+      if (typeof Chart === 'undefined') return;
+      var dist = stats.color_distribution || {};
+      var mvDist = stats.mana_value_distribution || [];
+      while (mvDist.length < 8) mvDist.push(0);
+
+      var pieEl = document.getElementById('statsPieChart');
+      if (pieEl) {
+        var colorColors = ['#f0e6d3', '#0e4b8c', '#2d2d2d', '#c41e3a', '#2d5016'];
+        var pieData = ['W', 'U', 'B', 'R', 'G'].map(function (c) { return dist[c] != null ? dist[c] : 0; });
+        var hasAny = pieData.some(function (v) { return v > 0; });
+        var pieLabels = ['W', 'U', 'B', 'R', 'G'];
+        if (!hasAny) { pieData = [1]; pieLabels = ['No colored mana']; colorColors = ['#555']; }
+        statsPieChartInstance = new Chart(pieEl, {
+          type: 'pie',
+          data: {
+            labels: pieLabels,
+            datasets: [{ data: pieData, backgroundColor: colorColors, borderColor: 'var(--border)', borderWidth: 1 }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: { legend: { position: 'bottom', labels: { color: '#fff', padding: 8 } } }
+          }
+        });
+      }
+      var mvEl = document.getElementById('statsMvChart');
+      if (mvEl) {
+        var mvLabels = ['0', '1', '2', '3', '4', '5', '6', '7+'];
+        var mvCreatures = (stats.mana_value_distribution && stats.mana_value_distribution.creatures) ? stats.mana_value_distribution.creatures.slice(0, 8) : [];
+        var mvNonCreatures = (stats.mana_value_distribution && stats.mana_value_distribution.non_creatures) ? stats.mana_value_distribution.non_creatures.slice(0, 8) : [];
+        while (mvCreatures.length < 8) mvCreatures.push(0);
+        while (mvNonCreatures.length < 8) mvNonCreatures.push(0);
+        statsMvChartInstance = new Chart(mvEl, {
+          type: 'bar',
+          data: {
+            labels: mvLabels,
+            datasets: [
+              { label: 'Creatures', data: mvCreatures, backgroundColor: '#7cb342', borderColor: 'var(--border)', borderWidth: 1, stack: 'mv' },
+              { label: 'Non-creatures', data: mvNonCreatures, backgroundColor: '#d8d8d8', borderColor: 'var(--border)', borderWidth: 1, stack: 'mv' }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            scales: {
+              x: { title: { display: true, text: 'Mana value', color: '#fff' }, ticks: { color: '#fff' }, grid: { color: '#fff' }, stacked: true },
+              y: { beginAtZero: true, ticks: { color: '#fff', stepSize: 1 }, grid: { color: '#fff' }, stacked: true }
+            },
+            plugins: { legend: { display: true, position: 'bottom', labels: { color: '#fff', padding: 8 } } }
+          }
+        });
+      }
+    }
+
     function typeLineToSectionKey(typeLine) {
-      if (!typeLine || typeof typeLine !== 'string') return 'spells';
+      if (!typeLine || typeof typeLine !== 'string') return 'sorceries';
       var t = typeLine.toLowerCase();
       if (t.indexOf('land') !== -1) return 'lands';
       if (t.indexOf('creature') !== -1) return 'creatures';
@@ -542,7 +735,7 @@
       if (t.indexOf('enchantment') !== -1) return 'enchantments';
       if (t.indexOf('instant') !== -1) return 'instants';
       if (t.indexOf('sorcery') !== -1) return 'sorceries';
-      return 'spells';
+      return 'sorceries';
     }
 
     function addCardToDeck(cardName, typeKey) {
@@ -584,12 +777,21 @@
             return;
           }
           var name = data.name;
-          var typeKey = typeLineToSectionKey(data.type_line);
-          addCardToDeck(name, typeKey);
-          msgEl.textContent = 'Added: ' + name;
-          msgEl.className = 'search-msg';
-          input.value = '';
-          input.focus();
+          addCardToDeck(name, typeLineToSectionKey(data.type_line));
+          fetch('/api/add_card', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: name })
+          }).then(function (r) {
+            if (!r.ok) return r.json().then(function (err) { throw new Error(err.detail || 'Add failed'); });
+            msgEl.textContent = 'Added: ' + name;
+            msgEl.className = 'search-msg';
+            input.value = '';
+            input.focus();
+          }).catch(function (err) {
+            msgEl.textContent = err.message || 'Add failed';
+            msgEl.className = 'search-msg error';
+          });
         })
         .catch(function () {
           msgEl.textContent = 'Search failed.';
@@ -636,10 +838,16 @@
             msgEl.className = 'search-msg error';
             return;
           }
-          var typeKey = typeLineToSectionKey(data.type_line);
-          addCardToDeck(name, typeKey);
-          msgEl.textContent = 'Added: ' + name;
-          msgEl.className = 'search-msg';
+          addCardToDeck(name, typeLineToSectionKey(data.type_line));
+          return fetch('/api/add_card', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: name })
+          }).then(function (r) {
+            if (!r.ok) return r.json().then(function (err) { throw new Error(err.detail || 'Add failed'); });
+            msgEl.textContent = 'Added: ' + name;
+            msgEl.className = 'search-msg';
+          });
         })
         .catch(function () {
           msgEl.textContent = 'Failed to add card.';
@@ -767,6 +975,23 @@
       return deck;
     }
 
+    function formatDecklistForMTGGoldfish(state) {
+      var lines = [];
+      TYPE_KEYS.forEach(function (key) {
+        var arr = state[key];
+        if (!Array.isArray(arr) || !arr.length) return;
+        var counts = {};
+        arr.forEach(function (name) { counts[name] = (counts[name] || 0) + 1; });
+        var names = Object.keys(counts).sort();
+        lines.push('// ' + (TYPE_LABELS[key] || key));
+        names.forEach(function (name) {
+          lines.push(counts[name] + ' ' + name);
+        });
+        lines.push('');
+      });
+      return lines.join('\n').replace(/\n+$/, '');
+    }
+
     function getDeckMeta() {
       return fetch('/api/deck').then(function (r) {
         if (!r.ok) return { deck: null, removed: [] };
@@ -809,7 +1034,6 @@
           planeswalkers: state.planeswalkers,
           instants: state.instants,
           sorceries: state.sorceries,
-          spells: state.spells,
           lands: state.lands
         };
         var blob = new Blob([JSON.stringify(deck, null, 2)], { type: 'application/json' });
@@ -844,6 +1068,29 @@
         resultEl.textContent = 'Error: ' + (err.message || 'save failed');
         resultEl.style.color = '#f88';
       });
+    });
+
+    document.getElementById('exportDecklistBtn').addEventListener('click', function () {
+      var resultEl = document.getElementById('saveResult');
+      var state = collectState();
+      var text = formatDecklistForMTGGoldfish(state);
+      if (!text) {
+        resultEl.textContent = 'Deck is empty.';
+        resultEl.style.color = '#f88';
+        return;
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () {
+          resultEl.textContent = 'Decklist copied (MTGGoldfish format).';
+          resultEl.style.color = '';
+        }).catch(function () {
+          resultEl.textContent = 'Copy failed.';
+          resultEl.style.color = '#f88';
+        });
+      } else {
+        resultEl.textContent = 'Clipboard not available.';
+        resultEl.style.color = '#f88';
+      }
     });
 
     document.getElementById('loadBtn').addEventListener('click', function () {
