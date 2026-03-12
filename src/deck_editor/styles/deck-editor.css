@@ -328,6 +328,7 @@ body {
   min-height: 320px;
 }
 .tabs { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.tabs.tabs-after-settings { margin-top: 1rem; }
 .tab-buttons {
   display: flex;
   gap: 0;
@@ -381,6 +382,19 @@ body {
   min-height: 120px;
   background: var(--panel);
 }
+.deck-sections-zone-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.5rem;
+  background: var(--border);
+  border-radius: 6px 6px 0 0;
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin: -0.5rem -0.5rem 0.5rem -0.5rem;
+  color: var(--text);
+}
+.deck-sections-zone-title-label { flex: 1; }
 .deck-sections-zone.deck-sections-zone-drag-from-side {
   outline: 3px solid var(--accent);
   outline-offset: 2px;
@@ -441,20 +455,20 @@ body {
 .deck-section-controls {
   display: flex;
   gap: 0.4rem;
-  margin-bottom: 0.5rem;
+  margin-left: auto;
 }
 .deck-section-controls button {
   padding: 0.25rem 0.7rem;
-  background: var(--border);
+  background: var(--panel);
   color: var(--text);
-  border: none;
+  border: 1px solid var(--border);
   border-radius: 4px;
   cursor: pointer;
   font-size: 0.8rem;
   font-weight: 600;
 }
 .deck-section-controls button:hover { background: #1a4a7a; }
-.deck-section-controls .clear-btn { background: #5a1a2a; color: #ff8a8a; margin-left: auto; }
+.deck-section-controls .clear-btn { background: #5a1a2a; color: #ff8a8a; margin-left: auto; border-color: #7a2a3a; }
 .deck-section-controls .clear-btn:hover { background: #7a1a2a; }
 .section-header-label { flex: 1; }
 .section-clear-btn {
@@ -551,6 +565,7 @@ body {
 .card-stack .card-img { margin: 0; border-radius: 8px 8px 0 0; }
 .card-stack-banner {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
   gap: 6px;
@@ -559,6 +574,11 @@ body {
   border: 1px solid var(--border);
   border-top: none;
   border-radius: 0 0 8px 8px;
+}
+.card-stack-banner .card-price {
+  width: 100%;
+  margin-top: 2px;
+  margin-bottom: 0;
 }
 .card-stack-badge {
   min-width: 22px;
@@ -677,8 +697,7 @@ body {
 .deck-settings {
   margin-bottom: 0;
   padding: 0 1rem;
-  background: var(--panel);
-  border-bottom: 1px solid var(--border);
+  background: transparent;
 }
 .deck-settings .section-body {
   padding: 0.75rem 0.5rem;

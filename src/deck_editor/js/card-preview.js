@@ -26,17 +26,23 @@ export function initCardPreview() {
   document.addEventListener('mouseover', (e) => {
     const preview = document.getElementById('cardPreview');
     if (e.target === preview || (preview && preview.contains(e.target))) return;
+    let name = null;
     const img = e.target.closest('.card-img');
     if (img) {
       const stack = img.closest('.card-stack');
-      if (stack && stack.dataset.name) showCardPreview(stack.dataset.name, e.clientX, e.clientY);
+      if (stack && stack.dataset.name) name = stack.dataset.name;
     }
+    if (!name) {
+      const stack = e.target.closest('.card-stack[data-name]');
+      if (stack) name = stack.dataset.name;
+    }
+    if (name) showCardPreview(name, e.clientX, e.clientY);
   });
   document.addEventListener('mouseout', (e) => {
-    const img = e.target.closest('.card-img');
     const related = e.relatedTarget;
     const preview = document.getElementById('cardPreview');
-    if (img && (!related || !img.contains(related)) && (!preview || !preview.contains(related))) hideCardPreview();
+    const cardEl = e.target.closest('.card-stack[data-name]');
+    if (cardEl && (!related || !cardEl.contains(related)) && (!preview || !preview.contains(related))) hideCardPreview();
     if (preview && (e.target === preview || preview.contains(e.target)) && (!related || !preview.contains(related))) hideCardPreview();
   });
   document.addEventListener('mousemove', (e) => {

@@ -61,7 +61,7 @@
       </div>
     </div>
   </div>
-  <div class="tabs">
+  <div class="tabs tabs-after-settings">
     <div class="tab-buttons">
       <button type="button" class="tab-btn active" data-tab="board" id="tabBoard">Board</button>
       <button type="button" class="tab-btn" data-tab="statistics" id="tabStatistics">Statistics</button>
@@ -90,10 +90,13 @@
       <main class="main">
         <div class="deck-column">
           <div class="deck-sections-zone" id="deckSectionsZone">
-            <div class="deck-section-controls">
-              <button type="button" id="collapseAllBtn">Collapse All</button>
-              <button type="button" id="expandAllBtn">Expand All</button>
-              <button type="button" id="clearAllBtn" class="clear-btn">Clear</button>
+            <div class="deck-sections-zone-title">
+              <span class="deck-sections-zone-title-label">Main Deck</span>
+              <div class="deck-section-controls">
+                <button type="button" id="collapseAllBtn">Collapse All</button>
+                <button type="button" id="expandAllBtn">Expand All</button>
+                <button type="button" id="clearAllBtn" class="clear-btn">Clear</button>
+              </div>
             </div>
             <div id="deckSections"></div>
             <ul class="deck-drop-target" id="deckDropTarget"></ul>
@@ -101,7 +104,7 @@
         </div>
         <div class="removed-column">
           <div class="section" id="section-maybe" data-type="maybe">
-            <div class="section-header"><span class="section-header-label">Maybe Board (0)</span><button type="button" class="section-clear-btn" id="clearMaybeBtn" title="Clear maybe board">✕</button></div>
+            <div class="section-header"><span class="section-header-label">Maybe Board (0)</span><button type="button" class="section-clear-btn" id="clearMaybeBtn" title="Clear maybe board">Clear</button></div>
             <div class="section-body"><ul class="removed-list" id="list-maybe"></ul></div>
           </div>
           <div class="section" id="section-sideboard" data-type="sideboard">

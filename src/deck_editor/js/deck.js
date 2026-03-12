@@ -99,14 +99,14 @@ export function makeCardStackEl(name, count) {
   banner.className = 'card-stack-banner';
   banner.appendChild(badge);
   banner.appendChild(controls);
-  wrap.appendChild(img);
-  wrap.appendChild(banner);
   const priceSpan = document.createElement('span');
   priceSpan.className = 'card-price';
   const prices = window._deckPrices || {};
   const priceVal = prices[name];
   priceSpan.textContent = (priceVal != null && Number(priceVal) >= 0) ? '$' + Number(priceVal).toFixed(2) : '—';
-  wrap.appendChild(priceSpan);
+  banner.appendChild(priceSpan);
+  wrap.appendChild(img);
+  wrap.appendChild(banner);
   li.appendChild(wrap);
   return li;
 }
