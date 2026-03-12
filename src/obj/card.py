@@ -1,12 +1,62 @@
 """Card dataclass -- single source of truth for MTG card data representation."""
 
 import dataclasses
+import json
 import re
 from dataclasses import dataclass, field, fields
 from typing import Any
 
 from src.config.keyword_explanations import expand_keywords as _expand_keywords
 from src.config.thresholds import classify as _classify_value
+from src.lib.config import KEYWORD_EXPLANATIONS_PATH
+
+# ---------------------------------------------------------------------------
+# Compiled regexes for ability parsing (module-level for reuse)
+# ---------------------------------------------------------------------------
+_REX_TRIGGERED = re.compile(
+    r"^(When|Whenever|At)\s+(.+?),\s*(.+)$",
+    re.IGNORECASE | re.DOTALL,
+)
+_REX_ACTIVATED = re.compile(r"^(.+?):\s*(.+)$", re.DOTALL)
+_REX_LOYALTY_COST = re.compile(r"^[+\-\u2212]\d+$|^0$")
+_REX_MANA_SYMBOL = re.compile(r"\{[^}]+\}")
+
+_KNOWN_KEYWORDS: set[str] | None = None
+
+
+def _get_known_keywords() -> set[str]:
+    """Return set of keyword names from keyword_explanations.json. Cached."""
+    global _KNOWN_KEYWORDS
+    if _KNOWN_KEYWORDS is None:
+        if not KEYWORD_EXPLANATIONS_PATH.is_file():
+            _KNOWN_KEYWORDS = set()
+        else:
+            with open(KEYWORD_EXPLANATIONS_PATH, encoding="utf-8") as f:
+                data = json.load(f)
+            _KNOWN_KEYWORDS = {k.strip() for k in data if isinstance(k, str) and k.strip()}
+    return _KNOWN_KEYWORDS
+
+
+def _match_keyword_line(
+    line: str, known_kw: set[str], card_keywords: list[str],
+) -> tuple[str, str] | None:
+    """If *line* is a known keyword optionally followed by a parameter, return ``(keyword, param)``.
+
+    Matches longest keyword first so e.g. "Flashback" beats "Flash".
+    Returns ``None`` when *line* does not start with any known keyword.
+    """
+    all_kw = known_kw | set(card_keywords or [])
+    for kw in sorted(all_kw, key=len, reverse=True):
+        kw_lower = kw.lower()
+        line_lower = line.lower()
+        if line_lower == kw_lower:
+            return (kw, "")
+        if line_lower.startswith(kw_lower) and len(line) > len(kw):
+            sep = line[len(kw)]
+            if sep in (" ", "\u2014", "\u2013", "-"):
+                param = line[len(kw):].strip().lstrip("\u2014\u2013- ").strip()
+                return (kw, param)
+    return None
 
 
 def _classify_stat(stat_value: str, section: str) -> str:
@@ -19,6 +69,34 @@ def _classify_stat(stat_value: str, section: str) -> str:
         return _classify_value(num, section)
     except ValueError:
         return "variable"
+
+
+def _parse_activated_cost(cost_str: str) -> list[str]:
+    """Parse the cost side of an activated ability into trigger phrases."""
+    cost = (cost_str or "").strip()
+    if not cost:
+        return []
+    triggers: list[str] = []
+
+    if _REX_LOYALTY_COST.match(cost):
+        triggers.append(f"Loyalty {cost.replace(chr(0x2212), '-')}")
+        return triggers
+
+    if re.search(r"\{T\}", cost, re.IGNORECASE):
+        triggers.append("Tap this card")
+    if re.search(r"\{Q\}", cost, re.IGNORECASE):
+        triggers.append("Untap this card")
+
+    all_braces = _REX_MANA_SYMBOL.findall(cost)
+    mana_parts = [m for m in all_braces if m.upper() not in ("{T}", "{Q}")]
+    if mana_parts:
+        triggers.append("Pay " + "".join(mana_parts))
+
+    rest = re.sub(r"\{[^}]+\}", "", cost)
+    rest = re.sub(r"[,;]\s*", " ", rest).strip()
+    if rest:
+        triggers.append(rest)
+    return triggers
 
 
 def _field_default(f: dataclasses.Field) -> Any:
@@ -190,6 +268,94 @@ class Card:
         else:
             text = re.sub(re.escape(self.name), "this card", raw, flags=re.IGNORECASE)
         return _expand_keywords(text)
+
+    def _derive_mechanics(self) -> None:
+        """Populate self.triggers and self.effects from oracle text, type line, and intrinsic properties."""
+        raw = (self.text or "").strip()
+        if self.name:
+            text = re.sub(re.escape(self.name), "this card", raw, flags=re.IGNORECASE)
+        else:
+            text = raw
+        statements: list[str] = [s.strip() for s in re.split(r"[\n\u2022]", text) if s.strip()]
+
+        triggers_out: list[str] = []
+        effects_out: list[str] = []
+        known_kw = _get_known_keywords()
+
+        for line in statements:
+            # --- 1. Triggered ability: "When/Whenever/At <condition>, <effect>" ---
+            triggered_match = _REX_TRIGGERED.match(line)
+            if triggered_match:
+                when_word = triggered_match.group(1).strip()
+                condition = triggered_match.group(2).strip()
+                effect_part = triggered_match.group(3).strip()
+                triggers_out.append(f"{when_word} {condition}")
+                if effect_part:
+                    effects_out.append(effect_part)
+                continue
+
+            # --- 2. Keyword ability (single or comma-separated, with optional parameter) ---
+            comma_parts = [p.strip() for p in line.split(",") if p.strip()]
+            if comma_parts and all(
+                _match_keyword_line(p, known_kw, self.keywords) is not None
+                for p in comma_parts
+            ):
+                for p in comma_parts:
+                    result = _match_keyword_line(p, known_kw, self.keywords)
+                    assert result is not None
+                    kw_name, kw_param = result
+                    mana_syms = _REX_MANA_SYMBOL.findall(kw_param) if kw_param else []
+                    if mana_syms:
+                        effects_out.append(kw_name)
+                        triggers_out.append(f"Pay {''.join(mana_syms)}")
+                    elif kw_param:
+                        effects_out.append(f"{kw_name} {kw_param}")
+                    else:
+                        effects_out.append(kw_name)
+                continue
+
+            # --- 3. Activated ability: "cost: effect" ---
+            activated_match = _REX_ACTIVATED.match(line)
+            if activated_match:
+                cost_part = activated_match.group(1).strip()
+                effect_part = activated_match.group(2).strip()
+                triggers_out.extend(_parse_activated_cost(cost_part))
+                if effect_part:
+                    effects_out.append(effect_part)
+                continue
+
+            # --- 4. Static ability (fallback): effect only, no trigger ---
+            effects_out.append(line)
+
+        # --- 5. Intrinsic card properties ---
+        if self.mana_cost:
+            triggers_out.append(f"Cast for {self.mana_cost}")
+        for t in self.types:
+            effects_out.append(t)
+        for st in self.subtypes:
+            effects_out.append(st)
+        for spt in self.supertypes:
+            effects_out.append(spt)
+        if "Creature" in self.types:
+            if self.power:
+                effects_out.append(f"Has Power {self.power}")
+            if self.toughness:
+                effects_out.append(f"Has Toughness {self.toughness}")
+
+        self.triggers = triggers_out
+        self.effects = effects_out
+
+    def get_triggers(self) -> list[str]:
+        """Return this card's triggers (causes). Derives mechanics from oracle text if not yet computed."""
+        if (self.text or self.type_line) and not self.triggers and not self.effects:
+            self._derive_mechanics()
+        return list(self.triggers)
+
+    def get_effects(self) -> list[str]:
+        """Return this card's effects (results). Derives mechanics from oracle text if not yet computed."""
+        if (self.text or self.type_line) and not self.triggers and not self.effects:
+            self._derive_mechanics()
+        return list(self.effects)
 
     def to_rag_document(self) -> str:
         """Build the document string for RAG indexing: type_line, mana_cost, color_identity,
