@@ -163,6 +163,20 @@ def run_server() -> None:
         return result
 
     @mcp.tool()
+    def extract_card_mechanics(card_name: str, extract_type: str) -> str:
+        """Extract triggers or effects for a card by exact name.
+        card_name: exact card name (e.g. 'Lightning Bolt').
+        extract_type: 'triggers' or 'effects'.
+        Returns the extracted list as a semicolon-separated string, or '(none)' if empty."""
+        LOGGER.info(
+            "Request received tool=extract_card_mechanics card_name=%r extract_type=%s",
+            card_name, extract_type,
+        )
+        result: str = CardDB.inst().get_card_mechanics(name=card_name, extract_type=extract_type)
+        LOGGER.info("Request completed tool=extract_card_mechanics card_name=%r", card_name)
+        return result
+
+    @mcp.tool()
     def search_triggers(query: str, n_results: int = 10) -> str:
         """Find cards whose triggers (costs, conditions) semantically match the query.
         Use this to find cards that respond to or care about a specific game event or cost.
@@ -184,7 +198,7 @@ def run_server() -> None:
 
     LOGGER.info(
         "Tools registered: semantic_search_card, plain_search_card, get_card_info, "
-        "append_cards_to_deck, search_triggers, search_effects; entering mcp.run(transport=stdio)",
+        "extract_card_mechanics, append_cards_to_deck, search_triggers, search_effects; entering mcp.run(transport=stdio)",
     )
     mcp.run(transport="stdio")
 

@@ -609,6 +609,21 @@ async def get_card_type(name: str = Query(..., min_length=1)) -> dict:
         raise HTTPException(status_code=404, detail=str(e)) from e
 
 
+@app.get("/api/card_mechanics")
+async def get_card_mechanics(
+    name: str = Query(..., min_length=1),
+    type: str = Query(..., pattern="^(triggers|effects)$"),
+) -> dict:
+    """Return extracted triggers or effects for a card by name. type must be 'triggers' or 'effects'."""
+    try:
+        result: str = CardDB.inst().get_card_mechanics(name=name, extract_type=type)
+    except ValueError as e:
+        if "not found" in str(e).lower():
+            raise HTTPException(status_code=404, detail=str(e)) from e
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return {"card": name, "type": type, "result": result}
+
+
 def _run_price_update_then_notify() -> None:
     """Background: run full price update, reload CardDB prices, broadcast deck_updated."""
     try:
