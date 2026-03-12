@@ -10,6 +10,7 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 from src.lib.cardDB import CardDB
 from src.lib.config import DECK_EDITOR_SAVE_DIR
@@ -246,11 +247,11 @@ def _resolve_type_key(card_name: str) -> tuple[str, str]:
 async def serve_editor() -> FileResponse:
     """Serve the deck editor HTML page."""
     static_dir: Path = Path(__file__).resolve().parent / "static"
-    index_path: Path = static_dir / "index.html"
-    if not index_path.is_file():
-        LOGGER.error(0, "Deck editor static file not found: %s", index_path)
-        raise FileNotFoundError(f"Static file not found: {index_path}")
-    return FileResponse(index_path)
+    main_path: Path = static_dir / "main.html"
+    if not main_path.is_file():
+        LOGGER.error(0, "Deck editor static file not found: %s", main_path)
+        raise FileNotFoundError(f"Static file not found: {main_path}")
+    return FileResponse(main_path)
 
 
 @app.get("/search")
@@ -265,6 +266,28 @@ async def serve_search() -> FileResponse:
         search_path,
         headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"},
     )
+
+
+@app.get("/export-modal")
+async def serve_export_modal() -> FileResponse:
+    """Serve the export format modal iframe page."""
+    static_dir: Path = Path(__file__).resolve().parent / "static"
+    path: Path = static_dir / "export-modal.html"
+    if not path.is_file():
+        LOGGER.error(0, "Deck editor static file not found: %s", path)
+        raise FileNotFoundError(f"Static file not found: {path}")
+    return FileResponse(path, headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"})
+
+
+@app.get("/import-modal")
+async def serve_import_modal() -> FileResponse:
+    """Serve the import deck modal iframe page."""
+    static_dir: Path = Path(__file__).resolve().parent / "static"
+    path: Path = static_dir / "import-modal.html"
+    if not path.is_file():
+        LOGGER.error(0, "Deck editor static file not found: %s", path)
+        raise FileNotFoundError(f"Static file not found: {path}")
+    return FileResponse(path, headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"})
 
 
 @app.post("/api/search")
@@ -571,3 +594,9 @@ async def save_deck() -> dict:
     _current_deck.save("json", out_path)
     LOGGER.info("Deck saved to %s", out_path)
     return {"saved_to": str(out_path)}
+
+
+# Static file mounts for JS and CSS (must be after specific routes)
+_deck_editor_root: Path = Path(__file__).resolve().parent
+app.mount("/js", StaticFiles(directory=str(_deck_editor_root / "js")), name="js")
+app.mount("/styles", StaticFiles(directory=str(_deck_editor_root / "styles")), name="styles")

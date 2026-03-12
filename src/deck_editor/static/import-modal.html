@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Import deck</title>
+  <style>
+    :root {
+      --bg: #1a1a2e;
+      --panel: #16213e;
+      --border: #0f3460;
+      --text: #e8e8e8;
+      --accent: #e94560;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      background: var(--panel);
+      color: var(--text);
+      padding: 1rem 1.25rem;
+    }
+    h3 { margin: 0 0 1rem 0; font-size: 1rem; }
+    .import-error { font-size: 0.85rem; color: #f88; margin-bottom: 0.5rem; min-height: 1.2em; }
+    .import-textarea {
+      width: 100%;
+      min-height: 160px;
+      padding: 0.5rem;
+      margin-bottom: 0.75rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.9rem;
+      resize: vertical;
+      box-sizing: border-box;
+    }
+    .import-format-select {
+      width: 100%;
+      padding: 0.5rem;
+      margin-bottom: 1rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      font-size: 0.95rem;
+    }
+    .import-actions { display: flex; gap: 0.5rem; justify-content: flex-end; }
+    .import-actions button {
+      padding: 0.5rem 1rem;
+      border: none;
+      border-radius: 4px;
+      font-size: 0.95rem;
+      cursor: pointer;
+    }
+    .import-cancel-btn { background: var(--border); color: var(--text); }
+    .import-cancel-btn:hover { background: #1a4a7a; }
+    .import-submit-btn { background: var(--accent); color: #fff; }
+    .import-submit-btn:hover { opacity: 0.9; }
+  </style>
+</head>
+<body>
+  <h3 class="modal-title">Import deck</h3>
+  <div class="import-error" id="importError"></div>
+  <textarea class="import-textarea" id="importTextarea" placeholder="Paste decklist here…" aria-label="Decklist text"></textarea>
+  <select class="import-format-select" id="importFormatSelect" aria-label="Import format">
+    <option value="">Loading…</option>
+  </select>
+  <div class="import-actions">
+    <button type="button" class="import-cancel-btn" id="importCancelBtn">Cancel</button>
+    <button type="button" class="import-submit-btn" id="importSubmitBtn">Import</button>
+  </div>
+  <script>
+    (function () {
+      var cancelBtn = document.getElementById('importCancelBtn');
+      var textarea = document.getElementById('importTextarea');
+      var selectEl = document.getElementById('importFormatSelect');
+      var submitBtn = document.getElementById('importSubmitBtn');
+      var errorEl = document.getElementById('importError');
+
+      function sendDone(message, isError) {
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage({ type: 'import-done', message: message || 'Deck imported.', isError: isError === true }, '*');
+        }
+      }
+
+      cancelBtn.addEventListener('click', function () {
+        sendDone('Cancelled.', false);
+      });
+
+      fetch('/api/export/formats')
+        .then(function (r) {
+          if (!r.ok) throw new Error('Could not load formats');
+          return r.json();
+        })
+        .then(function (data) {
+          var formats = data.formats || {};
+          selectEl.innerHTML = '';
+          Object.keys(formats).forEach(function (key) {
+            var opt = document.createElement('option');
+            opt.value = key;
+            opt.textContent = formats[key] || key;
+            selectEl.appendChild(opt);
+          });
+          if (selectEl.options.length) selectEl.selectedIndex = 0;
+          textarea.focus();
+        })
+        .catch(function () {
+          errorEl.textContent = 'Failed to load formats.';
+        });
+
+      submitBtn.addEventListener('click', function () {
+        var text = textarea.value.trim();
+        var format = selectEl.value;
+        errorEl.textContent = '';
+        if (!format) {
+          errorEl.textContent = 'Select a format.';
+          return;
+        }
+        fetch('/api/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: text, format: format })
+        })
+          .then(function (r) {
+            if (!r.ok) {
+              return r.json().then(function (err) {
+                var msg = 'Import failed.';
+                if (typeof err.detail === 'string') msg = err.detail;
+                else if (Array.isArray(err.detail) && err.detail[0] && err.detail[0].msg) msg = err.detail[0].msg;
+                throw new Error(msg);
+              });
+            }
+            return r.json();
+          })
+          .then(function () {
+            sendDone('Deck imported.', false);
+          })
+          .catch(function (err) {
+            errorEl.textContent = err.message || 'Import failed.';
+          });
+      });
+    })();
+  </script>
+</body>
+</html>

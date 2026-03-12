@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Export deck</title>
+  <style>
+    :root {
+      --bg: #1a1a2e;
+      --panel: #16213e;
+      --border: #0f3460;
+      --text: #e8e8e8;
+      --accent: #e94560;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      background: var(--panel);
+      color: var(--text);
+      padding: 1rem 1.25rem;
+    }
+    h3 { margin: 0 0 1rem 0; font-size: 1rem; }
+    .format-btns { display: flex; flex-direction: column; gap: 0.5rem; }
+    .format-btns button {
+      padding: 0.5rem 1rem;
+      background: var(--border);
+      border: none;
+      border-radius: 4px;
+      color: var(--text);
+      font-size: 0.95rem;
+      cursor: pointer;
+      text-align: left;
+    }
+    .format-btns button:hover { background: #1a4a7a; }
+    .msg { font-size: 0.85rem; margin-top: 0.5rem; color: #8f8; }
+    .msg.error { color: #f88; }
+  </style>
+</head>
+<body>
+  <h3 class="modal-title">Export as</h3>
+  <div class="format-btns" id="formatButtons"></div>
+  <p class="msg" id="msg"></p>
+  <script>
+    (function () {
+      var container = document.getElementById('formatButtons');
+      var msgEl = document.getElementById('msg');
+      msgEl.textContent = '';
+
+      function sendDone(message, isError) {
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage({ type: 'export-done', message: message, isError: isError === true }, '*');
+        }
+      }
+
+      fetch('/api/export/formats')
+        .then(function (r) {
+          if (!r.ok) throw new Error('Could not load export formats');
+          return r.json();
+        })
+        .then(function (data) {
+          var formats = data.formats || {};
+          var keys = Object.keys(formats);
+          if (!keys.length) {
+            msgEl.textContent = 'No export formats available.';
+            msgEl.className = 'msg error';
+            return;
+          }
+          keys.forEach(function (key) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.textContent = formats[key] || key;
+            btn.addEventListener('click', function () {
+              msgEl.textContent = '';
+              msgEl.className = 'msg';
+              fetch('/api/export?format=' + encodeURIComponent(key))
+                .then(function (r) {
+                  if (!r.ok) return r.json().then(function (err) { throw new Error(err.detail || 'Export failed'); });
+                  return r.json();
+                })
+                .then(function (data) {
+                  var text = data.text;
+                  if (!navigator.clipboard || !navigator.clipboard.writeText) {
+                    sendDone('Clipboard not available.', true);
+                    return;
+                  }
+                  return navigator.clipboard.writeText(text).then(function () {
+                    sendDone('Copied to clipboard (' + (formats[key] || key) + ').');
+                  });
+                })
+                .catch(function (err) {
+                  sendDone(err.message || 'Export failed', true);
+                });
+            });
+            container.appendChild(btn);
+          });
+        })
+        .catch(function (err) {
+          msgEl.textContent = err.message || 'Failed to load formats.';
+          msgEl.className = 'msg error';
+        });
+    })();
+  </script>
+</body>
+</html>

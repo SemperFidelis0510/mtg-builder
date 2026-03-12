@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MTG Deck Editor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles/deck-editor.css">
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <header class="header">
+    <h1>MTG Deck Editor</h1>
+  </header>
+  <div class="tabs">
+    <div class="tab-buttons">
+      <button type="button" class="tab-btn active" data-tab="board" id="tabBoard">Board</button>
+      <button type="button" class="tab-btn" data-tab="statistics" id="tabStatistics">Statistics</button>
+    </div>
+    <div class="tab-panel active" id="boardTab">
+      <div class="search-bar">
+        <div class="search-group">
+          <div class="search-wrap">
+            <input type="text" id="cardSearch" placeholder="Search card by name..." title="Type a card name and click Add or press Enter" autocomplete="off">
+            <ul class="autocomplete-dropdown" id="autocompleteDropdown" style="display: none;"></ul>
+          </div>
+          <button type="button" class="add-card-btn" id="addCardBtn" title="Add the searched card to the deck">Add to deck</button>
+          <button type="button" class="add-card-btn" id="advancedSearchBtn" title="Open advanced search by criteria">Advanced Search</button>
+          <span class="search-msg" id="searchMsg"></span>
+        </div>
+        <div class="deck-actions">
+          <span class="save-result" id="saveResult"></span>
+          <button type="button" class="save-btn" id="exportDecklistBtn" title="Export deck to clipboard (choose format)">Export</button>
+          <button type="button" class="save-btn" id="importDeckBtn" title="Import deck from pasted list (choose format)">Import</button>
+          <button type="button" class="save-btn" id="loadBtn">Load</button>
+          <input type="file" id="loadFileInput" accept=".json" style="display: none">
+          <button class="save-btn" id="saveBtn" disabled title="Opens save dialog (suggested name: deck_&lt;timestamp&gt;.json). Choose the decks folder in your repo to save there.">Save</button>
+          <button type="button" class="save-btn" id="refreshPricesBtn" title="Update card prices from Scryfall">Refresh Prices</button>
+        </div>
+      </div>
+      <main class="main">
+        <div class="deck-column">
+          <div class="deck-section-controls">
+            <button type="button" id="collapseAllBtn">Collapse All</button>
+            <button type="button" id="expandAllBtn">Expand All</button>
+            <button type="button" id="clearAllBtn" class="clear-btn">Clear</button>
+          </div>
+          <div id="deckSections"></div>
+        </div>
+        <div class="removed-column">
+          <div class="section" id="section-maybe" data-type="maybe">
+            <div class="section-header"><span class="section-header-label">Maybe Board (0)</span><button type="button" class="section-clear-btn" id="clearMaybeBtn" title="Clear maybe board">✕</button></div>
+            <div class="section-body"><ul class="removed-list" id="list-maybe"></ul></div>
+          </div>
+          <div class="section" id="section-sideboard" data-type="sideboard">
+            <div class="section-header">Sideboard (0)</div>
+            <div class="section-body"><ul class="removed-list" id="list-sideboard"></ul></div>
+          </div>
+        </div>
+      </main>
+    </div>
+    <div class="tab-panel" id="statisticsTab">
+      <div id="statisticsContainer"></div>
+    </div>
+  </div>
+  <div id="cardPreview" class="card-preview" aria-hidden="true"><img src="" alt=""></div>
+
+  <div class="adv-search-modal" id="advSearchModal" aria-hidden="true">
+    <div class="modal-content">
+      <button type="button" class="modal-close" id="advSearchModalClose" aria-label="Close">×</button>
+      <iframe class="modal-iframe" id="advSearchIframe" src="about:blank" title="Advanced Card Search"></iframe>
+    </div>
+  </div>
+
+  <div class="export-format-modal" id="exportFormatModal" aria-hidden="true">
+    <div class="modal-content">
+      <button type="button" class="modal-close" id="exportFormatModalClose" aria-label="Close">×</button>
+      <iframe class="modal-iframe" id="exportFormatIframe" src="about:blank" title="Export format"></iframe>
+    </div>
+  </div>
+
+  <div class="import-format-modal" id="importFormatModal" aria-hidden="true">
+    <div class="modal-content">
+      <button type="button" class="modal-close" id="importFormatModalClose" aria-label="Close">×</button>
+      <iframe class="modal-iframe" id="importFormatIframe" src="about:blank" title="Import deck"></iframe>
+    </div>
+  </div>
+
+  <script type="module" src="/js/main.js"></script>
+</body>
+</html>
