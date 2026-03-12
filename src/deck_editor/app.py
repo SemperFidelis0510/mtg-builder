@@ -87,6 +87,16 @@ def _count_colored_mana_in_cost(mana_cost: str) -> dict[str, int]:
     return counts
 
 
+def _compute_deck_card_colors(deck: Deck) -> set[str]:
+    """Return set of WUBRG colors present in any card's color_identity."""
+    colors: set[str] = set()
+    for card in deck.cards:
+        for c in getattr(card, "color_identity", []) or []:
+            if c in "WUBRG":
+                colors.add(c)
+    return colors
+
+
 def _compute_deck_stats(deck: Deck) -> dict:
     """Compute total cards, non_land, lands, and W/U/B/R/G symbol distribution as percentages."""
     total_cards: int = 0
@@ -510,6 +520,9 @@ async def add_card(body: dict) -> dict:
         raise HTTPException(status_code=404, detail=str(e)) from e
     for card in cards_to_append:
         _current_deck.cards.append(card)
+    card_colors = _compute_deck_card_colors(_current_deck)
+    existing = set(_current_deck.colors)
+    _current_deck.colors = list(existing | card_colors)
     _notify_deck_updated()
     return _deck_to_response(_current_deck)
 
@@ -616,6 +629,9 @@ async def import_deck(request: Request) -> dict:
         print("[import] from_export_text unexpected:", type(e).__name__, e)
         raise
     _current_deck = deck
+    card_colors = _compute_deck_card_colors(_current_deck)
+    existing = set(_current_deck.colors)
+    _current_deck.colors = list(existing | card_colors)
     _notify_deck_updated()
     resp = _deck_to_response(_current_deck)
     print("[import] returning response; deck keys in out:", list(resp.get("deck", {}).keys())[:10])
