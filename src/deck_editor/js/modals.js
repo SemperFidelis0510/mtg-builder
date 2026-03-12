@@ -27,6 +27,66 @@ export function initAdvSearchModal() {
   });
 }
 
+export function initSemanticSearchModal() {
+  const modal = document.getElementById('semanticSearchModal');
+  const iframe = document.getElementById('semanticSearchIframe');
+  const closeBtn = document.getElementById('semanticSearchModalClose');
+  const ragPopup = document.getElementById('ragLoadingPopup');
+  const ragPopupDismiss = document.getElementById('ragLoadingPopupDismiss');
+
+  function showRagLoadingPopup() {
+    if (ragPopup) {
+      ragPopup.classList.add('visible');
+      ragPopup.setAttribute('aria-hidden', 'false');
+    } else {
+      alert('RAG still loading');
+    }
+  }
+
+  function hideRagLoadingPopup() {
+    if (ragPopup) {
+      ragPopup.classList.remove('visible');
+      ragPopup.setAttribute('aria-hidden', 'true');
+    }
+  }
+
+  if (ragPopupDismiss) {
+    ragPopupDismiss.addEventListener('click', hideRagLoadingPopup);
+  }
+  if (ragPopup) {
+    const backdrop = ragPopup.querySelector('.rag-loading-popup-backdrop');
+    if (backdrop) {
+      backdrop.addEventListener('click', hideRagLoadingPopup);
+    }
+  }
+
+  document.getElementById('semanticSearchBtn').addEventListener('click', () => {
+    fetch('/api/rag_ready')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.ready) {
+          iframe.src = '/semantic-search?t=' + String(Date.now());
+          modal.classList.add('open');
+          modal.setAttribute('aria-hidden', 'false');
+        } else {
+          showRagLoadingPopup();
+        }
+      })
+      .catch(() => {
+        showRagLoadingPopup();
+      });
+  });
+  function closeModal() {
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden', 'true');
+    iframe.src = 'about:blank';
+  }
+  closeBtn.addEventListener('click', closeModal);
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) closeModal();
+  });
+}
+
 export function initExportModal() {
   const modal = document.getElementById('exportFormatModal');
   const closeBtn = document.getElementById('exportFormatModalClose');

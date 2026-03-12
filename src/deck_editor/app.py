@@ -57,6 +57,18 @@ def _startup_refresh_prices() -> None:
         thread.start()
 
 
+def _startup_load_rag() -> None:
+    """Load RAG (embedding model + ChromaDB) in background so semantic search is ready without blocking startup."""
+    CardDB.inst().load_rag_sync()
+
+
+@app.on_event("startup")
+def _startup_rag_async() -> None:
+    """Start RAG loading in a background thread at server init; heavy deps are not imported in the main process until then."""
+    thread: threading.Thread = threading.Thread(target=_startup_load_rag, daemon=True)
+    thread.start()
+
+
 # Type-group keys used by the client (order: creature, instant, sorcery, artifact, enchantment, planeswalker, battle, land)
 TYPE_KEYS: list[str] = [
     "creature",
@@ -312,6 +324,20 @@ async def serve_search() -> FileResponse:
     )
 
 
+@app.get("/semantic-search")
+async def serve_semantic_search() -> FileResponse:
+    """Serve the semantic search popup HTML page."""
+    static_dir: Path = Path(__file__).resolve().parent / "static"
+    path: Path = static_dir / "semantic-search.html"
+    if not path.is_file():
+        LOGGER.error(0, "Deck editor static file not found: %s", path)
+        raise FileNotFoundError(f"Static file not found: {path}")
+    return FileResponse(
+        path,
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"},
+    )
+
+
 @app.get("/export-modal")
 async def serve_export_modal() -> FileResponse:
     """Serve the export format modal iframe page."""
@@ -407,6 +433,32 @@ async def search_cards_api(body: dict) -> dict:
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     return {"results": [c.to_dict() for c in results]}
+
+
+@app.get("/api/rag_ready")
+async def rag_ready() -> dict:
+    """Return whether RAG (embedding model + ChromaDB) is loaded and semantic search is available."""
+    return {"ready": CardDB.inst().is_rag_ready()}
+
+
+@app.post("/api/semantic_search")
+async def semantic_search_api(body: dict) -> dict:
+    """Semantic search by query and type (general/trigger/effect). Returns list of {name, text}."""
+    query: str = (body["query"] or "").strip() if "query" in body and isinstance(body["query"], str) else ""
+    if not query:
+        raise HTTPException(status_code=400, detail="query is required and must be non-empty")
+    search_type: str = (
+        body["search_type"] if "search_type" in body and isinstance(body["search_type"], str) else "general"
+    ).strip().lower()
+    if search_type not in ("general", "trigger", "effect"):
+        raise HTTPException(status_code=400, detail="search_type must be general, trigger, or effect")
+    n_results: int = int(body["n_results"]) if "n_results" in body and body["n_results"] is not None else 10
+    n_results = max(1, min(50, n_results))
+    try:
+        results = CardDB.inst().semantic_search_structured(query, search_type, n_results)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return {"results": results}
 
 
 @app.get("/api/autocomplete")

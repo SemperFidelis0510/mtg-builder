@@ -6,7 +6,7 @@ Build the RAG index first using install.bat (install / download / build) or pyth
 """
 
 import os
-import time
+import threading
 
 import requests
 
@@ -35,20 +35,12 @@ def run_server() -> None:
         REPO_ROOT, CHROMA_PATH, COLLECTION_NAME, MODEL_NAME,
     )
 
-    LOGGER.debug("Eager import: torch")
-    t0: float = time.perf_counter()
-    import torch  # noqa: F401
-    LOGGER.debug("torch imported elapsed=%.3fs", time.perf_counter() - t0)
+    def _load_rag() -> None:
+        CardDB.inst().load_rag_sync()
 
-    LOGGER.debug("Eager import: SentenceTransformer")
-    t1: float = time.perf_counter()
-    from sentence_transformers import SentenceTransformer  # noqa: F401
-    LOGGER.debug("SentenceTransformer imported elapsed=%.3fs", time.perf_counter() - t1)
-
-    LOGGER.debug("Eager import: chromadb")
-    t2: float = time.perf_counter()
-    import chromadb  # noqa: F401
-    LOGGER.debug("chromadb imported elapsed=%.3fs", time.perf_counter() - t2)
+    rag_thread: threading.Thread = threading.Thread(target=_load_rag, daemon=True)
+    rag_thread.start()
+    LOGGER.debug("RAG load started in background thread")
 
     mcp = FastMCP("MTG Card Search")
 

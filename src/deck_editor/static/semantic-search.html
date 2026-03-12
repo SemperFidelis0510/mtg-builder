@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Semantic Card Search</title>
+  <style>
+    :root {
+      --bg: #1a1a2e;
+      --panel: #16213e;
+      --border: #0f3460;
+      --text: #e8e8e8;
+      --accent: #e94560;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 1rem;
+    }
+    h1 { margin: 0 0 1rem 0; font-size: 1.25rem; }
+    .form-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    .form-grid label {
+      display: block;
+      font-size: 0.8rem;
+      margin-bottom: 2px;
+      color: #a0a0a0;
+    }
+    .form-grid input[type="text"],
+    .form-grid textarea,
+    .form-grid input[type="number"] {
+      width: 100%;
+      padding: 0.35rem 0.5rem;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      font-size: 0.9rem;
+    }
+    .form-grid textarea { min-height: 60px; resize: vertical; }
+    .search-type-toggle {
+      display: flex;
+      width: 100%;
+      max-width: 320px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .search-type-toggle button {
+      flex: 1;
+      padding: 0.5rem 0.75rem;
+      border: none;
+      background: var(--panel);
+      color: var(--text);
+      font-size: 0.85rem;
+      cursor: pointer;
+      border-right: 1px solid var(--border);
+    }
+    .search-type-toggle button:last-child { border-right: none; }
+    .search-type-toggle button:hover { background: var(--border); }
+    .search-type-toggle button.selected {
+      background: var(--accent);
+      color: #fff;
+      font-weight: 600;
+    }
+    .form-actions { margin-bottom: 1rem; }
+    .form-actions button {
+      padding: 0.5rem 1rem;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .form-actions button:hover { opacity: 0.9; }
+    .form-actions button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .search-msg {
+      font-size: 0.85rem;
+      margin-bottom: 0.5rem;
+      color: #a0a0a0;
+    }
+    .search-msg.error { color: #f88; }
+    .search-msg.ok { color: #6f6; }
+    .results-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+    .results-grid li { margin: 0; padding: 0; }
+    .result-card {
+      width: 150px;
+      cursor: pointer;
+      border-radius: 8px;
+      border: 2px solid transparent;
+      transition: border-color 0.15s;
+    }
+    .result-card:hover { border-color: var(--border); }
+    .result-card img {
+      width: 100%;
+      height: 210px;
+      object-fit: cover;
+      border-radius: 6px;
+      display: block;
+    }
+    .result-card .name {
+      font-size: 0.75rem;
+      padding: 2px 4px;
+      text-align: center;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .card-preview {
+      position: fixed;
+      z-index: 10000;
+      display: none;
+      border-radius: 12px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+      border: 2px solid var(--border);
+      pointer-events: auto;
+    }
+    .card-preview.visible { display: block; }
+    .card-preview img {
+      width: 244px;
+      height: 340px;
+      object-fit: cover;
+      border-radius: 10px;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <h1>Semantic Card Search</h1>
+  <p class="search-msg" id="searchMsg">Enter a natural-language query, choose search type, then click Search. Double-click a card to add it to the deck.</p>
+
+  <form id="searchForm" class="form-grid">
+    <div style="max-width: 480px;">
+      <label for="query">Query</label>
+      <textarea id="query" name="query" placeholder="e.g. draw cards when creature enters" autocomplete="off"></textarea>
+    </div>
+    <div>
+      <label>Search type</label>
+      <div class="search-type-toggle" id="searchTypeToggle" role="group" aria-label="Search type">
+        <button type="button" class="selected" data-type="general">General</button>
+        <button type="button" data-type="trigger">Trigger</button>
+        <button type="button" data-type="effect">Effect</button>
+      </div>
+    </div>
+    <div style="max-width: 120px;">
+      <label for="nResults">Results (1–50)</label>
+      <input type="number" id="nResults" name="n_results" min="1" max="50" value="10">
+    </div>
+  </form>
+
+  <div class="form-actions">
+    <button type="submit" form="searchForm" id="searchBtn">Search</button>
+  </div>
+
+  <ul class="results-grid" id="resultsGrid"></ul>
+  <div id="cardPreview" class="card-preview" aria-hidden="true"><img src="" alt=""></div>
+
+  <script>
+    (function () {
+      var searchType = 'general';
+      var toggle = document.getElementById('searchTypeToggle');
+      if (toggle) {
+        toggle.querySelectorAll('button').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            searchType = btn.getAttribute('data-type');
+            toggle.querySelectorAll('button').forEach(function (b) { b.classList.remove('selected'); });
+            btn.classList.add('selected');
+          });
+        });
+      }
+
+      function getSearchType() { return searchType; }
+
+      function scryfallImageUrl(name) {
+        return 'https://api.scryfall.com/cards/named?exact=' + encodeURIComponent(name) + '&format=image&version=normal';
+      }
+      function scryfallImageUrlLarge(name) {
+        return 'https://api.scryfall.com/cards/named?exact=' + encodeURIComponent(name) + '&format=image&version=large';
+      }
+      function clampPreviewToViewport(el, desiredLeft, desiredTop) {
+        if (!el) return;
+        var w = el.offsetWidth || 250;
+        var h = el.offsetHeight || 346;
+        var vw = window.innerWidth;
+        var vh = window.innerHeight;
+        var left = Math.max(8, Math.min(desiredLeft, vw - w - 8));
+        var top = Math.max(8, Math.min(desiredTop, vh - h - 8));
+        el.style.left = left + 'px';
+        el.style.top = top + 'px';
+      }
+      function showCardPreview(name, x, y) {
+        var el = document.getElementById('cardPreview');
+        if (!el || !name) return;
+        var img = el.querySelector('img');
+        img.src = scryfallImageUrlLarge(name);
+        img.alt = name;
+        var desiredLeft = x + 16;
+        var desiredTop = y + 16;
+        el.style.left = desiredLeft + 'px';
+        el.style.top = desiredTop + 'px';
+        el.classList.add('visible');
+        el.setAttribute('aria-hidden', 'false');
+        clampPreviewToViewport(el, desiredLeft, desiredTop);
+      }
+      function hideCardPreview() {
+        var el = document.getElementById('cardPreview');
+        if (el) {
+          el.classList.remove('visible');
+          el.setAttribute('aria-hidden', 'true');
+        }
+      }
+      document.addEventListener('mouseover', function (e) {
+        var card = e.target.closest('.result-card');
+        if (card && card.dataset.name) showCardPreview(card.dataset.name, e.clientX, e.clientY);
+      });
+      document.addEventListener('mouseout', function (e) {
+        var card = e.target.closest('.result-card');
+        var related = e.relatedTarget;
+        var preview = document.getElementById('cardPreview');
+        if (card && card.dataset.name && (!related || !card.contains(related)) && (!preview || !preview.contains(related))) hideCardPreview();
+        if (preview && (e.target === preview || preview.contains(e.target)) && (!related || !preview.contains(related))) hideCardPreview();
+      });
+      document.addEventListener('mousemove', function (e) {
+        var preview = document.getElementById('cardPreview');
+        if (preview && preview.classList.contains('visible')) {
+          var desiredLeft = e.clientX + 16;
+          var desiredTop = e.clientY + 16;
+          clampPreviewToViewport(preview, desiredLeft, desiredTop);
+        }
+      });
+
+      function setMsg(text, isError) {
+        var el = document.getElementById('searchMsg');
+        el.textContent = text;
+        el.className = 'search-msg' + (isError ? ' error' : ' ok');
+      }
+
+      function makeCardEl(item) {
+        var name = item.name || '';
+        var li = document.createElement('li');
+        var wrap = document.createElement('div');
+        wrap.className = 'result-card';
+        wrap.dataset.name = name;
+        var img = document.createElement('img');
+        img.src = scryfallImageUrl(name);
+        img.alt = name;
+        img.loading = 'lazy';
+        img.onerror = function () { this.style.background = '#333'; this.style.minHeight = '210px'; };
+        var span = document.createElement('span');
+        span.className = 'name';
+        span.textContent = name;
+        wrap.appendChild(img);
+        wrap.appendChild(span);
+        wrap.addEventListener('dblclick', function () {
+          fetch('/api/add_card', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: name })
+          }).then(function (r) {
+            if (r.ok) setMsg('Added: ' + name, false);
+            else return r.json().then(function (j) { setMsg(j.detail || 'Add failed', true); });
+          }).catch(function () { setMsg('Add failed', true); });
+        });
+        li.appendChild(wrap);
+        return li;
+      }
+
+      function renderResults(items) {
+        var grid = document.getElementById('resultsGrid');
+        grid.innerHTML = '';
+        (items || []).forEach(function (item) {
+          grid.appendChild(makeCardEl(item));
+        });
+      }
+
+      document.getElementById('searchForm').addEventListener('submit', function (e) {
+        e.preventDefault();
+        var queryEl = document.getElementById('query');
+        var query = (queryEl && queryEl.value || '').trim();
+        if (!query) {
+          setMsg('Enter a search query.', true);
+          return;
+        }
+        var nResultsEl = document.getElementById('nResults');
+        var nResults = 10;
+        if (nResultsEl && nResultsEl.value !== '') {
+          var n = parseInt(nResultsEl.value, 10);
+          if (!isNaN(n) && n >= 1 && n <= 50) nResults = n;
+        }
+        var searchBtn = document.getElementById('searchBtn');
+        if (searchBtn) searchBtn.disabled = true;
+        setMsg('Searching…', false);
+        fetch('/api/semantic_search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            query: query,
+            search_type: getSearchType(),
+            n_results: nResults
+          })
+        }).then(function (r) {
+          return r.json().then(function (data) {
+            if (!r.ok) {
+              setMsg(data.detail || 'Search failed', true);
+              renderResults([]);
+              if (searchBtn) searchBtn.disabled = false;
+              return;
+            }
+            var results = data.results || [];
+            renderResults(results);
+            setMsg(results.length + ' card(s) found. Double-click a card to add to deck.', false);
+            if (searchBtn) searchBtn.disabled = false;
+          });
+        }).catch(function () {
+          setMsg('Search failed', true);
+          renderResults([]);
+          if (searchBtn) searchBtn.disabled = false;
+        });
+      });
+    })();
+  </script>
+</body>
+</html>
