@@ -87,6 +87,10 @@ export function renderDeck(data) {
     statsMvChartInstance.destroy();
     statsMvChartInstance = null;
   }
+  const existingSections = container.querySelectorAll('.section[data-type]');
+  const expandedTypes = new Set(
+    [...existingSections].filter((s) => !s.classList.contains('collapsed')).map((s) => s.dataset.type)
+  );
   container.innerHTML = '';
   if (statsContainer) statsContainer.innerHTML = '';
   const deck = data.deck || data;
@@ -110,6 +114,9 @@ export function renderDeck(data) {
     stacks.forEach((s) => {
       list.appendChild(makeCardStackEl(s.name, s.count));
     });
+    if (expandedTypes.has(key)) {
+      section.classList.remove('collapsed');
+    }
     container.appendChild(section);
   });
 
