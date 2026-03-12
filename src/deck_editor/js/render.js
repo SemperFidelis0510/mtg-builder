@@ -76,13 +76,6 @@ function renderStatsCharts(stats) {
   }
 }
 
-function countForSection(deck, key, maybeByType, sideboardByType) {
-  const main = Array.isArray(deck[key]) ? deck[key].length : 0;
-  const maybe = (maybeByType && Array.isArray(maybeByType[key])) ? maybeByType[key].length : 0;
-  const side = (sideboardByType && Array.isArray(sideboardByType[key])) ? sideboardByType[key].length : 0;
-  return main + maybe + side;
-}
-
 export function renderDeck(data) {
   const container = document.getElementById('deckSections');
   const statsContainer = document.getElementById('statisticsContainer');
@@ -104,8 +97,6 @@ export function renderDeck(data) {
   window._lastStats = stats;
 
   TYPE_KEYS.forEach((key) => {
-    const totalForSection = countForSection(deck, key, maybeByType, sideboardByType);
-    if (totalForSection === 0) return;
     const cards = Array.isArray(deck[key]) ? deck[key] : [];
     const stacks = collapseToStacks(cards);
     const section = document.createElement('div');

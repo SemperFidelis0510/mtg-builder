@@ -519,6 +519,16 @@ async def get_deck_meta() -> dict:
     }
 
 
+@app.get("/api/card_type")
+async def get_card_type(name: str = Query(..., min_length=1)) -> dict:
+    """Return the type key for a card name (e.g. creature, instant, land)."""
+    try:
+        _, type_key = _resolve_type_key(name)
+        return {"type_key": type_key}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+
+
 def _run_price_update_then_notify() -> None:
     """Background: run full price update, reload CardDB prices, broadcast deck_updated."""
     try:

@@ -148,10 +148,13 @@ class Deck:
         cards: Full list of Card objects in the main deck (duplicates for multiple copies).
         maybe: Maybe board: list of Card (same form as cards); not counted in type buckets.
         sideboard: Sideboard: list of Card (same form as cards); not counted in type buckets.
-        creatures: (Read-only.) Card names that are creatures, computed from cards.
-        non_creatures: (Read-only.) Card names that are artifacts, enchantments, or planeswalkers.
-        spells: (Read-only.) Card names that are instants or sorceries.
-        lands: (Read-only.) Card names that are lands.
+        creature: (Read-only.) Card names that are creatures.
+        instant: (Read-only.) Card names that are instants.
+        sorcery: (Read-only.) Card names that are sorceries.
+        artifact: (Read-only.) Card names that are artifacts.
+        enchantment: (Read-only.) Card names that are enchantments.
+        planeswalker: (Read-only.) Card names that are planeswalkers.
+        land: (Read-only.) Card names that are lands.
     """
 
     # Import and export support the same formats (arena first, json last).
