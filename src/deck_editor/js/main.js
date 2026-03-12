@@ -7,7 +7,7 @@ import { updateSectionHeaderTotal, getDeckMeta, collectState, syncDeckToServer }
 import { renderDeck } from './render.js';
 import { initSearch } from './search.js';
 import { initAdvSearchModal, initExportModal, initImportModal } from './modals.js';
-import { initSettings } from './settings.js';
+import { initSettings, populateSettings } from './settings.js';
 
 initCardPreview();
 initSettings(syncDeckToServer);
@@ -39,6 +39,7 @@ document.getElementById('expandAllBtn').addEventListener('click', () => {
 
 document.getElementById('clearAllBtn').addEventListener('click', () => {
   if (!confirm('Clear all cards from the deck (including sideboard and maybe board)?')) return;
+  populateSettings({ name: '', description: '', colors: [], format: '' });
   TYPE_KEYS.forEach((key) => {
     const listEl = document.getElementById('list-' + key);
     if (listEl) {
