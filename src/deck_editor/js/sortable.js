@@ -95,6 +95,25 @@ export function initSortable() {
     );
   }
 
+  TYPE_KEYS.forEach((key) => {
+    const el = document.getElementById('list-' + key);
+    if (el) {
+      sortables.push(
+        Sortable.create(el, {
+          group: { name: 'cards', pull: true, put: allowPutOnlyFromSideZones },
+          handle: '.card-img',
+          animation: 150,
+          ghostClass: 'sortable-ghost',
+          dragClass: 'sortable-drag',
+          onEnd() {
+            const list = el;
+            if (list) updateSectionHeaderTotal(list);
+          },
+        })
+      );
+    }
+  });
+
   const sideZoneIds = ['list-maybe', 'list-sideboard'];
   sideZoneIds.forEach((zoneId) => {
     const el = document.getElementById(zoneId);
