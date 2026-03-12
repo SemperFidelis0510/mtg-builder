@@ -8,7 +8,7 @@ Install deps and download data first using src.lib.setup / install.bat install a
 import json
 
 from src.lib.config import ATOMIC_CARDS_PATH, CHROMA_PATH, COLLECTION_NAME, MODEL_NAME
-from src.lib.card_data import make_id
+from src.lib.cardDB import CardDB
 from src.obj.card import Card
 
 # ---------------------------------------------------------------------------
@@ -43,7 +43,7 @@ def do_build() -> None:
             if not isinstance(face, dict):
                 continue
             card: Card = Card.from_json_face(face, card_name)
-            uid: str = make_id(card_name, i)
+            uid: str = CardDB.make_id(card_name, i)
             rows.append((uid, card.to_rag_document(), card.to_chroma_metadata()))
 
     device: str = "cuda" if torch.cuda.is_available() else "cpu"

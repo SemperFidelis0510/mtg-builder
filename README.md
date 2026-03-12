@@ -129,8 +129,7 @@ MTG/
 ├── src/
 │   ├── lib/
 │   │   ├── config.py      # Paths and model constants
-│   │   ├── card_data.py   # Load and filter AtomicCards.json
-│   │   ├── search.py      # Semantic search via ChromaDB + embeddings
+│   │   ├── cardDB.py      # CardDB: load/filter AtomicCards + RAG semantic search
 │   │   └── build_rag.py   # Install, download, and build pipeline
 │   ├── obj/
 │   │   └── card.py        # Card dataclass

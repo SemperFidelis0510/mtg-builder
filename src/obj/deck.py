@@ -62,13 +62,13 @@ def _type_line_to_key(type_line: str) -> str:
 
 def _resolve_name_to_type_key(card_name: str) -> tuple[str, str]:
     """Look up card_name in card data; return (canonical_name, type_key). Raises ValueError if not found."""
-    from src.lib.card_data import get_card_data
+    from src.lib.cardDB import CardDB
     from src.utils.logger import LOGGER
 
     name_clean: str = (card_name or "").strip()
     if not name_clean:
         raise ValueError("card name is empty")
-    data: list = get_card_data()
+    data: list = CardDB.inst().get_card_data()
     name_lower: str = name_clean.lower()
     for c in data:
         if c.name.lower() == name_lower:
@@ -86,14 +86,14 @@ def _resolve_name_to_type_key(card_name: str) -> tuple[str, str]:
 
 
 def _cards_from_names(names: list[str]) -> list["Card"]:
-    """Build list of Card from list of card names. Uses get_card_data(); raises ValueError if any name not found."""
-    from src.lib.card_data import get_card_data
+    """Build list of Card from list of card names. Uses CardDB.get_card_data(); raises ValueError if any name not found."""
+    from src.lib.cardDB import CardDB
     from src.obj.card import Card
     from src.utils.logger import LOGGER
 
     if not names:
         return []
-    data: list["Card"] = get_card_data()
+    data: list["Card"] = CardDB.inst().get_card_data()
     name_lower_to_card: dict[str, "Card"] = {}
     for c in data:
         key: str = c.name.lower()
@@ -190,9 +190,9 @@ class Deck:
             FileNotFoundError: If AtomicCards.json is not available.
             ValueError: If any name does not match a card in the database.
         """
-        from src.lib.card_data import get_card_data
+        from src.lib.cardDB import CardDB
 
-        data: list["Card"] = get_card_data()
+        data: list["Card"] = CardDB.inst().get_card_data()
         name_lower_to_card: dict[str, "Card"] = {}
         for c in data:
             key: str = c.name.lower()

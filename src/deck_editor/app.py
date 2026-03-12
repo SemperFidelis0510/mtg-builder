@@ -10,7 +10,7 @@ from typing import Any
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
 
-from src.lib.card_data import filter_cards_list
+from src.lib.cardDB import CardDB
 from src.lib.config import DECK_EDITOR_SAVE_DIR
 from src.obj.card import Card
 from src.obj.deck import Deck, _cards_from_names, _normalize_cards_arg
@@ -72,8 +72,6 @@ def _count_colored_mana_in_cost(mana_cost: str) -> dict[str, int]:
 
 def _compute_deck_stats(deck: Deck) -> dict:
     """Compute total cards, non_land, lands, and W/U/B/R/G symbol distribution as percentages."""
-    from src.lib.card_data import get_card_data
-
     total_cards: int = 0
     land_count: int = 0
     all_names: list[str] = []
@@ -88,7 +86,7 @@ def _compute_deck_stats(deck: Deck) -> dict:
     non_land: int = total_cards - land_count
 
     color_counts: dict[str, int] = {c: 0 for c in _COLOR_SYMBOLS}
-    data: list = get_card_data()
+    data: list = CardDB.inst().get_card_data()
     name_lower_to_card: dict[str, Any] = {}
     for c in data:
         k: str = c.name.lower()
@@ -202,12 +200,10 @@ def _type_line_to_key(type_line: str) -> str:
 
 def _resolve_type_key(card_name: str) -> tuple[str, str]:
     """Look up card_name in local data; return (canonical_name, type_key). Raises ValueError if not found."""
-    from src.lib.card_data import get_card_data
-
     name_clean: str = (card_name or "").strip()
     if not name_clean:
         raise ValueError("add_card: card name is empty")
-    data: list = get_card_data()
+    data: list = CardDB.inst().get_card_data()
     name_lower: str = name_clean.lower()
     for c in data:
         if c.name.lower() == name_lower:
@@ -289,7 +285,7 @@ async def search_cards_api(body: dict) -> dict:
     offset = max(0, offset)
 
     try:
-        results = filter_cards_list(
+        results = CardDB.inst().filter_cards_list(
             name=name,
             oracle_text=oracle_text,
             type_line=type_line,

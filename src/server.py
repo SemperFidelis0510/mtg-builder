@@ -17,8 +17,7 @@ from src.lib.config import (
     MODEL_NAME,
     REPO_ROOT,
 )
-from src.lib.card_data import filter_cards
-from src.lib.search import search_cards
+from src.lib.cardDB import CardDB
 from src.utils.logger import LOGGER
 
 # ---------------------------------------------------------------------------
@@ -58,7 +57,7 @@ def run_server() -> None:
         """Search for Magic: The Gathering cards by semantic meaning.
         Returns card names and rules text matching the query."""
         LOGGER.info("Request received tool=semantic_search_card query=%r n_results=%s", query, n_results)
-        result: str = search_cards(query=query, n_results=n_results)
+        result: str = CardDB.inst().search_cards(query=query, n_results=n_results)
         LOGGER.info("Request completed tool=semantic_search_card query=%r", query)
         return result
 
@@ -86,7 +85,7 @@ def run_server() -> None:
             "Request received tool=plain_search_card name=%r type_line=%r colors=%r n_results=%s",
             name, type_line, colors, n_results,
         )
-        result: str = filter_cards(
+        result: str = CardDB.inst().filter_cards(
             name=name,
             oracle_text=oracle_text,
             type_line=type_line,
