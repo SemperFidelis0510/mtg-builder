@@ -357,6 +357,20 @@ class Card:
             self._derive_mechanics()
         return list(self.effects)
 
+    def to_triggers_document(self) -> str:
+        """Build document for the triggers RAG collection: card name + all trigger phrases."""
+        trigs = self.get_triggers()
+        if not trigs:
+            return f"Name: {self.name}\nTriggers: (none)"
+        return f"Name: {self.name}\nTriggers: {'; '.join(trigs)}"
+
+    def to_effects_document(self) -> str:
+        """Build document for the effects RAG collection: card name + all effect phrases."""
+        effs = self.get_effects()
+        if not effs:
+            return f"Name: {self.name}\nEffects: (none)"
+        return f"Name: {self.name}\nEffects: {'; '.join(effs)}"
+
     def to_rag_document(self) -> str:
         """Build the document string for RAG indexing: type_line, mana_cost, color_identity,
         power/toughness (creatures only, categorical), price (if available), keywords,

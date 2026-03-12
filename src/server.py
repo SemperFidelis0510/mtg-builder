@@ -141,7 +141,30 @@ def run_server() -> None:
         LOGGER.info("Request completed tool=append_cards_to_deck added=%s", len(names))
         return f"Added {len(names)} card(s) to the deck: {', '.join(names)}."
 
-    LOGGER.info("Tool registered: semantic_search_card, plain_search_card, append_cards_to_deck; entering mcp.run(transport=stdio)")
+    @mcp.tool()
+    def search_triggers(query: str, n_results: int = 10) -> str:
+        """Find cards whose triggers (costs, conditions) semantically match the query.
+        Use this to find cards that respond to or care about a specific game event or cost.
+        Example: query='creature enters the battlefield' returns cards that trigger on creature ETB."""
+        LOGGER.info("Request received tool=search_triggers query=%r n_results=%s", query, n_results)
+        result: str = CardDB.inst().search_triggers(query=query, n_results=n_results)
+        LOGGER.info("Request completed tool=search_triggers query=%r", query)
+        return result
+
+    @mcp.tool()
+    def search_effects(query: str, n_results: int = 10) -> str:
+        """Find cards whose effects (what they produce or provide) semantically match the query.
+        Use this to find cards that produce a specific outcome or board state.
+        Example: query='create creature token' returns cards that make creature tokens."""
+        LOGGER.info("Request received tool=search_effects query=%r n_results=%s", query, n_results)
+        result: str = CardDB.inst().search_effects(query=query, n_results=n_results)
+        LOGGER.info("Request completed tool=search_effects query=%r", query)
+        return result
+
+    LOGGER.info(
+        "Tools registered: semantic_search_card, plain_search_card, append_cards_to_deck, "
+        "search_triggers, search_effects; entering mcp.run(transport=stdio)",
+    )
     mcp.run(transport="stdio")
 
 
