@@ -24,6 +24,7 @@ document.getElementById('deckSections').addEventListener('click', (e) => {
   }
 });
 document.querySelector('.removed-column').addEventListener('click', (e) => {
+  if (e.target.closest('button')) return;
   const header = e.target.closest('.section-header');
   if (header) {
     const section = header.closest('.section');
@@ -81,6 +82,16 @@ document.getElementById('clearMaybeBtn').addEventListener('click', (e) => {
   e.stopPropagation();
   if (!confirm('Clear all cards from the maybe board?')) return;
   const listEl = document.getElementById('list-maybe');
+  if (listEl) {
+    listEl.innerHTML = '';
+    updateSectionHeaderTotal(listEl);
+  }
+});
+
+document.getElementById('clearSideboardBtn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  if (!confirm('Clear all cards from the sideboard?')) return;
+  const listEl = document.getElementById('list-sideboard');
   if (listEl) {
     listEl.innerHTML = '';
     updateSectionHeaderTotal(listEl);
