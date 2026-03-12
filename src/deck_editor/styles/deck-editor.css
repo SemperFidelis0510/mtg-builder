@@ -61,14 +61,6 @@ body {
   gap: 0.5rem;
   flex-wrap: wrap;
 }
-.search-bar .deck-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-left: auto;
-  flex-shrink: 0;
-}
-.search-bar .deck-actions .save-btn { flex-shrink: 0; }
 .search-bar input {
   flex: 1;
   max-width: 280px;
@@ -810,6 +802,22 @@ body {
 .deck-settings .section-body {
   padding: 0.75rem 0.5rem;
 }
+
+/* Tools section (below deck settings) */
+.tools-section {
+  margin-top: 0.5rem;
+  margin-bottom: 0;
+  padding: 0 1rem;
+  background: transparent;
+}
+.tools-section .section-body {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 0.5rem;
+}
+.tools-section .section-body .save-btn { flex-shrink: 0; }
+
 .deck-settings-row {
   display: flex;
   flex-wrap: nowrap;

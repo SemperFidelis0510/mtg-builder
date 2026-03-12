@@ -26,6 +26,13 @@ document.getElementById('deckSections').addEventListener('click', (e) => {
     if (section) section.classList.toggle('collapsed');
   }
 });
+document.addEventListener('click', (e) => {
+  const toolsHeader = document.getElementById('toolsHeader');
+  const toolsSection = document.getElementById('toolsSection');
+  if (toolsHeader && toolsSection && toolsHeader.contains(e.target)) {
+    toolsSection.classList.toggle('collapsed');
+  }
+});
 document.querySelector('.removed-column').addEventListener('click', (e) => {
   if (e.target.closest('button')) return;
   const header = e.target.closest('.section-header');
@@ -219,18 +226,3 @@ evtSource.addEventListener('deck_updated', (e) => {
   const data = JSON.parse(e.data);
   renderDeck(data);
 });
-
-const refreshPricesBtn = document.getElementById('refreshPricesBtn');
-if (refreshPricesBtn) {
-  refreshPricesBtn.addEventListener('click', () => {
-    refreshPricesBtn.disabled = true;
-    fetch('/api/refresh_prices', { method: 'POST' })
-      .then((r) => r.json())
-      .then(() => {
-        refreshPricesBtn.disabled = false;
-      })
-      .catch(() => {
-        refreshPricesBtn.disabled = false;
-      });
-  });
-}

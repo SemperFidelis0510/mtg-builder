@@ -61,6 +61,19 @@
       </div>
     </div>
   </div>
+  <div class="tools-section section collapsed" id="toolsSection">
+    <div class="section-header" id="toolsHeader">
+      <span class="section-header-label">Tools</span>
+    </div>
+    <div class="section-body">
+      <span class="save-result" id="saveResult"></span>
+      <button type="button" class="save-btn" id="exportDecklistBtn" title="Export deck to clipboard (choose format)">Export</button>
+      <button type="button" class="save-btn" id="importDeckBtn" title="Import deck from pasted list (choose format)">Import</button>
+      <button type="button" class="save-btn" id="loadBtn">Load</button>
+      <input type="file" id="loadFileInput" accept=".json" style="display: none">
+      <button class="save-btn" id="saveBtn" disabled title="Opens save dialog (suggested name: deck_&lt;timestamp&gt;.json). Choose the decks folder in your repo to save there.">Save</button>
+    </div>
+  </div>
   <div class="tabs tabs-after-settings">
     <div class="tab-buttons">
       <button type="button" class="tab-btn active" data-tab="board" id="tabBoard">Board</button>
@@ -77,15 +90,6 @@
           <button type="button" class="add-card-btn" id="advancedSearchBtn" title="Open advanced search by criteria">Advanced Search</button>
           <button type="button" class="add-card-btn" id="semanticSearchBtn" title="Open semantic search by meaning">Semantic Search</button>
           <span class="search-msg" id="searchMsg"></span>
-        </div>
-        <div class="deck-actions">
-          <span class="save-result" id="saveResult"></span>
-          <button type="button" class="save-btn" id="exportDecklistBtn" title="Export deck to clipboard (choose format)">Export</button>
-          <button type="button" class="save-btn" id="importDeckBtn" title="Import deck from pasted list (choose format)">Import</button>
-          <button type="button" class="save-btn" id="loadBtn">Load</button>
-          <input type="file" id="loadFileInput" accept=".json" style="display: none">
-          <button class="save-btn" id="saveBtn" disabled title="Opens save dialog (suggested name: deck_&lt;timestamp&gt;.json). Choose the decks folder in your repo to save there.">Save</button>
-          <button type="button" class="save-btn" id="refreshPricesBtn" title="Update card prices from Scryfall">Refresh Prices</button>
         </div>
       </div>
       <main class="main">
