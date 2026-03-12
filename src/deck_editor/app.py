@@ -349,6 +349,20 @@ async def serve_export_modal() -> FileResponse:
     return FileResponse(path, headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"})
 
 
+@app.get("/synergy-checker")
+async def serve_synergy_checker() -> FileResponse:
+    """Serve the synergy checker popup HTML page."""
+    static_dir: Path = Path(__file__).resolve().parent / "static"
+    path: Path = static_dir / "synergy-checker.html"
+    if not path.is_file():
+        LOGGER.error("Deck editor static file not found: %s", path)
+        raise FileNotFoundError(f"Static file not found: {path}")
+    return FileResponse(
+        path,
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"},
+    )
+
+
 @app.get("/import-modal")
 async def serve_import_modal() -> FileResponse:
     """Serve the import deck modal iframe page."""
@@ -622,6 +636,26 @@ async def get_card_mechanics(
             raise HTTPException(status_code=404, detail=str(e)) from e
         raise HTTPException(status_code=400, detail=str(e)) from e
     return {"card": name, "type": type, "result": result}
+
+
+@app.get("/api/synergy")
+async def get_synergy(
+    name1: str = Query(..., min_length=1),
+    name2: str = Query(..., min_length=1),
+) -> dict:
+    """Return synergy score between two cards by name. Lower score = better synergy. Requires RAG to be loaded."""
+    if not CardDB.inst().is_rag_ready():
+        raise HTTPException(
+            status_code=503,
+            detail="Synergy check requires RAG (embedding model) to be loaded. Please try again in a moment.",
+        )
+    try:
+        score: float = CardDB.inst().get_synergy_score(name_a=name1, name_b=name2)
+    except ValueError as e:
+        if "not found" in str(e).lower():
+            raise HTTPException(status_code=404, detail=str(e)) from e
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return {"card_a": name1, "card_b": name2, "synergy_score": round(score, 4)}
 
 
 def _run_price_update_then_notify() -> None:

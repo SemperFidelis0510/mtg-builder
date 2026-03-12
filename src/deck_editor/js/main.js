@@ -7,7 +7,7 @@ import { initContextMenu } from './context-menu.js';
 import { updateSectionHeaderTotal, getDeckMeta, collectState, syncDeckToServer } from './deck.js';
 import { renderDeck } from './render.js';
 import { initSearch } from './search.js';
-import { initAdvSearchModal, initSemanticSearchModal, initExportModal, initImportModal } from './modals.js';
+import { initAdvSearchModal, initSemanticSearchModal, initSynergyCheckerModal, initExportModal, initImportModal } from './modals.js';
 import { initSettings, populateSettings } from './settings.js';
 
 initCardPreview();
@@ -16,6 +16,7 @@ initSettings(syncDeckToServer);
 initSearch();
 initAdvSearchModal();
 initSemanticSearchModal();
+initSynergyCheckerModal();
 initExportModal();
 initImportModal();
 

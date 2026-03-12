@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Synergy Checker</title>
+  <style>
+    :root {
+      --bg: #1a1a2e;
+      --panel: #16213e;
+      --border: #0f3460;
+      --text: #e8e8e8;
+      --accent: #e94560;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 1rem;
+    }
+    h1 { margin: 0 0 1rem 0; font-size: 1.25rem; }
+    .synergy-form {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      margin-bottom: 1rem;
+      max-width: 560px;
+    }
+    .synergy-form label {
+      display: block;
+      font-size: 0.8rem;
+      margin-bottom: 2px;
+      color: #a0a0a0;
+    }
+    .synergy-form input[type="text"] {
+      width: 100%;
+      padding: 0.35rem 0.5rem;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      font-size: 0.9rem;
+    }
+    .input-wrap { position: relative; }
+    .autocomplete-list {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 100%;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-top: none;
+      border-radius: 0 0 4px 4px;
+      max-height: 180px;
+      overflow-y: auto;
+      z-index: 100;
+    }
+    .autocomplete-list li {
+      padding: 0.35rem 0.5rem;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+    .autocomplete-list li:hover { background: var(--border); }
+    .cards-row {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      margin-bottom: 1rem;
+    }
+    .card-slot {
+      flex: 0 0 auto;
+      width: 220px;
+      text-align: center;
+    }
+    .card-slot .label {
+      font-size: 0.8rem;
+      color: #a0a0a0;
+      margin-bottom: 4px;
+    }
+    .card-slot img {
+      width: 220px;
+      height: 307px;
+      object-fit: cover;
+      border-radius: 8px;
+      border: 2px solid var(--border);
+      display: block;
+      margin: 0 auto;
+      background: var(--panel);
+    }
+    .card-slot img.placeholder { opacity: 0.4; }
+    .form-actions { margin-bottom: 1rem; }
+    .form-actions button {
+      padding: 0.5rem 1rem;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .form-actions button:hover { opacity: 0.9; }
+    .form-actions button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .synergy-msg {
+      font-size: 0.9rem;
+      margin-bottom: 0.5rem;
+      color: #a0a0a0;
+    }
+    .synergy-msg.error { color: #f88; }
+    .synergy-msg.ok { color: #6f6; }
+    .synergy-score {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: var(--accent);
+      margin-top: 0.25rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>Synergy Checker</h1>
+  <p class="synergy-msg" id="synergyMsg">Pick two cards to see how well they synergize (lower score = better synergy).</p>
+
+  <div class="synergy-form">
+    <div class="input-wrap">
+      <label for="card1">Card 1</label>
+      <input type="text" id="card1" name="card1" placeholder="Type card name..." autocomplete="off">
+      <ul class="autocomplete-list" id="ac1" aria-hidden="true"></ul>
+    </div>
+    <div class="input-wrap">
+      <label for="card2">Card 2</label>
+      <input type="text" id="card2" name="card2" placeholder="Type card name..." autocomplete="off">
+      <ul class="autocomplete-list" id="ac2" aria-hidden="true"></ul>
+    </div>
+  </div>
+
+  <div class="cards-row">
+    <div class="card-slot">
+      <span class="label" id="label1">Card 1</span>
+      <img id="img1" class="placeholder" src="" alt="" width="220" height="307">
+    </div>
+    <div class="card-slot">
+      <span class="label" id="label2">Card 2</span>
+      <img id="img2" class="placeholder" src="" alt="" width="220" height="307">
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <button type="button" id="checkBtn">Check synergy</button>
+  </div>
+  <div id="scoreWrap" style="display: none;">
+    <span class="synergy-msg">Synergy score (lower = better):</span>
+    <div class="synergy-score" id="synergyScore"></div>
+  </div>
+
+  <script>
+    (function () {
+      var SCRYFALL_LARGE = 'https://api.scryfall.com/cards/named?exact=';
+      function imageUrl(name) {
+        if (!name || !name.trim()) return '';
+        return SCRYFALL_LARGE + encodeURIComponent(name.trim()) + '&format=image&version=large';
+      }
+
+      var acTimer1 = null;
+      var acTimer2 = null;
+      function fetchAutocomplete(q, listId, inputEl) {
+        if (!q || q.length < 2) {
+          document.getElementById(listId).innerHTML = '';
+          document.getElementById(listId).setAttribute('aria-hidden', 'true');
+          return;
+        }
+        fetch('/api/autocomplete?q=' + encodeURIComponent(q))
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            var names = data.data || [];
+            var ul = document.getElementById(listId);
+            ul.innerHTML = '';
+            names.slice(0, 12).forEach(function (name) {
+              var li = document.createElement('li');
+              li.textContent = name;
+              li.tabIndex = 0;
+              li.addEventListener('click', function () {
+                inputEl.value = name;
+                ul.innerHTML = '';
+                ul.setAttribute('aria-hidden', 'true');
+                updateImages();
+              });
+              ul.appendChild(li);
+            });
+            ul.setAttribute('aria-hidden', names.length === 0 ? 'true' : 'false');
+          })
+          .catch(function () {
+            document.getElementById(listId).innerHTML = '';
+            document.getElementById(listId).setAttribute('aria-hidden', 'true');
+          });
+      }
+
+      function updateImages() {
+        var n1 = document.getElementById('card1').value.trim();
+        var n2 = document.getElementById('card2').value.trim();
+        var img1 = document.getElementById('img1');
+        var img2 = document.getElementById('img2');
+        var label1 = document.getElementById('label1');
+        var label2 = document.getElementById('label2');
+        if (n1) {
+          img1.src = imageUrl(n1);
+          img1.alt = n1;
+          img1.classList.remove('placeholder');
+          label1.textContent = n1;
+        } else {
+          img1.src = '';
+          img1.alt = '';
+          img1.classList.add('placeholder');
+          label1.textContent = 'Card 1';
+        }
+        if (n2) {
+          img2.src = imageUrl(n2);
+          img2.alt = n2;
+          img2.classList.remove('placeholder');
+          label2.textContent = n2;
+        } else {
+          img2.src = '';
+          img2.alt = '';
+          img2.classList.add('placeholder');
+          label2.textContent = 'Card 2';
+        }
+      }
+
+      document.getElementById('card1').addEventListener('input', function () {
+        var self = this;
+        clearTimeout(acTimer1);
+        acTimer1 = setTimeout(function () { fetchAutocomplete(self.value, 'ac1', self); }, 200);
+        updateImages();
+      });
+      document.getElementById('card2').addEventListener('input', function () {
+        var self = this;
+        clearTimeout(acTimer2);
+        acTimer2 = setTimeout(function () { fetchAutocomplete(self.value, 'ac2', self); }, 200);
+        updateImages();
+      });
+
+      document.getElementById('checkBtn').addEventListener('click', function () {
+        var name1 = document.getElementById('card1').value.trim();
+        var name2 = document.getElementById('card2').value.trim();
+        var msgEl = document.getElementById('synergyMsg');
+        var scoreWrap = document.getElementById('scoreWrap');
+        var scoreEl = document.getElementById('synergyScore');
+        scoreWrap.style.display = 'none';
+        if (!name1 || !name2) {
+          msgEl.textContent = 'Please enter both card names.';
+          msgEl.className = 'synergy-msg error';
+          return;
+        }
+        if (name1 === name2) {
+          msgEl.textContent = 'Pick two different cards.';
+          msgEl.className = 'synergy-msg error';
+          return;
+        }
+        msgEl.textContent = 'Checking synergy…';
+        msgEl.className = 'synergy-msg';
+        var params = new URLSearchParams({ name1: name1, name2: name2 });
+        fetch('/api/synergy?' + params.toString())
+          .then(function (r) {
+            if (!r.ok) return r.json().then(function (err) { throw { status: r.status, detail: err.detail || r.statusText }; });
+            return r.json();
+          })
+          .then(function (data) {
+            msgEl.textContent = 'Synergy score (lower = better):';
+            msgEl.className = 'synergy-msg ok';
+            scoreEl.textContent = data.synergy_score;
+            scoreWrap.style.display = 'block';
+          })
+          .catch(function (err) {
+            var detail = err.detail || err.message || 'Request failed';
+            if (err.status === 503) {
+              msgEl.textContent = 'RAG is still loading. Please wait a moment and try again.';
+            } else if (err.status === 404) {
+              msgEl.textContent = detail;
+            } else {
+              msgEl.textContent = 'Error: ' + detail;
+            }
+            msgEl.className = 'synergy-msg error';
+          });
+      });
+    })();
+  </script>
+</body>
+</html>

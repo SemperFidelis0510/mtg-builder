@@ -4,7 +4,7 @@ import dataclasses
 import json
 import re
 from dataclasses import dataclass, field, fields
-from typing import Any
+from typing import Any, Callable
 
 from src.config.keyword_explanations import expand_keywords as _expand_keywords
 from src.config.thresholds import classify as _classify_value
@@ -373,6 +373,27 @@ class Card:
         if not effs:
             return f"Name: {self.name}\nEffects: (none)"
         return f"Name: {self.name}\nEffects: {'; '.join(effs)}"
+
+    def synergy_with(self, other: "Card", encode_fn: Callable[[list[str]], list]) -> float:
+        """Return synergy score between this card and another: sum of two embedding distances.
+
+        Score = L2(embed(triggers of self), embed(effects of other))
+              + L2(embed(effects of self), embed(triggers of other)).
+        Lower score means higher synergy. encode_fn(texts: list[str]) -> list of vectors (list of float).
+        """
+        texts: list[str] = [
+            self.to_triggers_document(),
+            other.to_effects_document(),
+            self.to_effects_document(),
+            other.to_triggers_document(),
+        ]
+        vecs = encode_fn(texts)
+        assert len(vecs) >= 4, "encode_fn must return at least 4 vectors"
+
+        def l2(a: list[float], b: list[float]) -> float:
+            return sum((x - y) ** 2 for x, y in zip(a, b)) ** 0.5
+
+        return l2(vecs[0], vecs[1]) + l2(vecs[2], vecs[3])
 
     def to_rag_document(self) -> str:
         """Build the document string for RAG indexing: type_line, mana_cost, color_identity,

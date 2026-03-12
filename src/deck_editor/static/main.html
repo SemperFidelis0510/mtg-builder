@@ -67,6 +67,7 @@
     </div>
     <div class="section-body">
       <span class="save-result" id="saveResult"></span>
+      <button type="button" class="save-btn" id="synergyCheckerBtn" title="Check synergy between two cards">Synergy Checker</button>
       <button type="button" class="save-btn" id="exportDecklistBtn" title="Export deck to clipboard (choose format)">Export</button>
       <button type="button" class="save-btn" id="importDeckBtn" title="Import deck from pasted list (choose format)">Import</button>
       <button type="button" class="save-btn" id="loadBtn">Load</button>
@@ -137,6 +138,13 @@
     <div class="modal-content">
       <button type="button" class="modal-close" id="semanticSearchModalClose" aria-label="Close">×</button>
       <iframe class="modal-iframe" id="semanticSearchIframe" src="about:blank" title="Semantic Card Search"></iframe>
+    </div>
+  </div>
+
+  <div class="synergy-checker-modal" id="synergyCheckerModal" aria-hidden="true">
+    <div class="modal-content">
+      <button type="button" class="modal-close" id="synergyCheckerModalClose" aria-label="Close">×</button>
+      <iframe class="modal-iframe" id="synergyCheckerIframe" src="about:blank" title="Synergy Checker"></iframe>
     </div>
   </div>
 
