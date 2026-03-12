@@ -806,3 +806,33 @@ body {
 .color-R { background: #d3544a; }
 .color-G { background: #7cb35b; }
 .color-C { background: #888; }
+
+/* Card context menu (right-click) */
+#cardContextMenu {
+  display: none;
+  position: fixed;
+  z-index: 10001;
+  min-width: 180px;
+  padding: 4px 0;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+#cardContextMenu.visible {
+  display: block;
+}
+#cardContextMenu .context-menu-item {
+  display: block;
+  width: 100%;
+  padding: 0.4rem 0.75rem;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-size: 0.9rem;
+  text-align: left;
+  cursor: pointer;
+}
+#cardContextMenu .context-menu-item:hover {
+  background: var(--border);
+}

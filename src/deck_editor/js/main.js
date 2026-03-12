@@ -3,6 +3,7 @@
 import { TYPE_KEYS } from './constants.js';
 import { suggestedSaveName } from './utils.js';
 import { initCardPreview } from './card-preview.js';
+import { initContextMenu } from './context-menu.js';
 import { updateSectionHeaderTotal, getDeckMeta, collectState, syncDeckToServer } from './deck.js';
 import { renderDeck } from './render.js';
 import { initSearch } from './search.js';
@@ -10,6 +11,7 @@ import { initAdvSearchModal, initExportModal, initImportModal } from './modals.j
 import { initSettings, populateSettings } from './settings.js';
 
 initCardPreview();
+initContextMenu();
 initSettings(syncDeckToServer);
 initSearch();
 initAdvSearchModal();
