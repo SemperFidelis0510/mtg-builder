@@ -213,6 +213,16 @@ def _deck_to_response(deck: Deck) -> dict:
         if c.name not in seen_names:
             seen_names.add(c.name)
             out["prices"][c.name] = c.price_usd if c.price_usd >= 0 else None
+    for c in deck.maybe:
+        if c.name not in seen_names:
+            seen_names.add(c.name)
+            price = getattr(c, "price_usd", -1.0)
+            out["prices"][c.name] = price if price >= 0 else None
+    for c in deck.sideboard:
+        if c.name not in seen_names:
+            seen_names.add(c.name)
+            price = getattr(c, "price_usd", -1.0)
+            out["prices"][c.name] = price if price >= 0 else None
     resp: dict = {"deck": out, "stats": _compute_deck_stats(deck)}
     return resp
 

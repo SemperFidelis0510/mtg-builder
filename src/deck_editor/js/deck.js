@@ -131,50 +131,14 @@ export function makeMaybeBoardCardEl(name, count) {
   badge.className = 'card-stack-badge';
   badge.textContent = String(count);
 
-  const controls = document.createElement('div');
-  controls.className = 'card-stack-controls';
-  const btnPlus = document.createElement('button');
-  btnPlus.textContent = '+';
-  btnPlus.type = 'button';
-  const btnMinus = document.createElement('button');
-  btnMinus.textContent = '-';
-  btnMinus.type = 'button';
-
-  function setCount(c) {
-    c = Math.max(0, c);
-    wrap.setAttribute('data-count', String(c));
-    badge.textContent = String(c);
-    if (c === 0) {
-      const list = li.parentNode;
-      li.remove();
-      updateSectionHeaderTotal(list);
-      return;
-    }
-    updateSectionHeaderTotal(li.parentNode);
-  }
-
-  btnPlus.addEventListener('mousedown', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-  });
-  btnPlus.addEventListener('click', (e) => {
-    e.stopPropagation();
-    setCount(parseInt(wrap.getAttribute('data-count'), 10) + 1);
-  });
-  btnMinus.addEventListener('mousedown', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-  });
-  btnMinus.addEventListener('click', (e) => {
-    e.stopPropagation();
-    setCount(parseInt(wrap.getAttribute('data-count'), 10) - 1);
-  });
-
-  controls.appendChild(btnMinus);
-  controls.appendChild(btnPlus);
+  const priceSpan = document.createElement('span');
+  priceSpan.className = 'card-price';
+  const prices = window._deckPrices || {};
+  const priceVal = prices[name];
+  priceSpan.textContent = (priceVal != null && Number(priceVal) >= 0) ? '$' + Number(priceVal).toFixed(2) : '—';
   wrap.appendChild(nameSpan);
   wrap.appendChild(badge);
-  wrap.appendChild(controls);
+  wrap.appendChild(priceSpan);
   li.appendChild(wrap);
   return li;
 }

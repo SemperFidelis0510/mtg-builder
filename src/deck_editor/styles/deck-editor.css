@@ -648,6 +648,12 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.card-stack.maybe-board-item .card-price {
+  flex-shrink: 0;
+  margin-top: 0;
+  margin-left: auto;
+  font-size: 0.75rem;
+}
 .sortable-drag { opacity: 0.8; }
 .card-preview {
   position: fixed;
