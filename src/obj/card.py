@@ -5,6 +5,20 @@ import re
 from dataclasses import dataclass, field, fields
 from typing import Any
 
+from src.config.thresholds import classify as _classify_value
+
+
+def _classify_stat(stat_value: str, section: str) -> str:
+    """Classify power/toughness string: numeric -> category, non-numeric -> 'variable'."""
+    s = (stat_value or "").strip()
+    if not s:
+        return "variable"
+    try:
+        num = float(s)
+        return _classify_value(num, section)
+    except ValueError:
+        return "variable"
+
 
 def _field_default(f: dataclasses.Field) -> Any:
     """Return the effective default value for a dataclass field."""
@@ -176,7 +190,8 @@ class Card:
 
     def to_rag_document(self) -> str:
         """Build the document string for RAG indexing: type_line, mana_cost, color_identity,
-        power/toughness (creatures only), keywords, loyalty (planeswalkers only), oracle text.
+        power/toughness (creatures only, categorical), price (if available), keywords,
+        loyalty (planeswalkers only), oracle text.
         """
         lines: list[str] = [
             f"Type: {self.type_line}",
@@ -184,8 +199,10 @@ class Card:
             f"Color Identity: {', '.join(self.color_identity) if self.color_identity else '(none)'}",
         ]
         if "Creature" in self.types:
-            lines.append(f"Power: {self.power}")
-            lines.append(f"Toughness: {self.toughness}")
+            lines.append(f"Power: {_classify_stat(self.power, 'power_toughness')}")
+            lines.append(f"Toughness: {_classify_stat(self.toughness, 'power_toughness')}")
+        if self.price_usd >= 0:
+            lines.append(f"Price: {_classify_value(self.price_usd, 'price')}")
         if self.keywords:
             lines.append(f"Keywords: {', '.join(self.keywords)}")
         if "Planeswalker" in self.types and self.loyalty:

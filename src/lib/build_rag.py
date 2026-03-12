@@ -9,6 +9,7 @@ import json
 
 from src.lib.config import ATOMIC_CARDS_PATH, CHROMA_PATH, COLLECTION_NAME, MODEL_NAME
 from src.lib.cardDB import CardDB
+from src.lib.prices import load_prices
 from src.obj.card import Card
 
 # ---------------------------------------------------------------------------
@@ -35,6 +36,7 @@ def do_build() -> None:
     if not data:
         raise ValueError("AtomicCards.json has no 'data' key")
 
+    price_map: dict[str, float] = load_prices()
     rows: list[tuple[str, str, dict]] = []
     for card_name, faces in data.items():
         if not isinstance(faces, list):
@@ -43,6 +45,7 @@ def do_build() -> None:
             if not isinstance(face, dict):
                 continue
             card: Card = Card.from_json_face(face, card_name)
+            card.price_usd = price_map.get(card_name, -1.0)
             uid: str = CardDB.make_id(card_name, i)
             rows.append((uid, card.to_rag_document(), card.to_chroma_metadata()))
 
