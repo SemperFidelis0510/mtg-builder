@@ -547,6 +547,13 @@
       text-align: center;
       pointer-events: none;
     }
+    .card-price {
+      display: block;
+      font-size: 0.75rem;
+      color: var(--text);
+      margin-top: 2px;
+      text-align: center;
+    }
     .card-stack-controls {
       display: flex;
       gap: 4px;
@@ -664,6 +671,7 @@
           <button type="button" class="save-btn" id="loadBtn">Load</button>
           <input type="file" id="loadFileInput" accept=".json" style="display: none">
           <button class="save-btn" id="saveBtn" disabled title="Opens save dialog (suggested name: deck_&lt;timestamp&gt;.json). Choose the decks folder in your repo to save there.">Save</button>
+          <button type="button" class="save-btn" id="refreshPricesBtn" title="Update card prices from Scryfall">Refresh Prices</button>
         </div>
       </div>
       <main class="main">
@@ -924,6 +932,12 @@
       banner.appendChild(controls);
       wrap.appendChild(img);
       wrap.appendChild(banner);
+      var priceSpan = document.createElement('span');
+      priceSpan.className = 'card-price';
+      var prices = window._deckPrices || {};
+      var priceVal = prices[name];
+      priceSpan.textContent = (priceVal != null && Number(priceVal) >= 0) ? '$' + Number(priceVal).toFixed(2) : '—';
+      wrap.appendChild(priceSpan);
       li.appendChild(wrap);
       return li;
     }
@@ -1003,10 +1017,12 @@
       var nonLand = total - landCount;
       var totalsEl = statsSection.querySelector('.deck-stats-totals');
       if (totalsEl) {
+        var totalPrice = (window._lastStats && window._lastStats.total_price_usd != null) ? window._lastStats.total_price_usd : 0;
         totalsEl.innerHTML =
           '<span class="deck-total-item"><strong>Total cards:</strong> ' + total + '</span>' +
           '<span class="deck-total-item"><strong>Non-land:</strong> ' + nonLand + '</span>' +
-          '<span class="deck-total-item"><strong>Lands:</strong> ' + landCount + '</span>';
+          '<span class="deck-total-item"><strong>Lands:</strong> ' + landCount + '</span>' +
+          '<span class="deck-total-item"><strong>Total price (USD):</strong> $' + Number(totalPrice).toFixed(2) + '</span>';
       }
     }
 
@@ -1020,6 +1036,8 @@
       const deck = data.deck || {};
       const removed = data.removed || [];
       const stats = data.stats || {};
+      window._deckPrices = (deck.prices != null && typeof deck.prices === 'object') ? deck.prices : {};
+      window._lastStats = stats;
 
       TYPE_KEYS.forEach(function (key) {
         const cards = Array.isArray(deck[key]) ? deck[key] : [];
@@ -1779,6 +1797,20 @@
       evtSource.addEventListener('deck_updated', function (e) {
         var data = JSON.parse(e.data);
         renderDeck(data);
+      });
+    })();
+
+    (function initRefreshPricesBtn() {
+      var btn = document.getElementById('refreshPricesBtn');
+      if (!btn) return;
+      btn.addEventListener('click', function () {
+        btn.disabled = true;
+        fetch('/api/refresh_prices', { method: 'POST' })
+          .then(function (r) { return r.json(); })
+          .then(function () {
+            btn.disabled = false;
+          })
+          .catch(function () { btn.disabled = false; });
       });
     })();
   </script>

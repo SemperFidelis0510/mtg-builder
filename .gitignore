@@ -2,6 +2,7 @@
 # Project-specific
 # =============================================================================
 data/*
+data/prices.json
 chroma_db/
 logs/
 output/

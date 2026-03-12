@@ -59,6 +59,10 @@ class Card:
         default_factory=list,
         metadata={"source": "derived"},
     )
+    price_usd: float = field(
+        default=-1.0,
+        metadata={"source": "price", "chroma": False},
+    )
 
     def __iter__(self):
         for f in fields(self):
@@ -73,7 +77,7 @@ class Card:
         """Parse a raw JSON face dict from AtomicCards.json into a Card."""
         kwargs: dict[str, Any] = {}
         for f in fields(cls):
-            if f.metadata.get("source") == "derived":
+            if f.metadata.get("source") in ("derived", "price"):
                 continue
             json_key: str = f.metadata["json_key"]
             raw = face.get(json_key)
@@ -106,7 +110,7 @@ class Card:
             if f.name == "text":
                 kwargs["text"] = text
                 continue
-            if f.metadata.get("source") == "derived":
+            if f.metadata.get("source") in ("derived", "price"):
                 continue
 
             json_key: str = f.metadata["json_key"]
@@ -193,11 +197,11 @@ class Card:
     def to_chroma_metadata(self) -> dict[str, str | float]:
         """Build a flat metadata dict for ChromaDB (lists are comma-joined).
 
-        Fields with ``metadata["chroma"] == False`` or ``metadata["source"] == "derived"`` are excluded.
+        Fields with ``metadata["chroma"] == False`` or ``metadata["source"] == "derived"`` or ``"price"`` are excluded.
         """
         meta: dict[str, str | float] = {}
         for f in fields(self):
-            if f.metadata.get("source") == "derived":
+            if f.metadata.get("source") in ("derived", "price"):
                 continue
             if "chroma" in f.metadata and not f.metadata["chroma"]:
                 continue
@@ -212,7 +216,9 @@ class Card:
     def format_display(self, index: int, total: int) -> str:
         """Format this card for display in search / filter results."""
         text: str = self.text.strip() or "(No rules text)"
+        price_str: str = f"${self.price_usd:.2f}" if self.price_usd >= 0 else "N/A"
         return (
             f"--- Card {index} of {total} ---\n"
-            f"Name: {self.name}\nMana Cost: {self.mana_cost}\nType: {self.type_line}\nOracle Text: {text}"
+            f"Name: {self.name}\nMana Cost: {self.mana_cost}\nType: {self.type_line}\n"
+            f"Price (USD): {price_str}\nOracle Text: {text}"
         )

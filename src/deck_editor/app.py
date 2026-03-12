@@ -3,6 +3,7 @@
 import asyncio
 import json
 import re
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -12,6 +13,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 
 from src.lib.cardDB import CardDB
 from src.lib.config import DECK_EDITOR_SAVE_DIR
+from src.lib.prices import prices_age_hours, update_all_prices
 from src.obj.card import Card
 from src.obj.deck import Deck, _cards_from_names, _normalize_cards_arg
 from src.utils.logger import LOGGER
@@ -43,6 +45,16 @@ def _broadcast(event_type: str, data_dict: dict) -> None:
 def _notify_deck_updated() -> None:
     """Broadcast current deck state to all SSE clients."""
     _broadcast("deck_updated", _deck_to_response(_current_deck))
+
+
+@app.on_event("startup")
+def _startup_refresh_prices() -> None:
+    """If prices are missing or older than 24h, start a background price update."""
+    age: float | None = prices_age_hours()
+    if age is None or age > 24:
+        thread: threading.Thread = threading.Thread(target=_run_price_update_then_notify, daemon=True)
+        thread.start()
+
 
 # Type-group keys used by the client (order for display): creatures, non-creatures (artifacts/enchantments/planeswalkers), spells (instants/sorceries), lands
 TYPE_KEYS: list[str] = [
@@ -151,12 +163,18 @@ def _compute_deck_stats(deck: Deck) -> dict:
         mv_non_creatures[idx] += 1
     mana_value_distribution = {"creatures": mv_creatures, "non_creatures": mv_non_creatures}
 
+    total_price_usd: float = 0.0
+    for c in deck.cards:
+        if getattr(c, "price_usd", -1.0) >= 0:
+            total_price_usd += c.price_usd
+
     return {
         "total_cards": total_cards,
         "non_land": non_land,
         "lands": land_count,
         "color_distribution": color_distribution,
         "mana_value_distribution": mana_value_distribution,
+        "total_price_usd": round(total_price_usd, 2),
     }
 
 
@@ -173,6 +191,12 @@ def _deck_to_response(deck: Deck) -> dict:
     out["lands"] = list(deck.lands)
     out["maybe_names"] = [c.name for c in deck.maybe]
     out["sideboard_names"] = [c.name for c in deck.sideboard]
+    seen_names: set[str] = set()
+    out["prices"] = {}
+    for c in deck.cards:
+        if c.name not in seen_names:
+            seen_names.add(c.name)
+            out["prices"][c.name] = c.price_usd if c.price_usd >= 0 else None
     resp: dict = {"deck": out, "stats": _compute_deck_stats(deck)}
     return resp
 
@@ -271,6 +295,12 @@ async def search_cards_api(body: dict) -> dict:
     mana_value_max: float = (
         float(body["mana_value_max"]) if "mana_value_max" in body and body["mana_value_max"] is not None else -1.0
     )
+    price_usd_min: float = (
+        float(body["price_usd_min"]) if "price_usd_min" in body and body["price_usd_min"] is not None else -1.0
+    )
+    price_usd_max: float = (
+        float(body["price_usd_max"]) if "price_usd_max" in body and body["price_usd_max"] is not None else -1.0
+    )
     power: str = body["power"] if "power" in body and isinstance(body["power"], str) else ""
     toughness: str = body["toughness"] if "toughness" in body and isinstance(body["toughness"], str) else ""
     keywords: str = body["keywords"] if "keywords" in body and isinstance(body["keywords"], str) else ""
@@ -296,6 +326,8 @@ async def search_cards_api(body: dict) -> dict:
             mana_value=mana_value,
             mana_value_min=mana_value_min,
             mana_value_max=mana_value_max,
+            price_usd_min=price_usd_min,
+            price_usd_max=price_usd_max,
             power=power,
             toughness=toughness,
             keywords=keywords,
@@ -398,6 +430,24 @@ async def add_card(body: dict) -> dict:
 async def get_deck() -> dict:
     """Return current deck and removed list (empty deck if none loaded yet)."""
     return _deck_to_response(_current_deck)
+
+
+def _run_price_update_then_notify() -> None:
+    """Background: run full price update, reload CardDB prices, broadcast deck_updated."""
+    try:
+        update_all_prices()
+        CardDB.inst().reload_prices()
+        _notify_deck_updated()
+    except Exception as e:
+        LOGGER.error(0, "Price update failed: %s", e)
+
+
+@app.post("/api/refresh_prices")
+async def refresh_prices() -> dict:
+    """Start a background update of all card prices from Scryfall. Returns immediately. When done, deck_updated is broadcast via SSE."""
+    thread: threading.Thread = threading.Thread(target=_run_price_update_then_notify, daemon=True)
+    thread.start()
+    return {"status": "started"}
 
 
 @app.get("/api/export/formats")

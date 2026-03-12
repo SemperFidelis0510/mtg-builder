@@ -354,6 +354,16 @@
         </select>
       </div>
     </div>
+    <div class="form-row">
+      <div>
+        <label for="price_min">Price min ($)</label>
+        <input type="number" id="price_min" name="price_usd_min" min="0" step="0.01" placeholder="e.g. 0.50">
+      </div>
+      <div>
+        <label for="price_max">Price max ($)</label>
+        <input type="number" id="price_max" name="price_usd_max" min="0" step="0.01" placeholder="e.g. 10.00">
+      </div>
+    </div>
   </form>
 
   <div class="form-actions">
@@ -515,6 +525,16 @@
       if (!isNaN(mana_value_min) && mana_value_min >= 0) body.mana_value_min = mana_value_min;
       var mana_value_max = parseInt(document.getElementById('mana_value_max').value, 10);
       if (!isNaN(mana_value_max) && mana_value_max >= 0) body.mana_value_max = mana_value_max;
+      var priceMinEl = document.getElementById('price_min');
+      var priceMaxEl = document.getElementById('price_max');
+      if (priceMinEl && priceMinEl.value !== '') {
+        var pMin = parseFloat(priceMinEl.value, 10);
+        if (!isNaN(pMin) && pMin >= 0) body.price_usd_min = pMin;
+      }
+      if (priceMaxEl && priceMaxEl.value !== '') {
+        var pMax = parseFloat(priceMaxEl.value, 10);
+        if (!isNaN(pMax) && pMax >= 0) body.price_usd_max = pMax;
+      }
       var power = document.getElementById('power').value.trim();
       if (power) body.power = power;
       var toughness = document.getElementById('toughness').value.trim();
@@ -545,6 +565,14 @@
       span.textContent = name;
       wrap.appendChild(img);
       wrap.appendChild(span);
+      var priceVal = card.price_usd;
+      if (priceVal != null && Number(priceVal) >= 0) {
+        var priceSpan = document.createElement('span');
+        priceSpan.className = 'result-card-price';
+        priceSpan.style.cssText = 'font-size:0.7rem;color:#a0a0a0;display:block;text-align:center;';
+        priceSpan.textContent = '$' + Number(priceVal).toFixed(2);
+        wrap.appendChild(priceSpan);
+      }
       wrap.addEventListener('dblclick', function () {
         fetch('/api/add_card', {
           method: 'POST',

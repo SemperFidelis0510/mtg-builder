@@ -16,6 +16,7 @@ if "%~1"=="" goto args_done
 if /i "%~1"=="install"  ( set "STAGE=install"  & shift & goto parse_args )
 if /i "%~1"=="download" ( set "STAGE=download" & shift & goto parse_args )
 if /i "%~1"=="build"    ( set "STAGE=build"    & shift & goto parse_args )
+if /i "%~1"=="prices"   ( set "STAGE=prices"   & shift & goto parse_args )
 if /i "%~1"=="--force"  ( set "FORCE=1"        & shift & goto parse_args )
 if /i "%~1"=="--cuda"   (
     if "%~2"=="" (
@@ -70,6 +71,7 @@ if "%STAGE%"=="" (
 if /i "%STAGE%"=="install"  ( call :do_install  & if errorlevel 1 exit /b 1 & goto end )
 if /i "%STAGE%"=="download" ( call :do_download & if errorlevel 1 exit /b 1 & goto end )
 if /i "%STAGE%"=="build"    ( call :do_build    & if errorlevel 1 exit /b 1 & goto end )
+if /i "%STAGE%"=="prices"   ( call :do_prices   & if errorlevel 1 exit /b 1 & goto end )
 
 :do_install
 echo.
@@ -136,14 +138,27 @@ if errorlevel 1 (
 echo === [build] Done ===
 exit /b 0
 
+:do_prices
+echo.
+echo === [prices] Updating card prices from Scryfall ===
+call "%_ACTIVATE%" %CONDA_ENV%
+python -m src.lib.prices
+if errorlevel 1 (
+    echo ERROR: Price update failed.
+    exit /b 1
+)
+echo === [prices] Done ===
+exit /b 0
+
 :usage
 echo.
-echo Usage: .\%~nx0 [install^|download^|build] [--force] [--cuda 11^|12^|cpu]
+echo Usage: .\%~nx0 [install^|download^|build^|prices] [--force] [--cuda 11^|12^|cpu]
 echo.
 echo   (no stage)           Run all stages: install, download, build
 echo   install              Create conda env and install Python deps
 echo   download             Download AtomicCards.json
 echo   build                Ingest data and build ChromaDB vector index
+echo   prices               Update card prices from Scryfall to data/prices.json
 echo.
 echo   --force              Skip-checks override:
 echo                          install  : remove and recreate the conda env

@@ -71,6 +71,8 @@ def run_server() -> None:
         mana_value: float = -1.0,
         mana_value_min: float = -1.0,
         mana_value_max: float = -1.0,
+        price_usd_min: float = -1.0,
+        price_usd_max: float = -1.0,
         power: str = "",
         toughness: str = "",
         keywords: str = "",
@@ -79,7 +81,7 @@ def run_server() -> None:
         format_legal: str = "",
         n_results: int = 20,
     ) -> str:
-        """Filter MTG cards by exact properties (name, type, colors, mana value, power/toughness, keywords, etc.).
+        """Filter MTG cards by exact properties (name, type, colors, mana value, price range, power/toughness, keywords, etc.).
         All filters are AND-combined. At least one filter must be provided. Returns card names and rules text."""
         LOGGER.info(
             "Request received tool=plain_search_card name=%r type_line=%r colors=%r n_results=%s",
@@ -94,6 +96,8 @@ def run_server() -> None:
             mana_value=mana_value,
             mana_value_min=mana_value_min,
             mana_value_max=mana_value_max,
+            price_usd_min=price_usd_min,
+            price_usd_max=price_usd_max,
             power=power,
             toughness=toughness,
             keywords=keywords,
