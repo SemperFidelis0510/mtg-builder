@@ -373,10 +373,31 @@ body {
   padding: 1rem;
   border-right: 1px solid var(--border);
 }
-.deck-column.deck-column-drag-from-side {
-  outline: 2px solid var(--accent);
+.deck-sections-zone {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem;
+  min-height: 120px;
+  background: var(--panel);
+}
+.deck-sections-zone.deck-sections-zone-drag-from-side {
+  outline: 3px solid var(--accent);
   outline-offset: 2px;
-  border-radius: 6px;
+  background: rgba(233, 69, 96, 0.08);
+}
+.deck-drop-target {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  z-index: 1;
+  pointer-events: none;
+}
+.deck-sections-zone.deck-sections-zone-drag-from-side .deck-drop-target {
+  pointer-events: auto;
+  z-index: 10;
 }
 .removed-column {
   width: 280px;

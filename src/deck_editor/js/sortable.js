@@ -25,60 +25,46 @@ function convertFullCardsInZone(zoneId) {
   });
 }
 
-/** Replace any minimized (maybe-board-item) cards in a deck section list with full card-stack elements. */
-function convertMinimizedToFullInDeckList(listEl) {
-  if (!listEl) return;
-  const toReplace = [];
-  for (let i = 0; i < listEl.children.length; i++) {
-    const li = listEl.children[i];
-    const stack = li.querySelector('.card-stack.maybe-board-item');
-    if (stack) {
-      const name = stack.getAttribute('data-name');
-      const count = parseInt(stack.getAttribute('data-count'), 10) || 1;
-      toReplace.push({ li, name, count });
-    }
-  }
-  toReplace.forEach((r) => {
-    const newLi = makeCardStackEl(r.name, r.count);
-    r.li.parentNode.replaceChild(newLi, r.li);
-  });
+function allowPutOnlyFromSideZones(to, from) {
+  if (!from) return false;
+  const fromEl = from.el || from;
+  const fromId = (fromEl && fromEl.id) || '';
+  return fromId === 'list-maybe' || fromId === 'list-sideboard';
 }
 
-function isDeckSectionList(listId) {
-  return listId && listId.startsWith('list-') && TYPE_KEYS.includes(listId.replace(/^list-/, ''));
-}
-
-function handleDeckSectionDrop(evt) {
-  const listEl = evt.to;
+function handleDeckDropTargetAdd(evt) {
   const item = evt.item;
-  const stack = item.querySelector('.card-stack.maybe-board-item');
-  if (!stack) {
-    return;
-  }
+  const dropTarget = document.getElementById('deckDropTarget');
+  if (!dropTarget) return;
+  const stack = item.querySelector('.card-stack.maybe-board-item') || item.querySelector('.card-stack');
+  if (!stack) return;
   const name = stack.getAttribute('data-name');
   if (!name) return;
+  const count = parseInt(stack.getAttribute('data-count'), 10) || 1;
+  dropTarget.removeChild(item);
   fetch('/api/card_type?name=' + encodeURIComponent(name))
     .then((r) => (r.ok ? r.json() : Promise.reject(new Error('card type lookup failed'))))
     .then((data) => {
       const typeKey = data.type_key;
-      const currentKey = listEl.id.replace(/^list-/, '');
-      if (typeKey !== currentKey) {
-        const targetList = document.getElementById('list-' + typeKey);
-        if (targetList) {
-          listEl.removeChild(item);
-          targetList.appendChild(item);
-          convertMinimizedToFullInDeckList(targetList);
-          updateSectionHeaderTotal(listEl);
-          updateSectionHeaderTotal(targetList);
-          return;
-        }
+      const targetList = document.getElementById('list-' + typeKey);
+      if (!targetList) return;
+      const existing = targetList.querySelector('.card-stack[data-name="' + CSS.escape(name) + '"]');
+      if (existing) {
+        const c = parseInt(existing.getAttribute('data-count'), 10) || 1;
+        existing.setAttribute('data-count', String(c + count));
+        const badge = existing.closest('li').querySelector('.card-stack-badge');
+        if (badge) badge.textContent = String(c + count);
+      } else {
+        targetList.appendChild(makeCardStackEl(name, count));
       }
-      convertMinimizedToFullInDeckList(listEl);
-      updateSectionHeaderTotal(listEl);
+      updateSectionHeaderTotal(targetList);
     })
     .catch(() => {
-      convertMinimizedToFullInDeckList(listEl);
-      updateSectionHeaderTotal(listEl);
+      const targetList = document.getElementById('list-sorcery');
+      if (targetList) {
+        targetList.appendChild(makeCardStackEl(name, count));
+        updateSectionHeaderTotal(targetList);
+      }
     });
 }
 
@@ -88,29 +74,26 @@ export function initSortable() {
   });
   sortables = [];
 
-  const deckColumnEl = document.querySelector('.deck-column');
-  function removeDeckColumnHighlight() {
-    if (deckColumnEl) deckColumnEl.classList.remove('deck-column-drag-from-side');
+  const deckSectionsZoneEl = document.getElementById('deckSectionsZone');
+  function removeDeckSectionsZoneHighlight() {
+    if (deckSectionsZoneEl) deckSectionsZoneEl.classList.remove('deck-sections-zone-drag-from-side');
   }
 
-  const deckSectionOptions = {
-    group: { name: 'cards', pull: true, put: true },
-    handle: '.card-img, .maybe-board-item',
-    animation: 150,
-    ghostClass: 'sortable-ghost',
-    dragClass: 'sortable-drag',
-    onEnd(evt) {
-      removeDeckColumnHighlight();
-      if (isDeckSectionList(evt.to.id)) {
-        handleDeckSectionDrop(evt);
-      }
-    },
-  };
-
-  TYPE_KEYS.forEach((key) => {
-    const el = document.getElementById('list-' + key);
-    if (el) sortables.push(Sortable.create(el, deckSectionOptions));
-  });
+  const dropTargetEl = document.getElementById('deckDropTarget');
+  if (dropTargetEl) {
+    sortables.push(
+      Sortable.create(dropTargetEl, {
+        group: { name: 'cards', pull: false, put: allowPutOnlyFromSideZones },
+        animation: 150,
+        ghostClass: 'sortable-ghost',
+        dragClass: 'sortable-drag',
+        onAdd: handleDeckDropTargetAdd,
+        onEnd() {
+          removeDeckSectionsZoneHighlight();
+        },
+      })
+    );
+  }
 
   const sideZoneIds = ['list-maybe', 'list-sideboard'];
   sideZoneIds.forEach((zoneId) => {
@@ -124,10 +107,10 @@ export function initSortable() {
           ghostClass: 'sortable-ghost',
           dragClass: 'sortable-drag',
           onStart() {
-            if (deckColumnEl) deckColumnEl.classList.add('deck-column-drag-from-side');
+            if (deckSectionsZoneEl) deckSectionsZoneEl.classList.add('deck-sections-zone-drag-from-side');
           },
           onEnd() {
-            removeDeckColumnHighlight();
+            removeDeckSectionsZoneHighlight();
             setTimeout(() => convertFullCardsInZone(zoneId), 0);
           },
         })

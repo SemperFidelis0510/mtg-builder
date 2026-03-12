@@ -89,12 +89,15 @@
       </div>
       <main class="main">
         <div class="deck-column">
-          <div class="deck-section-controls">
-            <button type="button" id="collapseAllBtn">Collapse All</button>
-            <button type="button" id="expandAllBtn">Expand All</button>
-            <button type="button" id="clearAllBtn" class="clear-btn">Clear</button>
+          <div class="deck-sections-zone" id="deckSectionsZone">
+            <div class="deck-section-controls">
+              <button type="button" id="collapseAllBtn">Collapse All</button>
+              <button type="button" id="expandAllBtn">Expand All</button>
+              <button type="button" id="clearAllBtn" class="clear-btn">Clear</button>
+            </div>
+            <div id="deckSections"></div>
+            <ul class="deck-drop-target" id="deckDropTarget"></ul>
           </div>
-          <div id="deckSections"></div>
         </div>
         <div class="removed-column">
           <div class="section" id="section-maybe" data-type="maybe">
