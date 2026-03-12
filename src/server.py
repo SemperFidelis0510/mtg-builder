@@ -141,6 +141,32 @@ def run_server() -> None:
         LOGGER.info("Request completed tool=append_cards_to_deck added=%s", len(names))
         return f"Added {len(names)} card(s) to the deck: {', '.join(names)}."
 
+    _DEFAULT_CARD_FIELDS: str = "name,mana_cost,mana_value,type_line,text,colors,color_identity,power,toughness,keywords"
+
+    @mcp.tool()
+    def get_card_info(
+        card_names: str,
+        fields: str = _DEFAULT_CARD_FIELDS,
+    ) -> str:
+        """Get detailed data for one or more MTG cards by exact name.
+        card_names: comma-separated card names (e.g. 'Lightning Bolt, Counterspell').
+        fields: comma-separated Card field names to include in the response (default covers the most common fields).
+        Available fields: name, type_line, types, subtypes, supertypes, text, mana_cost, mana_value, colors, color_identity, power, toughness, keywords, loyalty, defense, legalities, triggers, effects, price_usd.
+        Returns a JSON array with the requested fields for each card. Cards not found get an error entry."""
+        names: list[str] = [n.strip() for n in card_names.split(",") if n.strip()]
+        if not names:
+            return "Error: card_names must contain at least one card name (comma-separated)."
+        card_fields: list[str] = [f.strip() for f in fields.split(",") if f.strip()]
+        if not card_fields:
+            return "Error: fields must contain at least one field name (comma-separated)."
+        LOGGER.info(
+            "Request received tool=get_card_info names=%s fields=%s",
+            names, card_fields,
+        )
+        result: str = CardDB.inst().get_cards_info(names=names, card_fields=card_fields)
+        LOGGER.info("Request completed tool=get_card_info names=%s", names)
+        return result
+
     @mcp.tool()
     def search_triggers(query: str, n_results: int = 10) -> str:
         """Find cards whose triggers (costs, conditions) semantically match the query.
@@ -162,8 +188,8 @@ def run_server() -> None:
         return result
 
     LOGGER.info(
-        "Tools registered: semantic_search_card, plain_search_card, append_cards_to_deck, "
-        "search_triggers, search_effects; entering mcp.run(transport=stdio)",
+        "Tools registered: semantic_search_card, plain_search_card, get_card_info, "
+        "append_cards_to_deck, search_triggers, search_effects; entering mcp.run(transport=stdio)",
     )
     mcp.run(transport="stdio")
 
