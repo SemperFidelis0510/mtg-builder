@@ -5,6 +5,7 @@ import re
 from dataclasses import dataclass, field, fields
 from typing import Any
 
+from src.config.keyword_explanations import expand_keywords as _expand_keywords
 from src.config.thresholds import classify as _classify_value
 
 
@@ -180,13 +181,15 @@ class Card:
         return template.format_map(values)
 
     def normalize_oracle_text(self) -> str:
-        """Return oracle text normalized for RAG: card name in text replaced with 'this card'."""
+        """Return oracle text normalized for RAG: card name replaced with 'this card', keywords expanded with explanations."""
         raw = self.text.strip()
         if not raw:
             return "(Vanilla)"
         if not self.name:
-            return raw
-        return re.sub(re.escape(self.name), "this card", raw, flags=re.IGNORECASE)
+            text = raw
+        else:
+            text = re.sub(re.escape(self.name), "this card", raw, flags=re.IGNORECASE)
+        return _expand_keywords(text)
 
     def to_rag_document(self) -> str:
         """Build the document string for RAG indexing: type_line, mana_cost, color_identity,
