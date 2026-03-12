@@ -8,9 +8,10 @@ export function initAdvSearchModal() {
   const closeBtn = document.getElementById('advSearchModalClose');
   document.getElementById('advancedSearchBtn').addEventListener('click', () => {
     const params = new URLSearchParams({ t: String(Date.now()) });
-    const { colors, format } = getSettings();
+    const { colors, format, colorlessOnly } = getSettings();
     if (colors && colors.length) params.set('deck_colors', colors.join(','));
     if (format) params.set('deck_format', format);
+    if (colorlessOnly) params.set('deck_colorless', 'true');
     iframe.src = '/search?' + params.toString();
     modal.classList.add('open');
     modal.setAttribute('aria-hidden', 'false');

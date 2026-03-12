@@ -2,6 +2,7 @@
 
 import { typeLineToSectionKey } from './utils.js';
 import { addCardToDeck } from './deck.js';
+import { renderDeck } from './render.js';
 import { getSettings } from './settings.js';
 
 let autocompleteDebounceTimer = null;
@@ -50,8 +51,11 @@ function selectAutocomplete(name) {
         body: JSON.stringify({ name }),
       }).then((r) => {
         if (!r.ok) return r.json().then((err) => { throw new Error(err.detail || 'Add failed'); });
-        msgEl.textContent = 'Added: ' + name;
-        msgEl.className = 'search-msg';
+        return r.json().then((deckData) => {
+          renderDeck(deckData);
+          msgEl.textContent = 'Added: ' + name;
+          msgEl.className = 'search-msg';
+        });
       });
     })
     .catch(() => {
@@ -66,9 +70,13 @@ function runAutocomplete(query) {
     hideAutocomplete();
     return;
   }
-  const { colors, format } = getSettings();
+  const { colors, format, colorlessOnly } = getSettings();
   const params = new URLSearchParams({ q: query });
-  if (colors && colors.length) params.set('colors', colors.join(','));
+  if (colorlessOnly) {
+    params.set('colorless_only', 'true');
+  } else if (colors && colors.length) {
+    params.set('colors', colors.join(','));
+  }
   if (format) params.set('format', format);
   autocompleteAbort = new AbortController();
   fetch('/api/autocomplete?' + params.toString(), { signal: autocompleteAbort.signal })
@@ -109,10 +117,13 @@ function doSearch() {
         body: JSON.stringify({ name }),
       }).then((r) => {
         if (!r.ok) return r.json().then((err) => { throw new Error(err.detail || 'Add failed'); });
-        msgEl.textContent = 'Added: ' + name;
-        msgEl.className = 'search-msg';
-        input.value = '';
-        input.focus();
+        return r.json().then((deckData) => {
+          renderDeck(deckData);
+          msgEl.textContent = 'Added: ' + name;
+          msgEl.className = 'search-msg';
+          input.value = '';
+          input.focus();
+        });
       }).catch((err) => {
         msgEl.textContent = err.message || 'Add failed';
         msgEl.className = 'search-msg error';

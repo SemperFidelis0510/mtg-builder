@@ -27,15 +27,29 @@ def _normalize_cards_arg(
     return out
 
 
-_TYPE_KEYS: list[str] = ["creatures", "non_creatures", "spells", "lands"]
+# Display order: creature, instant, sorcery, artifact, enchantment, planeswalker, land (land last)
+_TYPE_KEYS: list[str] = [
+    "creature",
+    "instant",
+    "sorcery",
+    "artifact",
+    "enchantment",
+    "planeswalker",
+    "land",
+]
 _TYPE_LABELS: dict[str, str] = {
-    "creatures": "Creatures",
-    "non_creatures": "Non-creatures",
-    "spells": "Spells",
-    "lands": "Lands",
+    "creature": "Creature",
+    "instant": "Instant",
+    "sorcery": "Sorcery",
+    "artifact": "Artifact",
+    "enchantment": "Enchantment",
+    "planeswalker": "Planeswalker",
+    "land": "Land",
 }
 # Reverse map for goldfish import: section label -> type key
 _TYPE_LABEL_TO_KEY: dict[str, str] = {v: k for k, v in _TYPE_LABELS.items()}
+# Legacy keys (old 4-type) -> map to new keys for from_dict
+_LEGACY_TYPE_KEYS: list[str] = ["creatures", "non_creatures", "spells", "lands"]
 # Goldfish sideboard section header (label only, no type key)
 _GOLDFISH_SIDEBOARD_LABEL: str = "Sideboard"
 # Standalone sideboard line (no "//") for Moxfield-style pastes when Goldfish is selected
@@ -45,19 +59,27 @@ _SIDEBOARD_LINE_LOWER: frozenset[str] = frozenset(
 
 
 def _type_line_to_key(type_line: str) -> str:
-    """Map MTG type_line to type key: lands, creatures, non_creatures, or spells."""
+    """Map MTG type_line to one of: creature, instant, sorcery, artifact, enchantment, planeswalker, land.
+    For multi-type cards we use priority: land > creature > instant > sorcery > artifact > enchantment > planeswalker.
+    """
     if not type_line or not isinstance(type_line, str):
-        return "spells"
+        return "sorcery"
     t: str = type_line.lower()
     if "land" in t:
-        return "lands"
+        return "land"
     if "creature" in t:
-        return "creatures"
-    if "planeswalker" in t or "artifact" in t or "enchantment" in t:
-        return "non_creatures"
-    if "instant" in t or "sorcery" in t:
-        return "spells"
-    return "spells"
+        return "creature"
+    if "instant" in t:
+        return "instant"
+    if "sorcery" in t:
+        return "sorcery"
+    if "artifact" in t:
+        return "artifact"
+    if "enchantment" in t:
+        return "enchantment"
+    if "planeswalker" in t:
+        return "planeswalker"
+    return "sorcery"
 
 
 def _resolve_name_to_type_key(card_name: str) -> tuple[str, str]:
@@ -122,6 +144,7 @@ class Deck:
         colors: Deck colors (e.g. list of "W", "U", "B", "R", "G").
         description: Optional deck description.
         format: Deck format (e.g. "commander", "standard", "modern").
+        colorless_only: If True, deck is colorless-only (search filters for colorless cards).
         cards: Full list of Card objects in the main deck (duplicates for multiple copies).
         maybe: Maybe board: list of Card (same form as cards); not counted in type buckets.
         sideboard: Sideboard: list of Card (same form as cards); not counted in type buckets.
@@ -145,6 +168,7 @@ class Deck:
         colors: list[str] | None = None,
         description: str = "",
         format: str = "",
+        colorless_only: bool = False,
         cards: list["Card"] | list[dict] | None = None,
         maybe: list["Card"] | list[dict] | None = None,
         sideboard: list["Card"] | list[dict] | None = None,
@@ -155,29 +179,42 @@ class Deck:
         self.colors: list[str] = list(colors) if colors is not None else []
         self.description: str = description
         self.format: str = format
+        self.colorless_only: bool = colorless_only
         self.cards: list["Card"] = _normalize_cards_arg(cards, CardCls)
         self.maybe: list["Card"] = _normalize_cards_arg(maybe, CardCls)
         self.sideboard: list["Card"] = _normalize_cards_arg(sideboard, CardCls)
 
-    @property
-    def creatures(self) -> list[str]:
-        """Card names that are creatures (computed from self.cards)."""
-        return [c.name for c in self.cards if _type_line_to_key(c.type_line) == "creatures"]
+    def _names_by_type_key(self, key: str) -> list[str]:
+        """Card names in self.cards whose type_line maps to the given type key."""
+        return [c.name for c in self.cards if _type_line_to_key(c.type_line) == key]
 
     @property
-    def non_creatures(self) -> list[str]:
-        """Card names that are artifacts, enchantments, or planeswalkers (computed from self.cards)."""
-        return [c.name for c in self.cards if _type_line_to_key(c.type_line) == "non_creatures"]
+    def creature(self) -> list[str]:
+        return self._names_by_type_key("creature")
 
     @property
-    def spells(self) -> list[str]:
-        """Card names that are instants or sorceries (computed from self.cards)."""
-        return [c.name for c in self.cards if _type_line_to_key(c.type_line) == "spells"]
+    def instant(self) -> list[str]:
+        return self._names_by_type_key("instant")
 
     @property
-    def lands(self) -> list[str]:
-        """Card names that are lands (computed from self.cards)."""
-        return [c.name for c in self.cards if _type_line_to_key(c.type_line) == "lands"]
+    def sorcery(self) -> list[str]:
+        return self._names_by_type_key("sorcery")
+
+    @property
+    def artifact(self) -> list[str]:
+        return self._names_by_type_key("artifact")
+
+    @property
+    def enchantment(self) -> list[str]:
+        return self._names_by_type_key("enchantment")
+
+    @property
+    def planeswalker(self) -> list[str]:
+        return self._names_by_type_key("planeswalker")
+
+    @property
+    def land(self) -> list[str]:
+        return self._names_by_type_key("land")
 
     def add_cards(self, names: list[str]) -> None:
         """Resolve card names to Card objects from the card database and append them to this deck.
@@ -251,7 +288,7 @@ class Deck:
         if fmt == "goldfish":
             goldfish_lines: list[str] = []
             for key in _TYPE_KEYS:
-                arr: list[str] = getattr(self, key, None) or []
+                arr = getattr(self, key, None)
                 if not isinstance(arr, list) or not arr:
                     continue
                 counts_g: Counter[str] = Counter(arr)
@@ -303,6 +340,7 @@ class Deck:
             "colors": list(self.colors),
             "description": self.description,
             "format": self.format,
+            "colorless_only": self.colorless_only,
             "cards": [c.name for c in self.cards],
             "maybe": [c.name for c in self.maybe],
             "sideboard": [c.name for c in self.sideboard],
@@ -327,26 +365,20 @@ class Deck:
             cards_arg = cls._cards_list_from_data(data["cards"])
         else:
             all_names: list[str] = []
-            if "creatures" in data and isinstance(data["creatures"], list):
-                all_names.extend(data["creatures"])
-            non_creatures: list[str] = []
-            if "non_creatures" in data and isinstance(data["non_creatures"], list):
-                non_creatures = data["non_creatures"]
-            else:
-                for key in ("artifacts", "enchantments", "planeswalkers"):
-                    if key in data and isinstance(data[key], list):
-                        non_creatures.extend(data[key])
-            all_names.extend(non_creatures)
-            spells: list[str] = []
-            if "spells" in data and isinstance(data["spells"], list):
-                spells = data["spells"]
-            else:
-                for key in ("instants", "sorceries"):
-                    if key in data and isinstance(data[key], list):
-                        spells.extend(data[key])
-            all_names.extend(spells)
-            if "lands" in data and isinstance(data["lands"], list):
-                all_names.extend(data["lands"])
+            # New 7-type keys
+            for key in _TYPE_KEYS:
+                if key in data and isinstance(data[key], list):
+                    all_names.extend(data[key])
+            # Legacy 4-type keys (creatures, non_creatures, spells, lands)
+            if not all_names:
+                if "creatures" in data and isinstance(data["creatures"], list):
+                    all_names.extend(data["creatures"])
+                if "non_creatures" in data and isinstance(data["non_creatures"], list):
+                    all_names.extend(data["non_creatures"])
+                if "spells" in data and isinstance(data["spells"], list):
+                    all_names.extend(data["spells"])
+                if "lands" in data and isinstance(data["lands"], list):
+                    all_names.extend(data["lands"])
             if all_names:
                 cards_arg = _cards_from_names(all_names)
 
@@ -362,6 +394,7 @@ class Deck:
             colors=data["colors"] if "colors" in data else None,
             description=data["description"] if "description" in data else "",
             format=data["format"] if "format" in data else "",
+            colorless_only=data["colorless_only"] if "colorless_only" in data else False,
             cards=cards_arg,
             maybe=maybe_arg,
             sideboard=sideboard_arg,
@@ -407,10 +440,7 @@ class Deck:
 
         if fmt == "arena":
             print("[Deck.from_export_text] parsing arena; lines=%d" % len(raw.splitlines()))
-            creatures: list[str] = []
-            non_creatures: list[str] = []
-            spells: list[str] = []
-            lands: list[str] = []
+            by_type_arena: dict[str, list[str]] = {k: [] for k in _TYPE_KEYS}
             sideboard_names_arena: list[str] = []
             parsing_sideboard: bool = False
             for line in raw.splitlines():
@@ -439,18 +469,15 @@ class Deck:
                     for _ in range(count):
                         sideboard_names_arena.append(canonical_name)
                 else:
-                    target: list[str] = (
-                        creatures
-                        if type_key == "creatures"
-                        else non_creatures
-                        if type_key == "non_creatures"
-                        else spells
-                        if type_key == "spells"
-                        else lands
-                    )
-                    for _ in range(count):
-                        target.append(canonical_name)
-            all_names_arena: list[str] = creatures + non_creatures + spells + lands
+                    if type_key in by_type_arena:
+                        for _ in range(count):
+                            by_type_arena[type_key].append(canonical_name)
+                    else:
+                        for _ in range(count):
+                            by_type_arena["sorcery"].append(canonical_name)
+            all_names_arena: list[str] = []
+            for key in _TYPE_KEYS:
+                all_names_arena.extend(by_type_arena[key])
             print("[Deck.from_export_text] arena names count=%d sideboard=%d" % (len(all_names_arena), len(sideboard_names_arena)))
             cards_arena: list["Card"] = _cards_from_names(all_names_arena) if all_names_arena else []
             sb_cards_arena: list["Card"] = _cards_from_names(sideboard_names_arena) if sideboard_names_arena else []
@@ -459,10 +486,7 @@ class Deck:
 
         if fmt == "goldfish":
             print("[Deck.from_export_text] parsing goldfish; lines=%d" % len(raw.splitlines()))
-            creatures_g: list[str] = []
-            non_creatures_g: list[str] = []
-            spells_g: list[str] = []
-            lands_g: list[str] = []
+            by_type_g: dict[str, list[str]] = {k: [] for k in _TYPE_KEYS}
             sideboard_names_g: list[str] = []
             current_key: str | None = None
             for line in raw.splitlines():
@@ -495,30 +519,16 @@ class Deck:
                     for _ in range(count_g):
                         sideboard_names_g.append(canonical_g)
                 elif current_key is None:
-                    target_g = (
-                        creatures_g
-                        if type_key_g == "creatures"
-                        else non_creatures_g
-                        if type_key_g == "non_creatures"
-                        else spells_g
-                        if type_key_g == "spells"
-                        else lands_g
-                    )
+                    target_key = type_key_g if type_key_g in by_type_g else "sorcery"
                     for _ in range(count_g):
-                        target_g.append(canonical_g)
+                        by_type_g[target_key].append(canonical_g)
                 else:
-                    target_g = (
-                        creatures_g
-                        if current_key == "creatures"
-                        else non_creatures_g
-                        if current_key == "non_creatures"
-                        else spells_g
-                        if current_key == "spells"
-                        else lands_g
-                    )
+                    target_key = current_key if current_key in by_type_g else "sorcery"
                     for _ in range(count_g):
-                        target_g.append(canonical_g)
-            all_names_g: list[str] = creatures_g + non_creatures_g + spells_g + lands_g
+                        by_type_g[target_key].append(canonical_g)
+            all_names_g: list[str] = []
+            for key in _TYPE_KEYS:
+                all_names_g.extend(by_type_g[key])
             print("[Deck.from_export_text] goldfish names count=%d sideboard=%d" % (len(all_names_g), len(sideboard_names_g)))
             cards_g: list["Card"] = _cards_from_names(all_names_g) if all_names_g else []
             sb_cards_g: list["Card"] = _cards_from_names(sideboard_names_g) if sideboard_names_g else []

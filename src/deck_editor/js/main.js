@@ -39,7 +39,7 @@ document.getElementById('expandAllBtn').addEventListener('click', () => {
 
 document.getElementById('clearAllBtn').addEventListener('click', () => {
   if (!confirm('Clear all cards from the deck (including sideboard and maybe board)?')) return;
-  populateSettings({ name: '', description: '', colors: [], format: '' });
+  populateSettings({ name: '', description: '', colors: [], format: '', colorless_only: false });
   TYPE_KEYS.forEach((key) => {
     const listEl = document.getElementById('list-' + key);
     if (listEl) {
@@ -54,6 +54,27 @@ document.getElementById('clearAllBtn').addEventListener('click', () => {
       updateSectionHeaderTotal(listEl);
     }
   });
+  const state = collectState();
+  const body = {
+    name: state.name,
+    colors: state.colors,
+    description: state.description,
+    format: state.format,
+    colorless_only: state.colorless_only,
+    creature: state.creature,
+    instant: state.instant,
+    sorcery: state.sorcery,
+    artifact: state.artifact,
+    enchantment: state.enchantment,
+    planeswalker: state.planeswalker,
+    land: state.land,
+    maybe: state.maybe,
+    sideboard: state.sideboard,
+  };
+  fetch('/api/deck', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    .then((r) => r.ok ? r.json() : Promise.reject(new Error('Clear sync failed')))
+    .then(renderDeck)
+    .catch(() => {});
 });
 
 document.getElementById('clearMaybeBtn').addEventListener('click', (e) => {
@@ -75,10 +96,14 @@ document.getElementById('saveBtn').addEventListener('click', () => {
     colors: state.colors,
     description: state.description,
     format: state.format,
-    creatures: state.creatures,
-    non_creatures: state.non_creatures,
-    spells: state.spells,
-    lands: state.lands,
+    colorless_only: state.colorless_only,
+    creature: state.creature,
+    instant: state.instant,
+    sorcery: state.sorcery,
+    artifact: state.artifact,
+    enchantment: state.enchantment,
+    planeswalker: state.planeswalker,
+    land: state.land,
     maybe: state.maybe,
     sideboard: state.sideboard,
   };

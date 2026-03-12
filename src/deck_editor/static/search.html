@@ -208,25 +208,11 @@
     <div class="form-row">
       <div>
         <label>Colors</label>
-        <div class="colors-row">
-          <label class="color-chip color-W" title="White"><input type="checkbox" id="cW" name="color" value="W"></label>
-          <label class="color-chip color-U" title="Blue"><input type="checkbox" id="cU" name="color" value="U"></label>
-          <label class="color-chip color-B" title="Black"><input type="checkbox" id="cB" name="color" value="B"></label>
-          <label class="color-chip color-R" title="Red"><input type="checkbox" id="cR" name="color" value="R"></label>
-          <label class="color-chip color-G" title="Green"><input type="checkbox" id="cG" name="color" value="G"></label>
-          <label class="color-chip color-C" title="Colorless"><input type="checkbox" id="cC" name="colorless"></label>
-        </div>
+        <div id="colorsContainer"></div>
       </div>
       <div>
         <label>Color identity</label>
-        <div class="colors-row" id="colorIdentityRow">
-          <label class="color-chip color-W" title="White"><input type="checkbox" name="color_identity" value="W"></label>
-          <label class="color-chip color-U" title="Blue"><input type="checkbox" name="color_identity" value="U"></label>
-          <label class="color-chip color-B" title="Black"><input type="checkbox" name="color_identity" value="B"></label>
-          <label class="color-chip color-R" title="Red"><input type="checkbox" name="color_identity" value="R"></label>
-          <label class="color-chip color-G" title="Green"><input type="checkbox" name="color_identity" value="G"></label>
-          <label class="color-chip color-C" title="Colorless"><input type="checkbox" id="ciC" name="color_identity_colorless"></label>
-        </div>
+        <div id="colorIdentityContainer"></div>
       </div>
       <div>
         <label for="mana_value_min">Mana cost min</label>
@@ -402,24 +388,6 @@
     document.getElementById('type').addEventListener('change', updateSubtypeOptions);
     updateSubtypeOptions();
 
-    (function () {
-      var params = new URLSearchParams(window.location.search);
-      var deckColors = params.get('deck_colors');
-      var deckFormat = params.get('deck_format');
-      if (deckColors) {
-        var colors = deckColors.split(',').map(function (c) { return c.trim().toUpperCase(); }).filter(Boolean);
-        document.querySelectorAll('input[name="color"]').forEach(function (input) {
-          input.checked = colors.indexOf(input.value) !== -1;
-        });
-        document.querySelectorAll('input[name="color_identity"]').forEach(function (input) {
-          input.checked = colors.indexOf(input.value) !== -1;
-        });
-      }
-      if (deckFormat) {
-        var formatEl = document.getElementById('format_legal');
-        if (formatEl && deckFormat.trim()) formatEl.value = deckFormat.trim();
-      }
-    })();
 
     (function () {
       var container = document.getElementById('oracleTextEntries');
@@ -710,6 +678,34 @@
         });
       }
     });
+  </script>
+  <script type="module">
+    import { createColorPalette, setColorPaletteValues } from '/js/color-palette.js';
+
+    document.getElementById('colorsContainer').appendChild(
+      createColorPalette({ name: 'color', colorlessName: 'colorless', idPrefix: 'c' })
+    );
+    document.getElementById('colorIdentityContainer').appendChild(
+      createColorPalette({ name: 'color_identity', colorlessName: 'color_identity_colorless', idPrefix: 'ci' })
+    );
+
+    var params = new URLSearchParams(window.location.search);
+    var deckColors = params.get('deck_colors');
+    var deckFormat = params.get('deck_format');
+    var deckColorless = params.get('deck_colorless') === 'true';
+
+    if (deckColorless) {
+      setColorPaletteValues(document.getElementById('colorsContainer'), [], true);
+      setColorPaletteValues(document.getElementById('colorIdentityContainer'), [], true);
+    } else if (deckColors) {
+      var colors = deckColors.split(',').map(function (c) { return c.trim().toUpperCase(); }).filter(Boolean);
+      setColorPaletteValues(document.getElementById('colorsContainer'), colors, false);
+      setColorPaletteValues(document.getElementById('colorIdentityContainer'), colors, false);
+    }
+    if (deckFormat) {
+      var formatEl = document.getElementById('format_legal');
+      if (formatEl && deckFormat.trim()) formatEl.value = deckFormat.trim();
+    }
   </script>
 </body>
 </html>

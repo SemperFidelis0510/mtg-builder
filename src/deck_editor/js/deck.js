@@ -192,7 +192,7 @@ export function updateTotalsPanel() {
         n += parseInt(el.getAttribute('data-count') || '1', 10);
       });
       total += n;
-      if (key === 'lands') landCount = n;
+      if (key === 'land') landCount = n;
     }
   });
   const nonLand = total - landCount;
@@ -236,10 +236,14 @@ export function syncDeckToServer() {
       colors: state.colors,
       description: state.description,
       format: state.format,
-      creatures: state.creatures,
-      non_creatures: state.non_creatures,
-      spells: state.spells,
-      lands: state.lands,
+      colorless_only: state.colorless_only,
+      creature: state.creature,
+      instant: state.instant,
+      sorcery: state.sorcery,
+      artifact: state.artifact,
+      enchantment: state.enchantment,
+      planeswalker: state.planeswalker,
+      land: state.land,
       maybe: state.maybe,
       sideboard: state.sideboard,
     };
@@ -272,6 +276,7 @@ export function collectState() {
     colors: meta.colors,
     description: meta.description,
     format: meta.format,
+    colorless_only: meta.colorlessOnly,
   };
   TYPE_KEYS.forEach((key) => {
     deck[key] = expandList(document.getElementById('list-' + key));
@@ -284,7 +289,7 @@ export function collectState() {
 export function getDeckMeta() {
   return fetch('/api/deck/meta')
     .then((r) => {
-      if (!r.ok) return { name: '', colors: [], description: '', format: '' };
+      if (!r.ok) return { name: '', colors: [], description: '', format: '', colorless_only: false };
       return r.json();
     })
     .then((data) => ({
@@ -292,6 +297,7 @@ export function getDeckMeta() {
       colors: Array.isArray(data.colors) ? data.colors : [],
       description: data.description != null ? data.description : '',
       format: data.format != null ? data.format : '',
+      colorless_only: data.colorless_only === true,
     }))
-    .catch(() => ({ name: '', colors: [], description: '', format: '' }));
+    .catch(() => ({ name: '', colors: [], description: '', format: '', colorless_only: false }));
 }

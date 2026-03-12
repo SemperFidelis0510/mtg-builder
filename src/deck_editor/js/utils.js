@@ -38,11 +38,14 @@ export function suggestedSaveName() {
 }
 
 export function typeLineToSectionKey(typeLine) {
-  if (!typeLine || typeof typeLine !== 'string') return 'spells';
+  if (!typeLine || typeof typeLine !== 'string') return 'sorcery';
   const t = typeLine.toLowerCase();
-  if (t.indexOf('land') !== -1) return 'lands';
-  if (t.indexOf('creature') !== -1) return 'creatures';
-  if (t.indexOf('planeswalker') !== -1 || t.indexOf('artifact') !== -1 || t.indexOf('enchantment') !== -1) return 'non_creatures';
-  if (t.indexOf('instant') !== -1 || t.indexOf('sorcery') !== -1) return 'spells';
-  return 'spells';
+  if (t.indexOf('land') !== -1) return 'land';
+  if (t.indexOf('creature') !== -1) return 'creature';
+  if (t.indexOf('instant') !== -1) return 'instant';
+  if (t.indexOf('sorcery') !== -1) return 'sorcery';
+  if (t.indexOf('artifact') !== -1) return 'artifact';
+  if (t.indexOf('enchantment') !== -1) return 'enchantment';
+  if (t.indexOf('planeswalker') !== -1) return 'planeswalker';
+  return 'sorcery';
 }

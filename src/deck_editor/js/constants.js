@@ -1,17 +1,23 @@
-/** Shared constants for deck editor type keys and labels. */
+/** Shared constants for deck editor type keys and labels. Order: land last. */
 
 export const TYPE_KEYS = [
-  'creatures',
-  'non_creatures',
-  'spells',
-  'lands',
+  'creature',
+  'instant',
+  'sorcery',
+  'artifact',
+  'enchantment',
+  'planeswalker',
+  'land',
 ];
 
 export const TYPE_LABELS = {
-  creatures: 'Creatures',
-  non_creatures: 'Non-creatures',
-  spells: 'Spells',
-  lands: 'Lands',
+  creature: 'Creature',
+  instant: 'Instant',
+  sorcery: 'Sorcery',
+  artifact: 'Artifact',
+  enchantment: 'Enchantment',
+  planeswalker: 'Planeswalker',
+  land: 'Land',
 };
 
 export const SIDE_LABELS = {

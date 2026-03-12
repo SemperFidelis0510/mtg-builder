@@ -686,13 +686,13 @@ body {
 @media (max-width: 900px) {
   .deck-settings-row { flex-wrap: wrap; }
 }
-.deck-settings-colors.colors-row {
+.colors-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
 }
-.deck-settings-colors .color-chip {
+.colors-row .color-chip {
   width: 28px;
   height: 28px;
   border-radius: 6px;
@@ -703,10 +703,10 @@ body {
   border: 2px solid transparent;
   position: relative;
 }
-.deck-settings-colors .color-chip:hover { border-color: var(--text); }
-.deck-settings-colors .color-chip:has(input:checked) { border-color: #fff; box-shadow: 0 0 0 2px var(--bg); }
-.deck-settings-colors .color-chip:has(input:checked)::after {
-  content: "✓";
+.colors-row .color-chip:hover { border-color: var(--text); }
+.colors-row .color-chip:has(input:checked) { border-color: #fff; box-shadow: 0 0 0 2px var(--bg); }
+.colors-row .color-chip:has(input:checked)::after {
+  content: "\2713";
   position: absolute;
   inset: 0;
   display: flex;
@@ -717,8 +717,9 @@ body {
   color: #222;
   pointer-events: none;
 }
-.deck-settings-colors .color-chip.color-B:has(input:checked)::after { color: #fff; }
-.deck-settings-colors .color-chip input {
+.colors-row .color-chip.color-B:has(input:checked)::after,
+.colors-row .color-chip.color-C:has(input:checked)::after { color: #fff; }
+.colors-row .color-chip input {
   margin: 0;
   opacity: 0;
   position: absolute;
@@ -728,8 +729,9 @@ body {
   cursor: pointer;
   z-index: 1;
 }
-.deck-settings-colors .color-W { background: #f0e6d8; }
-.deck-settings-colors .color-U { background: #a8d0e6; }
-.deck-settings-colors .color-B { background: #3d3d3d; }
-.deck-settings-colors .color-R { background: #d3544a; }
-.deck-settings-colors .color-G { background: #7cb35b; }
+.color-W { background: #f0e6d8; }
+.color-U { background: #a8d0e6; }
+.color-B { background: #3d3d3d; }
+.color-R { background: #d3544a; }
+.color-G { background: #7cb35b; }
+.color-C { background: #888; }

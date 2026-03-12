@@ -76,16 +76,16 @@ function renderStatsCharts(stats) {
   }
 }
 
+function countForSection(deck, key, maybeByType, sideboardByType) {
+  const main = Array.isArray(deck[key]) ? deck[key].length : 0;
+  const maybe = (maybeByType && Array.isArray(maybeByType[key])) ? maybeByType[key].length : 0;
+  const side = (sideboardByType && Array.isArray(sideboardByType[key])) ? sideboardByType[key].length : 0;
+  return main + maybe + side;
+}
+
 export function renderDeck(data) {
   const container = document.getElementById('deckSections');
   const statsContainer = document.getElementById('statisticsContainer');
-  const collapsedTypes = new Set();
-  if (container) {
-    container.querySelectorAll('.section.collapsed[data-type]').forEach((el) => {
-      const t = el.getAttribute('data-type');
-      if (t) collapsedTypes.add(t);
-    });
-  }
   if (statsPieChartInstance) {
     statsPieChartInstance.destroy();
     statsPieChartInstance = null;
@@ -96,26 +96,29 @@ export function renderDeck(data) {
   }
   container.innerHTML = '';
   if (statsContainer) statsContainer.innerHTML = '';
-  const deck = data.deck || {};
+  const deck = data.deck || data;
   const stats = data.stats || {};
+  const maybeByType = deck.maybe_by_type || {};
+  const sideboardByType = deck.sideboard_by_type || {};
   window._deckPrices = deck.prices != null && typeof deck.prices === 'object' ? deck.prices : {};
   window._lastStats = stats;
 
   TYPE_KEYS.forEach((key) => {
+    const totalForSection = countForSection(deck, key, maybeByType, sideboardByType);
+    if (totalForSection === 0) return;
     const cards = Array.isArray(deck[key]) ? deck[key] : [];
     const stacks = collapseToStacks(cards);
     const section = document.createElement('div');
-    section.className = 'section';
+    section.className = 'section collapsed';
     section.dataset.type = key;
     const total = cards.length;
     section.innerHTML =
-      '<div class="section-header">' + (TYPE_LABELS[key] || key) + ' (' + total + ')</div>' +
+      '<div class="section-header"><span class="section-header-label">' + (TYPE_LABELS[key] || key) + ' (' + total + ')</span></div>' +
       '<div class="section-body"><ul class="card-list" id="list-' + key + '"></ul></div>';
     const list = section.querySelector('.card-list');
     stacks.forEach((s) => {
       list.appendChild(makeCardStackEl(s.name, s.count));
     });
-    if (collapsedTypes.has(key)) section.classList.add('collapsed');
     container.appendChild(section);
   });
 
@@ -146,7 +149,7 @@ export function renderDeck(data) {
 
   const sideKeys = ['maybe', 'sideboard'];
   sideKeys.forEach((key) => {
-    const names = Array.isArray(deck[key + '_names']) ? deck[key + '_names'] : Array.isArray(deck[key]) ? deck[key] : [];
+    const names = Array.isArray(deck[key + '_names']) ? deck[key + '_names'] : (Array.isArray(deck[key]) ? deck[key] : []);
     const listEl = document.getElementById('list-' + key);
     if (listEl) {
       listEl.innerHTML = '';

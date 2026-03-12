@@ -57,12 +57,15 @@ def _startup_refresh_prices() -> None:
         thread.start()
 
 
-# Type-group keys used by the client (order for display): creatures, non-creatures (artifacts/enchantments/planeswalkers), spells (instants/sorceries), lands
+# Type-group keys used by the client (order: creature, instant, sorcery, artifact, enchantment, planeswalker, land)
 TYPE_KEYS: list[str] = [
-    "creatures",
-    "non_creatures",
-    "spells",
-    "lands",
+    "creature",
+    "instant",
+    "sorcery",
+    "artifact",
+    "enchantment",
+    "planeswalker",
+    "land",
 ]
 
 
@@ -93,7 +96,7 @@ def _compute_deck_stats(deck: Deck) -> dict:
         if not isinstance(lst, list):
             continue
         total_cards += len(lst)
-        if key == "lands":
+        if key == "land":
             land_count = len(lst)
         all_names.extend(lst)
     non_land: int = total_cards - land_count
@@ -128,12 +131,12 @@ def _compute_deck_stats(deck: Deck) -> dict:
     # Mana value histogram for non-land cards: creatures vs non-creatures (buckets 0..6, 7+)
     mv_creatures: list[int] = [0] * 8
     mv_non_creatures: list[int] = [0] * 8
-    creature_names: list[str] = list(getattr(deck, "creatures", None) or [])
+    creature_names: list[str] = list(getattr(deck, "creature", None) or [])
     non_creature_non_land: list[str] = []
     for key in TYPE_KEYS:
-        if key in ("lands", "creatures"):
+        if key in ("land", "creature"):
             continue
-        lst: list[str] = getattr(deck, key, None) or []
+        lst = getattr(deck, key, None) or []
         if isinstance(lst, list):
             non_creature_non_land.extend(lst)
     for name in creature_names:
@@ -182,16 +185,28 @@ def _compute_deck_stats(deck: Deck) -> dict:
 def _deck_to_response(deck: Deck) -> dict:
     """Build API response with deck dict and stats.
 
-    The deck dict includes the computed type lists (creatures, non_creatures, spells, lands)
-    and flat name lists for maybe/sideboard in addition to the stored fields.
+    The deck dict includes the computed type lists (creature, instant, sorcery, artifact,
+    enchantment, planeswalker, land), maybe/sideboard name lists, and maybe_by_type /
+    sideboard_by_type for section visibility (counts per type in maybe/sideboard).
     """
     out: dict = deck.to_dict()
-    out["creatures"] = list(deck.creatures)
-    out["non_creatures"] = list(deck.non_creatures)
-    out["spells"] = list(deck.spells)
-    out["lands"] = list(deck.lands)
+    for key in TYPE_KEYS:
+        out[key] = list(getattr(deck, key, None) or [])
     out["maybe_names"] = [c.name for c in deck.maybe]
     out["sideboard_names"] = [c.name for c in deck.sideboard]
+    # Per-type lists for maybe/sideboard so client can show only sections that have cards
+    maybe_by_type: dict[str, list[str]] = {k: [] for k in TYPE_KEYS}
+    for c in deck.maybe:
+        key = _type_line_to_key(getattr(c, "type_line", "") or "")
+        if key in maybe_by_type:
+            maybe_by_type[key].append(c.name)
+    sideboard_by_type: dict[str, list[str]] = {k: [] for k in TYPE_KEYS}
+    for c in deck.sideboard:
+        key = _type_line_to_key(getattr(c, "type_line", "") or "")
+        if key in sideboard_by_type:
+            sideboard_by_type[key].append(c.name)
+    out["maybe_by_type"] = maybe_by_type
+    out["sideboard_by_type"] = sideboard_by_type
     seen_names: set[str] = set()
     out["prices"] = {}
     for c in deck.cards:
@@ -208,19 +223,25 @@ def _sanitize_filename(name: str) -> str:
 
 
 def _type_line_to_key(type_line: str) -> str:
-    """Map MTG type_line string to TYPE_KEYS section: non_creatures (artifact/enchantment/planeswalker) or spells (instant/sorcery)."""
+    """Map MTG type_line to one of TYPE_KEYS. Priority: land > creature > instant > sorcery > artifact > enchantment > planeswalker."""
     if not type_line or not isinstance(type_line, str):
-        return "spells"
+        return "sorcery"
     t: str = type_line.lower()
     if "land" in t:
-        return "lands"
+        return "land"
     if "creature" in t:
-        return "creatures"
-    if "planeswalker" in t or "artifact" in t or "enchantment" in t:
-        return "non_creatures"
-    if "instant" in t or "sorcery" in t:
-        return "spells"
-    return "spells"
+        return "creature"
+    if "instant" in t:
+        return "instant"
+    if "sorcery" in t:
+        return "sorcery"
+    if "artifact" in t:
+        return "artifact"
+    if "enchantment" in t:
+        return "enchantment"
+    if "planeswalker" in t:
+        return "planeswalker"
+    return "sorcery"
 
 
 def _resolve_type_key(card_name: str) -> tuple[str, str]:
@@ -370,15 +391,23 @@ async def autocomplete(
     q: str = Query("", min_length=0),
     colors: str = Query(""),
     deck_format: str = Query("", alias="format"),
+    colorless_only: bool = Query(False),
 ) -> dict:
     """Autocomplete card names by substring; optionally filter by color identity and format legality. Returns { data: [names] }."""
     q_clean: str = (q or "").strip()
     if len(q_clean) < 2:
         return {"data": []}
+    color_identity_arg: str = ""
+    color_identity_colorless_arg: bool = False
+    if colorless_only:
+        color_identity_colorless_arg = True
+    elif colors.strip():
+        color_identity_arg = colors.strip()
     try:
         results = CardDB.inst().filter_cards_list(
             name=q_clean,
-            color_identity=colors.strip() if colors else "",
+            color_identity=color_identity_arg,
+            color_identity_colorless=color_identity_colorless_arg,
             format_legal=deck_format.strip() if deck_format else "",
             n_results=15,
             offset=0,
@@ -480,12 +509,13 @@ async def get_deck() -> dict:
 
 @app.get("/api/deck/meta")
 async def get_deck_meta() -> dict:
-    """Return only deck metadata (name, colors, description, format) without card lists."""
+    """Return only deck metadata (name, colors, description, format, colorless_only) without card lists."""
     return {
         "name": _current_deck.name,
         "colors": list(_current_deck.colors),
         "description": _current_deck.description,
         "format": _current_deck.format,
+        "colorless_only": _current_deck.colorless_only,
     }
 
 
@@ -586,15 +616,19 @@ async def update_deck(body: dict) -> dict:
     deck_format: str = _current_deck.format
     if "format" in body and isinstance(body["format"], str):
         deck_format = body["format"]
+    colorless_only: bool = _current_deck.colorless_only
+    if "colorless_only" in body and isinstance(body["colorless_only"], bool):
+        colorless_only = body["colorless_only"]
 
-    creatures: list[str] = body["creatures"] if "creatures" in body and isinstance(body["creatures"], list) else []
-    non_creatures: list[str] = (
-        body["non_creatures"] if "non_creatures" in body and isinstance(body["non_creatures"], list) else []
-    )
-    spells: list[str] = body["spells"] if "spells" in body and isinstance(body["spells"], list) else []
-    lands: list[str] = body["lands"] if "lands" in body and isinstance(body["lands"], list) else []
-
-    all_names: list[str] = creatures + non_creatures + spells + lands
+    all_names: list[str] = []
+    for key in TYPE_KEYS:
+        lst = body[key] if key in body and isinstance(body[key], list) else []
+        all_names.extend(lst)
+    # Legacy: accept old 4-type keys if new keys not present
+    if not all_names:
+        for leg in ("creatures", "non_creatures", "spells", "lands"):
+            lst = body[leg] if leg in body and isinstance(body[leg], list) else []
+            all_names.extend(lst)
     try:
         cards_list: list[Card] = _cards_from_names(all_names)
     except ValueError as e:
@@ -613,6 +647,7 @@ async def update_deck(body: dict) -> dict:
         colors=colors,
         description=description,
         format=deck_format,
+        colorless_only=colorless_only,
         cards=cards_list,
         maybe=maybe_cards,
         sideboard=sideboard_cards,
