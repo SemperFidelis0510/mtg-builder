@@ -117,6 +117,11 @@ export function renderDeck(data) {
     if (expandedTypes.has(key)) {
       section.classList.remove('collapsed');
     }
+    const maybeCount = (maybeByType[key] || []).length;
+    const sideboardCount = (sideboardByType[key] || []).length;
+    if (total === 0 && maybeCount === 0 && sideboardCount === 0) {
+      section.classList.add('section-hidden');
+    }
     container.appendChild(section);
   });
 

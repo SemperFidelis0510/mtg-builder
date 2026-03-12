@@ -58,12 +58,22 @@ function handleDeckDropTargetAdd(evt) {
         targetList.appendChild(makeCardStackEl(name, count));
       }
       updateSectionHeaderTotal(targetList);
+      const section = targetList.closest('.section');
+      if (section) {
+        section.classList.remove('section-hidden');
+        section.classList.remove('collapsed');
+      }
     })
     .catch(() => {
       const targetList = document.getElementById('list-sorcery');
       if (targetList) {
         targetList.appendChild(makeCardStackEl(name, count));
         updateSectionHeaderTotal(targetList);
+        const section = targetList.closest('.section');
+        if (section) {
+          section.classList.remove('section-hidden');
+          section.classList.remove('collapsed');
+        }
       }
     });
 }
@@ -105,6 +115,10 @@ export function initSortable() {
           animation: 150,
           ghostClass: 'sortable-ghost',
           dragClass: 'sortable-drag',
+          onAdd() {
+            const section = el.closest('.section');
+            if (section) section.classList.remove('collapsed');
+          },
           onEnd() {
             const list = el;
             if (list) updateSectionHeaderTotal(list);

@@ -27,7 +27,7 @@ def _normalize_cards_arg(
     return out
 
 
-# Display order: creature, instant, sorcery, artifact, enchantment, planeswalker, land (land last)
+# Display order: creature, instant, sorcery, artifact, enchantment, planeswalker, battle, land (land last)
 _TYPE_KEYS: list[str] = [
     "creature",
     "instant",
@@ -35,6 +35,7 @@ _TYPE_KEYS: list[str] = [
     "artifact",
     "enchantment",
     "planeswalker",
+    "battle",
     "land",
 ]
 _TYPE_LABELS: dict[str, str] = {
@@ -44,6 +45,7 @@ _TYPE_LABELS: dict[str, str] = {
     "artifact": "Artifact",
     "enchantment": "Enchantment",
     "planeswalker": "Planeswalker",
+    "battle": "Battle",
     "land": "Land",
 }
 # Reverse map for goldfish import: section label -> type key
@@ -59,8 +61,8 @@ _SIDEBOARD_LINE_LOWER: frozenset[str] = frozenset(
 
 
 def _type_line_to_key(type_line: str) -> str:
-    """Map MTG type_line to one of: creature, instant, sorcery, artifact, enchantment, planeswalker, land.
-    For multi-type cards we use priority: land > creature > instant > sorcery > artifact > enchantment > planeswalker.
+    """Map MTG type_line to one of: creature, instant, sorcery, artifact, enchantment, planeswalker, battle, land.
+    For multi-type cards we use priority: land > creature > instant > sorcery > artifact > enchantment > planeswalker > battle.
     """
     if not type_line or not isinstance(type_line, str):
         return "sorcery"
@@ -79,6 +81,8 @@ def _type_line_to_key(type_line: str) -> str:
         return "enchantment"
     if "planeswalker" in t:
         return "planeswalker"
+    if "battle" in t:
+        return "battle"
     return "sorcery"
 
 
@@ -154,6 +158,7 @@ class Deck:
         artifact: (Read-only.) Card names that are artifacts.
         enchantment: (Read-only.) Card names that are enchantments.
         planeswalker: (Read-only.) Card names that are planeswalkers.
+        battle: (Read-only.) Card names that are battles.
         land: (Read-only.) Card names that are lands.
     """
 
@@ -214,6 +219,10 @@ class Deck:
     @property
     def planeswalker(self) -> list[str]:
         return self._names_by_type_key("planeswalker")
+
+    @property
+    def battle(self) -> list[str]:
+        return self._names_by_type_key("battle")
 
     @property
     def land(self) -> list[str]:

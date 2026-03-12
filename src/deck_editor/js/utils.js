@@ -47,5 +47,6 @@ export function typeLineToSectionKey(typeLine) {
   if (t.indexOf('artifact') !== -1) return 'artifact';
   if (t.indexOf('enchantment') !== -1) return 'enchantment';
   if (t.indexOf('planeswalker') !== -1) return 'planeswalker';
+  if (t.indexOf('battle') !== -1) return 'battle';
   return 'sorcery';
 }

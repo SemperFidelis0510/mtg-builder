@@ -7,6 +7,7 @@ export const TYPE_KEYS = [
   'artifact',
   'enchantment',
   'planeswalker',
+  'battle',
   'land',
 ];
 
@@ -17,6 +18,7 @@ export const TYPE_LABELS = {
   artifact: 'Artifact',
   enchantment: 'Enchantment',
   planeswalker: 'Planeswalker',
+  battle: 'Battle',
   land: 'Land',
 };
 

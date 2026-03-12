@@ -57,7 +57,7 @@ def _startup_refresh_prices() -> None:
         thread.start()
 
 
-# Type-group keys used by the client (order: creature, instant, sorcery, artifact, enchantment, planeswalker, land)
+# Type-group keys used by the client (order: creature, instant, sorcery, artifact, enchantment, planeswalker, battle, land)
 TYPE_KEYS: list[str] = [
     "creature",
     "instant",
@@ -65,6 +65,7 @@ TYPE_KEYS: list[str] = [
     "artifact",
     "enchantment",
     "planeswalker",
+    "battle",
     "land",
 ]
 
@@ -233,7 +234,7 @@ def _sanitize_filename(name: str) -> str:
 
 
 def _type_line_to_key(type_line: str) -> str:
-    """Map MTG type_line to one of TYPE_KEYS. Priority: land > creature > instant > sorcery > artifact > enchantment > planeswalker."""
+    """Map MTG type_line to one of TYPE_KEYS. Priority: land > creature > instant > sorcery > artifact > enchantment > planeswalker > battle."""
     if not type_line or not isinstance(type_line, str):
         return "sorcery"
     t: str = type_line.lower()
@@ -251,6 +252,8 @@ def _type_line_to_key(type_line: str) -> str:
         return "enchantment"
     if "planeswalker" in t:
         return "planeswalker"
+    if "battle" in t:
+        return "battle"
     return "sorcery"
 
 

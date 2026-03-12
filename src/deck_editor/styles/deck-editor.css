@@ -443,6 +443,7 @@ body {
 .section.collapsed .section-header { border-radius: 4px; }
 .section.collapsed .section-header::before { transform: rotate(-90deg); }
 .section.collapsed .section-body { display: none; }
+.section.section-hidden { display: none; }
 .section-header:hover { background: #1a4a7a; }
 .section-body {
   padding: 0.5rem;

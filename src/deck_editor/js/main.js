@@ -62,16 +62,12 @@ document.getElementById('clearAllBtn').addEventListener('click', () => {
     description: state.description,
     format: state.format,
     colorless_only: state.colorless_only,
-    creature: state.creature,
-    instant: state.instant,
-    sorcery: state.sorcery,
-    artifact: state.artifact,
-    enchantment: state.enchantment,
-    planeswalker: state.planeswalker,
-    land: state.land,
     maybe: state.maybe,
     sideboard: state.sideboard,
   };
+  TYPE_KEYS.forEach((key) => {
+    body[key] = state[key];
+  });
   fetch('/api/deck', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
     .then((r) => r.ok ? r.json() : Promise.reject(new Error('Clear sync failed')))
     .then(renderDeck)
@@ -108,16 +104,12 @@ document.getElementById('saveBtn').addEventListener('click', () => {
     description: state.description,
     format: state.format,
     colorless_only: state.colorless_only,
-    creature: state.creature,
-    instant: state.instant,
-    sorcery: state.sorcery,
-    artifact: state.artifact,
-    enchantment: state.enchantment,
-    planeswalker: state.planeswalker,
-    land: state.land,
     maybe: state.maybe,
     sideboard: state.sideboard,
   };
+  TYPE_KEYS.forEach((key) => {
+    body[key] = state[key];
+  });
   fetch('/api/deck', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },

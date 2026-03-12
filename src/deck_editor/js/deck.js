@@ -68,8 +68,8 @@ export function makeCardStackEl(name, count) {
     wrap.setAttribute('data-count', String(c));
     badge.textContent = String(c);
     if (c === 0) {
-      li.remove();
       const list = li.parentNode;
+      li.remove();
       if (list && list.id && list.id.indexOf('list-') === 0) updateSectionHeaderTotal(list);
       return;
     }
@@ -188,6 +188,8 @@ export function addCardToDeck(cardName, typeKey) {
     list.appendChild(makeCardStackEl(cardName, 1));
     updateSectionHeaderTotal(list);
   }
+  const section = list.closest('.section');
+  if (section) section.classList.remove('section-hidden');
 }
 
 export function syncDeckToServer() {
@@ -201,16 +203,12 @@ export function syncDeckToServer() {
       description: state.description,
       format: state.format,
       colorless_only: state.colorless_only,
-      creature: state.creature,
-      instant: state.instant,
-      sorcery: state.sorcery,
-      artifact: state.artifact,
-      enchantment: state.enchantment,
-      planeswalker: state.planeswalker,
-      land: state.land,
       maybe: state.maybe,
       sideboard: state.sideboard,
     };
+    TYPE_KEYS.forEach((key) => {
+      body[key] = state[key];
+    });
     fetch('/api/deck', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
