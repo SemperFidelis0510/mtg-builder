@@ -7,6 +7,7 @@ from collections import Counter
 from pathlib import Path
 # from typing import TYPE_CHECKING
 from src.obj.card import Card
+from src.utils.logger import LOGGER
 
 
 def _normalize_cards_arg(
@@ -89,7 +90,6 @@ def _type_line_to_key(type_line: str) -> str:
 def _resolve_name_to_type_key(card_name: str) -> tuple[str, str]:
     """Look up card_name in card data; return (canonical_name, type_key). Raises ValueError if not found."""
     from src.lib.cardDB import CardDB
-    from src.utils.logger import LOGGER
 
     name_clean: str = (card_name or "").strip()
     if not name_clean:
@@ -106,8 +106,7 @@ def _resolve_name_to_type_key(card_name: str) -> tuple[str, str]:
             if c.name.lower() == first_part:
                 key = _type_line_to_key(getattr(c, "type_line", "") or "")
                 return (c.name, key)
-    print("[_resolve_name_to_type_key] card not found: %r" % name_clean)
-    LOGGER.error(0, "from_export_text: card not found: %s", name_clean)
+    LOGGER.error("from_export_text: card not found: %s", name_clean)
     raise ValueError(f"card not found: {name_clean!r}")
 
 
@@ -115,7 +114,6 @@ def _cards_from_names(names: list[str]) -> list["Card"]:
     """Build list of Card from list of card names. Uses CardDB.get_card_data(); raises ValueError if any name not found."""
     from src.lib.cardDB import CardDB
     from src.obj.card import Card
-    from src.utils.logger import LOGGER
 
     if not names:
         return []
@@ -134,7 +132,7 @@ def _cards_from_names(names: list[str]) -> list["Card"]:
         if key not in name_lower_to_card and " // " in name_clean:
             key = name_clean.split(" // ", 1)[0].strip().lower()
         if key not in name_lower_to_card:
-            LOGGER.error(0, "_cards_from_names: card not found: %s", name_clean)
+            LOGGER.error("_cards_from_names: card not found: %s", name_clean)
             raise ValueError(f"_cards_from_names: card not found: {name_clean!r}")
         out.append(name_lower_to_card[key])
     return out
@@ -256,9 +254,7 @@ class Deck:
                 continue
             key = name_clean.lower()
             if key not in name_lower_to_card:
-                from src.utils.logger import LOGGER
-
-                LOGGER.error(0, "add_cards: card not found: %s", name_clean)
+                LOGGER.error("add_cards: card not found: %s", name_clean)
                 raise ValueError(f"add_cards: card not found: {name_clean!r}")
             self.cards.append(name_lower_to_card[key])
 
@@ -428,30 +424,30 @@ class Deck:
         """
         fmt: str = (format or "").strip().lower()
         raw: str = (text or "").strip()
-        print("[Deck.from_export_text] fmt=%r raw_len=%d" % (fmt, len(raw)))
+        LOGGER.debug("from_export_text: fmt=%r raw_len=%d", fmt, len(raw))
         if fmt not in cls.EXPORT_FORMATS:
             raise ValueError(
                 f"unsupported import format {format!r}; use 'arena', 'goldfish', 'moxfield', or 'json'"
             )
         if not raw and fmt != "json":
-            print("[Deck.from_export_text] empty raw, returning empty Deck")
+            LOGGER.debug("from_export_text: empty raw, returning empty Deck")
             return cls()
 
         if fmt == "json":
-            print("[Deck.from_export_text] parsing json")
+            LOGGER.debug("from_export_text: parsing json")
             try:
                 data: dict = json.loads(raw)
             except json.JSONDecodeError as e:
-                print("[Deck.from_export_text] JSONDecodeError:", e)
+                LOGGER.error("from_export_text: JSONDecodeError: %s", e)
                 raise ValueError(f"invalid JSON: {e}") from e
             if not isinstance(data, dict):
                 raise ValueError("JSON root must be an object")
             d = cls.from_dict(data)
-            print("[Deck.from_export_text] json ok; cards=%d" % len(d.cards))
+            LOGGER.debug("from_export_text: json ok; cards=%d", len(d.cards))
             return d
 
         if fmt == "arena":
-            print("[Deck.from_export_text] parsing arena; lines=%d" % len(raw.splitlines()))
+            LOGGER.debug("from_export_text: parsing arena; lines=%d", len(raw.splitlines()))
             by_type_arena: dict[str, list[str]] = {k: [] for k in _TYPE_KEYS}
             sideboard_names_arena: list[str] = []
             parsing_sideboard: bool = False
@@ -472,6 +468,7 @@ class Deck:
                 try:
                     count = int(parts[0])
                 except ValueError:
+                    LOGGER.debug("from_export_text: arena line skipped (invalid count): %r", s_line)
                     continue
                 name_part: str = parts[1].strip()
                 if count <= 0:
@@ -490,14 +487,14 @@ class Deck:
             all_names_arena: list[str] = []
             for key in _TYPE_KEYS:
                 all_names_arena.extend(by_type_arena[key])
-            print("[Deck.from_export_text] arena names count=%d sideboard=%d" % (len(all_names_arena), len(sideboard_names_arena)))
+            LOGGER.debug("from_export_text: arena names count=%d sideboard=%d", len(all_names_arena), len(sideboard_names_arena))
             cards_arena: list["Card"] = _cards_from_names(all_names_arena) if all_names_arena else []
             sb_cards_arena: list["Card"] = _cards_from_names(sideboard_names_arena) if sideboard_names_arena else []
-            print("[Deck.from_export_text] arena ok; cards=%d" % len(cards_arena))
+            LOGGER.debug("from_export_text: arena ok; cards=%d", len(cards_arena))
             return cls(cards=cards_arena, sideboard=sb_cards_arena)
 
         if fmt == "goldfish":
-            print("[Deck.from_export_text] parsing goldfish; lines=%d" % len(raw.splitlines()))
+            LOGGER.debug("from_export_text: parsing goldfish; lines=%d", len(raw.splitlines()))
             by_type_g: dict[str, list[str]] = {k: [] for k in _TYPE_KEYS}
             sideboard_names_g: list[str] = []
             current_key: str | None = None
@@ -522,6 +519,7 @@ class Deck:
                 try:
                     count_g = int(parts[0])
                 except ValueError:
+                    LOGGER.debug("from_export_text: goldfish line skipped (invalid count): %r", s)
                     continue
                 name_g: str = parts[1].strip()
                 if count_g <= 0:
@@ -541,14 +539,14 @@ class Deck:
             all_names_g: list[str] = []
             for key in _TYPE_KEYS:
                 all_names_g.extend(by_type_g[key])
-            print("[Deck.from_export_text] goldfish names count=%d sideboard=%d" % (len(all_names_g), len(sideboard_names_g)))
+            LOGGER.debug("from_export_text: goldfish names count=%d sideboard=%d", len(all_names_g), len(sideboard_names_g))
             cards_g: list["Card"] = _cards_from_names(all_names_g) if all_names_g else []
             sb_cards_g: list["Card"] = _cards_from_names(sideboard_names_g) if sideboard_names_g else []
-            print("[Deck.from_export_text] goldfish ok; cards=%d" % len(cards_g))
+            LOGGER.debug("from_export_text: goldfish ok; cards=%d", len(cards_g))
             return cls(cards=cards_g, sideboard=sb_cards_g)
 
         if fmt == "moxfield":
-            print("[Deck.from_export_text] parsing moxfield; lines=%d" % len(raw.splitlines()))
+            LOGGER.debug("from_export_text: parsing moxfield; lines=%d", len(raw.splitlines()))
             main_names_m: list[str] = []
             sideboard_names_m: list[str] = []
             in_sideboard: bool = False
@@ -571,6 +569,7 @@ class Deck:
                 try:
                     count_m: int = int(count_str)
                 except ValueError:
+                    LOGGER.debug("from_export_text: moxfield line skipped (invalid count): %r", s_m)
                     continue
                 if count_m <= 0:
                     continue
@@ -593,7 +592,7 @@ class Deck:
                         main_names_m.append(canonical_m)
             cards_m: list["Card"] = _cards_from_names(main_names_m) if main_names_m else []
             sb_cards_m: list["Card"] = _cards_from_names(sideboard_names_m) if sideboard_names_m else []
-            print("[Deck.from_export_text] moxfield ok; cards=%d sideboard=%d" % (len(cards_m), len(sb_cards_m)))
+            LOGGER.debug("from_export_text: moxfield ok; cards=%d sideboard=%d", len(cards_m), len(sb_cards_m))
             return cls(cards=cards_m, sideboard=sb_cards_m)
 
         raise ValueError(

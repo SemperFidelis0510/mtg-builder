@@ -40,7 +40,7 @@ def _broadcast(event_type: str, data_dict: dict) -> None:
         try:
             q.put_nowait(lines)
         except asyncio.QueueFull:
-            pass
+            LOGGER.warning("_broadcast: SSE queue full, dropping event %s", event_type)
 
 
 def _notify_deck_updated() -> None:
@@ -290,7 +290,7 @@ def _resolve_type_key(card_name: str) -> tuple[str, str]:
         if c.name.lower() == name_lower:
             key: str = _type_line_to_key(c.type_line)
             return (c.name, key)
-    LOGGER.error(0, "add_card: card not found: %s", name_clean)
+    LOGGER.error( "add_card: card not found: %s", name_clean)
     raise ValueError(f"add_card: card not found: {name_clean!r}")
 
 
@@ -305,7 +305,7 @@ async def serve_editor() -> FileResponse:
     static_dir: Path = Path(__file__).resolve().parent / "static"
     main_path: Path = static_dir / "main.html"
     if not main_path.is_file():
-        LOGGER.error(0, "Deck editor static file not found: %s", main_path)
+        LOGGER.error( "Deck editor static file not found: %s", main_path)
         raise FileNotFoundError(f"Static file not found: {main_path}")
     return FileResponse(main_path)
 
@@ -316,7 +316,7 @@ async def serve_search() -> FileResponse:
     static_dir: Path = Path(__file__).resolve().parent / "static"
     search_path: Path = static_dir / "search.html"
     if not search_path.is_file():
-        LOGGER.error(0, "Deck editor static file not found: %s", search_path)
+        LOGGER.error( "Deck editor static file not found: %s", search_path)
         raise FileNotFoundError(f"Static file not found: {search_path}")
     return FileResponse(
         search_path,
@@ -330,7 +330,7 @@ async def serve_semantic_search() -> FileResponse:
     static_dir: Path = Path(__file__).resolve().parent / "static"
     path: Path = static_dir / "semantic-search.html"
     if not path.is_file():
-        LOGGER.error(0, "Deck editor static file not found: %s", path)
+        LOGGER.error( "Deck editor static file not found: %s", path)
         raise FileNotFoundError(f"Static file not found: {path}")
     return FileResponse(
         path,
@@ -344,7 +344,7 @@ async def serve_export_modal() -> FileResponse:
     static_dir: Path = Path(__file__).resolve().parent / "static"
     path: Path = static_dir / "export-modal.html"
     if not path.is_file():
-        LOGGER.error(0, "Deck editor static file not found: %s", path)
+        LOGGER.error( "Deck editor static file not found: %s", path)
         raise FileNotFoundError(f"Static file not found: {path}")
     return FileResponse(path, headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"})
 
@@ -355,7 +355,7 @@ async def serve_import_modal() -> FileResponse:
     static_dir: Path = Path(__file__).resolve().parent / "static"
     path: Path = static_dir / "import-modal.html"
     if not path.is_file():
-        LOGGER.error(0, "Deck editor static file not found: %s", path)
+        LOGGER.error( "Deck editor static file not found: %s", path)
         raise FileNotFoundError(f"Static file not found: {path}")
     return FileResponse(path, headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"})
 
@@ -487,7 +487,8 @@ async def autocomplete(
             n_results=15,
             offset=0,
         )
-    except ValueError:
+    except ValueError as e:
+        LOGGER.warning("autocomplete: filter_cards_list failed: %s", e)
         return {"data": []}
     return {"data": [c.name for c in results]}
 
@@ -514,7 +515,7 @@ async def load_deck(body: dict) -> dict:
     try:
         _current_deck = Deck.from_dict(body)
     except (KeyError, TypeError) as e:
-        LOGGER.error(0, "load_deck: invalid deck payload: %s", e)
+        LOGGER.error( "load_deck: invalid deck payload: %s", e)
         raise HTTPException(status_code=400, detail=f"Invalid deck payload: {e}") from e
     _notify_deck_updated()
     return _deck_to_response(_current_deck)
@@ -535,7 +536,8 @@ async def sse_events() -> StreamingResponse:
                 msg: str = await queue.get()
                 yield msg
         except asyncio.CancelledError:
-            pass
+            LOGGER.debug("SSE stream cancelled (client disconnected)")
+            raise
         finally:
             _sse_clients.discard(queue)
 
@@ -614,7 +616,7 @@ def _run_price_update_then_notify() -> None:
         CardDB.inst().reload_prices()
         _notify_deck_updated()
     except Exception as e:
-        LOGGER.error(0, "Price update failed: %s", e)
+        LOGGER.error( "Price update failed: %s", e)
 
 
 @app.post("/api/refresh_prices")
@@ -651,34 +653,34 @@ async def export_deck(format: str) -> dict:
 async def import_deck(request: Request) -> dict:
     """Import a deck from pasted text. Body: {"text": str, "format": str}. Replaces current deck."""
     global _current_deck
-    print("[import] POST /api/import received")
+    LOGGER.debug("import_deck: POST /api/import received")
     try:
         body: dict = await request.json()
-        print("[import] body keys:", list(body.keys()) if isinstance(body, dict) else type(body))
+        LOGGER.debug("import_deck: body keys: %s", list(body.keys()) if isinstance(body, dict) else type(body))
     except Exception as e:
-        print("[import] request.json() failed:", type(e).__name__, e)
+        LOGGER.error("import_deck: request.json() failed: %s %s", type(e).__name__, e)
         raise HTTPException(status_code=400, detail="Invalid JSON body") from None
     if not isinstance(body, dict) or "text" not in body or "format" not in body:
-        print("[import] body missing text or format; body type:", type(body), "keys:", list(body.keys()) if isinstance(body, dict) else "n/a")
+        LOGGER.warning("import_deck: body missing text or format; body type=%s keys=%s", type(body), list(body.keys()) if isinstance(body, dict) else "n/a")
         raise HTTPException(status_code=400, detail="Body must include 'text' and 'format'")
     text: str = body["text"] if isinstance(body["text"], str) else ""
     fmt: str = (body["format"] or "").strip().lower()
-    print("[import] format=%r text_len=%d text_preview=%r" % (fmt, len(text), (text[:80] + "..." if len(text) > 80 else text)))
+    LOGGER.debug("import_deck: format=%r text_len=%d text_preview=%r", fmt, len(text), (text[:80] + "..." if len(text) > 80 else text))
     if fmt not in Deck.EXPORT_FORMATS:
-        print("[import] unsupported format:", repr(fmt), "allowed:", list(Deck.EXPORT_FORMATS.keys()))
+        LOGGER.warning("import_deck: unsupported format: %r allowed: %s", fmt, list(Deck.EXPORT_FORMATS.keys()))
         raise HTTPException(
             status_code=400,
             detail=f"Unsupported format {body['format']!r}; use one of: {list(Deck.EXPORT_FORMATS.keys())}",
         )
     try:
-        print("[import] calling Deck.from_export_text(...)")
+        LOGGER.debug("import_deck: calling Deck.from_export_text(...)")
         deck: Deck = Deck.from_export_text(text, fmt)
-        print("[import] from_export_text ok; deck.cards len=%d" % len(deck.cards))
+        LOGGER.info("import_deck: from_export_text ok; deck.cards len=%d", len(deck.cards))
     except ValueError as e:
-        print("[import] from_export_text ValueError:", e)
+        LOGGER.warning("import_deck: from_export_text ValueError: %s", e)
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
-        print("[import] from_export_text unexpected:", type(e).__name__, e)
+        LOGGER.error("import_deck: from_export_text unexpected: %s %s", type(e).__name__, e)
         raise
     _current_deck = deck
     card_colors = _compute_deck_card_colors(_current_deck)
@@ -686,7 +688,7 @@ async def import_deck(request: Request) -> dict:
     _current_deck.colors = list(existing | card_colors)
     _notify_deck_updated()
     resp = _deck_to_response(_current_deck)
-    print("[import] returning response; deck keys in out:", list(resp.get("deck", {}).keys())[:10])
+    LOGGER.debug("import_deck: returning response; deck keys in out: %s", list(resp.get("deck", {}).keys())[:10])
     return resp
 
 

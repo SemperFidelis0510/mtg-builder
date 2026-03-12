@@ -4,3 +4,7 @@
 - integregrate logger properly
 - add auto land
 - implement dynamic RAG search
+- remove 'refresh price' button
+- add 'tools' box in editor (move export/import etc. there)
+- increase deck description box
+- decksections should expand on any event adding a card there

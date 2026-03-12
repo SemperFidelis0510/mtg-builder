@@ -18,7 +18,7 @@ from src.lib.config import (
     REPO_ROOT,
 )
 from src.lib.cardDB import CardDB
-from src.utils.logger import LOGGER
+from src.utils.logger import LOGGER, init_logger
 
 # ---------------------------------------------------------------------------
 # Ensure CWD is the repo root
@@ -28,6 +28,7 @@ os.chdir(REPO_ROOT)
 
 def run_server() -> None:
     """Launch FastMCP server with search_cards tool, stdio transport."""
+    init_logger("mcp")
     from fastmcp import FastMCP
 
     LOGGER.info(
@@ -114,21 +115,23 @@ def run_server() -> None:
         try:
             r = requests.post(url, json={"names": names}, timeout=10)
         except requests.RequestException as e:
-            LOGGER.error(0, "append_cards_to_deck: request failed: %s", e)
+            LOGGER.error("append_cards_to_deck: request failed: %s", e)
             return f"Error: deck editor unreachable at {url}. Is the deck editor running (e.g. python deck_editor.py)?"
         if r.status_code == 404:
             try:
                 detail = r.json().get("detail", r.text)
-            except Exception:
+            except Exception as e:
+                LOGGER.debug("append_cards_to_deck: r.json() failed: %s", e)
                 detail = r.text
             LOGGER.warning("append_cards_to_deck: card not found: %s", detail)
             return f"Error: {detail}"
         if r.status_code != 200:
             try:
                 detail = r.json().get("detail", r.text)
-            except Exception:
+            except Exception as e:
+                LOGGER.debug("append_cards_to_deck: r.json() failed: %s", e)
                 detail = r.text
-            LOGGER.error(0, "append_cards_to_deck: %s %s", r.status_code, detail)
+            LOGGER.error("append_cards_to_deck: %s %s", r.status_code, detail)
             return f"Error: {r.status_code} {detail}"
         LOGGER.info("Request completed tool=append_cards_to_deck added=%s", len(names))
         return f"Added {len(names)} card(s) to the deck: {', '.join(names)}."

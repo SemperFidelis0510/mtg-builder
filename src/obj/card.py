@@ -9,6 +9,7 @@ from typing import Any
 from src.config.keyword_explanations import expand_keywords as _expand_keywords
 from src.config.thresholds import classify as _classify_value
 from src.lib.config import KEYWORD_EXPLANATIONS_PATH
+from src.utils.logger import LOGGER
 
 # ---------------------------------------------------------------------------
 # Compiled regexes for ability parsing (module-level for reuse)
@@ -29,11 +30,13 @@ def _get_known_keywords() -> set[str]:
     global _KNOWN_KEYWORDS
     if _KNOWN_KEYWORDS is None:
         if not KEYWORD_EXPLANATIONS_PATH.is_file():
+            LOGGER.warning("_get_known_keywords: file not found: %s", KEYWORD_EXPLANATIONS_PATH)
             _KNOWN_KEYWORDS = set()
         else:
             with open(KEYWORD_EXPLANATIONS_PATH, encoding="utf-8") as f:
                 data = json.load(f)
             _KNOWN_KEYWORDS = {k.strip() for k in data if isinstance(k, str) and k.strip()}
+            LOGGER.debug("_get_known_keywords: loaded %d keywords from %s", len(_KNOWN_KEYWORDS), KEYWORD_EXPLANATIONS_PATH)
     return _KNOWN_KEYWORDS
 
 

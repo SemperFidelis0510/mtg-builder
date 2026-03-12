@@ -19,6 +19,7 @@ from src.lib.config import (
 from src.lib.cardDB import CardDB
 from src.lib.prices import load_prices
 from src.obj.card import Card
+from src.utils.logger import LOGGER, init_logger
 
 # ---------------------------------------------------------------------------
 # Build-specific constants
@@ -28,6 +29,7 @@ BATCH_SIZE: int = 500
 
 def _load_cards() -> list[Card]:
     """Load all Card faces from AtomicCards.json with prices attached."""
+    LOGGER.info("build_rag: loading cards from %s", ATOMIC_CARDS_PATH)
     if not ATOMIC_CARDS_PATH.exists():
         raise FileNotFoundError(
             f"Data not found: {ATOMIC_CARDS_PATH}. Run with --download first."
@@ -48,6 +50,7 @@ def _load_cards() -> list[Card]:
             card: Card = Card.from_json_face(face, card_name)
             card.price_usd = price_map.get(card_name, -1.0)
             cards.append(card)
+    LOGGER.info("build_rag: loaded %d card faces", len(cards))
     return cards
 
 
@@ -67,7 +70,7 @@ def _build_collection(
     from tqdm import tqdm
 
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"[{label}] Using device: {device}")
+    LOGGER.info("%s: using device: %s model=%s", label, device, MODEL_NAME)
     model = SentenceTransformer(MODEL_NAME, device=device)
 
     CHROMA_PATH.mkdir(parents=True, exist_ok=True)
@@ -90,7 +93,7 @@ def _build_collection(
             embeddings=emb.tolist(),
             metadatas=metas_batch,
         )
-    print(f"[{label}] Indexed {n} card faces in {collection_name}.")
+    LOGGER.info("%s: indexed %d card faces in %s", label, n, collection_name)
 
 
 def _prepare_rows(
@@ -151,4 +154,7 @@ def do_build_all() -> None:
 
 
 if __name__ == "__main__":
+    init_logger("build_rag")
+    LOGGER.info("build_rag: starting do_build_all")
     do_build_all()
+    LOGGER.info("build_rag: do_build_all complete")
