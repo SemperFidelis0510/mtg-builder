@@ -643,7 +643,7 @@ async def get_synergy(
     name1: str = Query(..., min_length=1),
     name2: str = Query(..., min_length=1),
 ) -> dict:
-    """Return synergy score between two cards by name. Lower score = better synergy. Requires RAG to be loaded."""
+    """Return synergy score between two cards by name. Higher score = better synergy. Requires RAG to be loaded."""
     if not CardDB.inst().is_rag_ready():
         raise HTTPException(
             status_code=503,

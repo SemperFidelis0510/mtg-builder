@@ -124,7 +124,7 @@
 </head>
 <body>
   <h1>Synergy Checker</h1>
-  <p class="synergy-msg" id="synergyMsg">Pick two cards to see how well they synergize (lower score = better synergy).</p>
+  <p class="synergy-msg" id="synergyMsg">Pick two cards to see how well they synergize (higher score = better synergy).</p>
 
   <div class="synergy-form">
     <div class="input-wrap">
@@ -154,7 +154,7 @@
     <button type="button" id="checkBtn">Check synergy</button>
   </div>
   <div id="scoreWrap" style="display: none;">
-    <span class="synergy-msg">Synergy score (lower = better):</span>
+    <span class="synergy-msg">Synergy score (higher = better):</span>
     <div class="synergy-score" id="synergyScore"></div>
   </div>
 
@@ -270,7 +270,7 @@
             return r.json();
           })
           .then(function (data) {
-            msgEl.textContent = 'Synergy score (lower = better):';
+            msgEl.textContent = 'Synergy score (higher = better):';
             msgEl.className = 'synergy-msg ok';
             scoreEl.textContent = data.synergy_score;
             scoreWrap.style.display = 'block';

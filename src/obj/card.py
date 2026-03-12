@@ -375,11 +375,12 @@ class Card:
         return f"Name: {self.name}\nEffects: {'; '.join(effs)}"
 
     def synergy_with(self, other: "Card", encode_fn: Callable[[list[str]], list]) -> float:
-        """Return synergy score between this card and another: sum of two embedding distances.
+        """Return synergy score between this card and another: sum of two cosine similarities.
 
-        Score = L2(embed(triggers of self), embed(effects of other))
-              + L2(embed(effects of self), embed(triggers of other)).
-        Lower score means higher synergy. encode_fn(texts: list[str]) -> list of vectors (list of float).
+        Score = cos_sim(embed(triggers of self), embed(effects of other))
+              + cos_sim(embed(effects of self), embed(triggers of other)).
+        Higher score means better synergy. Uses cosine to match the embedding space (ChromaDB cosine).
+        encode_fn(texts: list[str]) -> list of vectors (list of float).
         """
         texts: list[str] = [
             self.to_triggers_document(),
@@ -390,10 +391,15 @@ class Card:
         vecs = encode_fn(texts)
         assert len(vecs) >= 4, "encode_fn must return at least 4 vectors"
 
-        def l2(a: list[float], b: list[float]) -> float:
-            return sum((x - y) ** 2 for x, y in zip(a, b)) ** 0.5
+        def cosine_sim(a: list[float], b: list[float]) -> float:
+            dot = sum(x * y for x, y in zip(a, b))
+            na = sum(x * x for x in a) ** 0.5
+            nb = sum(y * y for y in b) ** 0.5
+            if na == 0.0 or nb == 0.0:
+                return 0.0
+            return dot / (na * nb)
 
-        return l2(vecs[0], vecs[1]) + l2(vecs[2], vecs[3])
+        return cosine_sim(vecs[0], vecs[1]) + cosine_sim(vecs[2], vecs[3])
 
     def to_rag_document(self) -> str:
         """Build the document string for RAG indexing: type_line, mana_cost, color_identity,
