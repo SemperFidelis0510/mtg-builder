@@ -38,6 +38,17 @@ export function initSemanticSearchModal() {
     if (ragPopup) {
       ragPopup.classList.add('visible');
       ragPopup.setAttribute('aria-hidden', 'false');
+      ragPopup.style.cssText =
+        'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;padding:1rem;box-sizing:border-box;';
+      const backdrop = ragPopup.querySelector('.rag-loading-popup-backdrop');
+      if (backdrop) {
+        backdrop.style.cssText = 'position:absolute;inset:0;background:rgba(0,0,0,0.7);z-index:1;';
+      }
+      const content = ragPopup.querySelector('.rag-loading-popup-content');
+      if (content) {
+        content.style.cssText =
+          'position:relative;z-index:2;background:#16213e;border:1px solid #0f3460;border-radius:8px;padding:1.5rem 2rem;max-width:360px;box-shadow:0 8px 32px rgba(0,0,0,0.4);color:#e8e8e8;';
+      }
     } else {
       alert('RAG still loading');
     }
@@ -47,6 +58,11 @@ export function initSemanticSearchModal() {
     if (ragPopup) {
       ragPopup.classList.remove('visible');
       ragPopup.setAttribute('aria-hidden', 'true');
+      ragPopup.style.cssText = '';
+      const content = ragPopup.querySelector('.rag-loading-popup-content');
+      if (content) content.style.cssText = '';
+      const backdrop = ragPopup.querySelector('.rag-loading-popup-backdrop');
+      if (backdrop) backdrop.style.cssText = '';
     }
   }
 
