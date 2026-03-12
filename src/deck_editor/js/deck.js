@@ -42,7 +42,6 @@ export function makeCardStackEl(name, count) {
   img.className = 'card-img';
   img.src = scryfallImageUrl(name);
   img.alt = name;
-  img.title = name;
   img.loading = 'lazy';
   img.onerror = function () {
     this.style.background = '#333';
@@ -125,7 +124,6 @@ export function makeMaybeBoardCardEl(name, count) {
   const nameSpan = document.createElement('span');
   nameSpan.className = 'maybe-board-name';
   nameSpan.textContent = name;
-  nameSpan.title = name;
 
   const badge = document.createElement('span');
   badge.className = 'card-stack-badge';
@@ -144,6 +142,10 @@ export function makeMaybeBoardCardEl(name, count) {
 }
 
 export function updateTotalsPanel() {
+  const totalPrice = (window._lastStats && window._lastStats.total_price_usd != null) ? window._lastStats.total_price_usd : null;
+  const bannerEl = document.getElementById('deckBannerPrice');
+  if (bannerEl) bannerEl.textContent = totalPrice != null ? '$' + Number(totalPrice).toFixed(2) : '—';
+
   const statsSection = document.getElementById('deckStatisticsSection');
   if (!statsSection) return;
   let total = 0;

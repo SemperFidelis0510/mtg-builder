@@ -232,9 +232,9 @@ body {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 8px;
-  max-width: 420px;
+  max-width: 560px;
   width: 100%;
-  padding: 1rem 1.25rem;
+  padding: 1.25rem 1.5rem;
   position: relative;
 }
 .import-format-modal .modal-close {
@@ -260,7 +260,7 @@ body {
 }
 .import-format-modal .import-textarea {
   width: 100%;
-  min-height: 160px;
+  min-height: 260px;
   padding: 0.5rem;
   margin-bottom: 0.75rem;
   background: var(--bg);
@@ -325,7 +325,7 @@ body {
   display: block;
 }
 .import-format-modal .modal-iframe {
-  min-height: 320px;
+  min-height: 420px;
 }
 .tabs { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .tabs.tabs-after-settings { margin-top: 1rem; }
@@ -393,8 +393,26 @@ body {
   font-size: 0.9rem;
   margin: -0.5rem -0.5rem 0.5rem -0.5rem;
   color: var(--text);
+  position: relative;
+}
+.deck-sections-zone #deckSections {
+  margin-top: 0.75rem;
 }
 .deck-sections-zone-title-label { flex: 1; }
+.deck-banner-price {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.2rem 0.5rem;
+  background: var(--panel);
+  border: 1px solid var(--text);
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+.deck-section-controls { flex: 1; justify-content: flex-end; }
 .deck-sections-zone.deck-sections-zone-drag-from-side {
   outline: 3px solid var(--accent);
   outline-offset: 2px;
@@ -469,7 +487,7 @@ body {
   font-weight: 600;
 }
 .deck-section-controls button:hover { background: #1a4a7a; }
-.deck-section-controls .clear-btn { background: #5a1a2a; color: #ff8a8a; margin-left: auto; border-color: #7a2a3a; }
+.deck-section-controls .clear-btn { background: #5a1a2a; color: #ff8a8a; border-color: #7a2a3a; }
 .deck-section-controls .clear-btn:hover { background: #7a1a2a; }
 .section-header-label { flex: 1; }
 .section-clear-btn {
@@ -696,6 +714,7 @@ body {
 
 /* Deck settings panel (above tabs) */
 .deck-settings {
+  margin-top: 1.25rem;
   margin-bottom: 0;
   padding: 0 1rem;
   background: transparent;
