@@ -858,9 +858,15 @@ body {
 }
 .tools-section .section-body {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
   gap: 0.5rem;
   padding: 0.75rem 0.5rem;
+}
+.tools-section .tools-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 .tools-section .section-body .save-btn { flex-shrink: 0; }
 
