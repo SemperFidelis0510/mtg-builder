@@ -640,3 +640,96 @@ body {
   border-radius: 10px;
   display: block;
 }
+
+/* Deck settings panel (above tabs) */
+.deck-settings {
+  margin-bottom: 0;
+  padding: 0 1rem;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+.deck-settings .section-body {
+  padding: 0.75rem 0.5rem;
+}
+.deck-settings-row {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: flex-end;
+  gap: 1rem 1.5rem;
+  margin-bottom: 0;
+}
+.deck-settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex-shrink: 0;
+}
+.deck-settings-field-description { flex: 1; flex-shrink: 1; min-width: 120px; }
+.deck-settings-field-description input { max-width: none; }
+.deck-settings-field label {
+  font-size: 0.8rem;
+  color: #a0a0a0;
+  font-weight: 600;
+}
+.deck-settings-field input[type="text"],
+.deck-settings-field select {
+  padding: 0.35rem 0.5rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 0.9rem;
+  max-width: 200px;
+}
+.deck-settings-field select { max-width: 180px; cursor: pointer; }
+@media (max-width: 900px) {
+  .deck-settings-row { flex-wrap: wrap; }
+}
+.deck-settings-colors.colors-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+.deck-settings-colors .color-chip {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border: 2px solid transparent;
+  position: relative;
+}
+.deck-settings-colors .color-chip:hover { border-color: var(--text); }
+.deck-settings-colors .color-chip:has(input:checked) { border-color: #fff; box-shadow: 0 0 0 2px var(--bg); }
+.deck-settings-colors .color-chip:has(input:checked)::after {
+  content: "✓";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #222;
+  pointer-events: none;
+}
+.deck-settings-colors .color-chip.color-B:has(input:checked)::after { color: #fff; }
+.deck-settings-colors .color-chip input {
+  margin: 0;
+  opacity: 0;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  z-index: 1;
+}
+.deck-settings-colors .color-W { background: #f0e6d8; }
+.deck-settings-colors .color-U { background: #a8d0e6; }
+.deck-settings-colors .color-B { background: #3d3d3d; }
+.deck-settings-colors .color-R { background: #d3544a; }
+.deck-settings-colors .color-G { background: #7cb35b; }

@@ -3,12 +3,14 @@
 import { TYPE_KEYS } from './constants.js';
 import { suggestedSaveName } from './utils.js';
 import { initCardPreview } from './card-preview.js';
-import { updateSectionHeaderTotal, getDeckMeta, collectState } from './deck.js';
+import { updateSectionHeaderTotal, getDeckMeta, collectState, syncDeckToServer } from './deck.js';
 import { renderDeck } from './render.js';
 import { initSearch } from './search.js';
 import { initAdvSearchModal, initExportModal, initImportModal } from './modals.js';
+import { initSettings } from './settings.js';
 
 initCardPreview();
+initSettings(syncDeckToServer);
 initSearch();
 initAdvSearchModal();
 initExportModal();
@@ -66,26 +68,24 @@ document.getElementById('clearMaybeBtn').addEventListener('click', (e) => {
 document.getElementById('saveBtn').addEventListener('click', () => {
   const resultEl = document.getElementById('saveResult');
   resultEl.textContent = '';
-  getDeckMeta()
-    .then((meta) => {
-      const state = collectState();
-      const body = {
-        name: meta.name,
-        colors: meta.colors,
-        description: meta.description,
-        creatures: state.creatures,
-        non_creatures: state.non_creatures,
-        spells: state.spells,
-        lands: state.lands,
-        maybe: state.maybe,
-        sideboard: state.sideboard,
-      };
-      return fetch('/api/deck', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-    })
+  const state = collectState();
+  const body = {
+    name: state.name,
+    colors: state.colors,
+    description: state.description,
+    format: state.format,
+    creatures: state.creatures,
+    non_creatures: state.non_creatures,
+    spells: state.spells,
+    lands: state.lands,
+    maybe: state.maybe,
+    sideboard: state.sideboard,
+  };
+  fetch('/api/deck', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
     .then((r) => {
       if (!r.ok) return r.json().then((err) => { throw new Error(err.detail || 'Sync failed'); });
       return fetch('/api/export?format=json');

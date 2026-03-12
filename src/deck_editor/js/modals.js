@@ -1,11 +1,17 @@
 /** Modal open/close and postMessage handling for iframe modals. */
 
+import { getSettings } from './settings.js';
+
 export function initAdvSearchModal() {
   const modal = document.getElementById('advSearchModal');
   const iframe = document.getElementById('advSearchIframe');
   const closeBtn = document.getElementById('advSearchModalClose');
   document.getElementById('advancedSearchBtn').addEventListener('click', () => {
-    iframe.src = '/search?t=' + Date.now();
+    const params = new URLSearchParams({ t: String(Date.now()) });
+    const { colors, format } = getSettings();
+    if (colors && colors.length) params.set('deck_colors', colors.join(','));
+    if (format) params.set('deck_format', format);
+    iframe.src = '/search?' + params.toString();
     modal.classList.add('open');
     modal.setAttribute('aria-hidden', 'false');
   });

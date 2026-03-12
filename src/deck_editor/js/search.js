@@ -2,6 +2,7 @@
 
 import { typeLineToSectionKey } from './utils.js';
 import { addCardToDeck } from './deck.js';
+import { getSettings } from './settings.js';
 
 let autocompleteDebounceTimer = null;
 let autocompleteAbort = null;
@@ -65,8 +66,12 @@ function runAutocomplete(query) {
     hideAutocomplete();
     return;
   }
+  const { colors, format } = getSettings();
+  const params = new URLSearchParams({ q: query });
+  if (colors && colors.length) params.set('colors', colors.join(','));
+  if (format) params.set('format', format);
   autocompleteAbort = new AbortController();
-  fetch('https://api.scryfall.com/cards/autocomplete?q=' + encodeURIComponent(query), { signal: autocompleteAbort.signal })
+  fetch('/api/autocomplete?' + params.toString(), { signal: autocompleteAbort.signal })
     .then((r) => r.json())
     .then((data) => {
       if (data.data && data.data.length) showAutocomplete(data.data);

@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -365,6 +365,29 @@ async def search_cards_api(body: dict) -> dict:
     return {"results": [c.to_dict() for c in results]}
 
 
+@app.get("/api/autocomplete")
+async def autocomplete(
+    q: str = Query("", min_length=0),
+    colors: str = Query(""),
+    deck_format: str = Query("", alias="format"),
+) -> dict:
+    """Autocomplete card names by substring; optionally filter by color identity and format legality. Returns { data: [names] }."""
+    q_clean: str = (q or "").strip()
+    if len(q_clean) < 2:
+        return {"data": []}
+    try:
+        results = CardDB.inst().filter_cards_list(
+            name=q_clean,
+            color_identity=colors.strip() if colors else "",
+            format_legal=deck_format.strip() if deck_format else "",
+            n_results=15,
+            offset=0,
+        )
+    except ValueError:
+        return {"data": []}
+    return {"data": [c.name for c in results]}
+
+
 def _names_from_cards_array(cards: list) -> list[str]:
     """Extract card names from a 'cards' array (items may be strings or dicts with 'name')."""
     names: list[str] = []
@@ -453,6 +476,17 @@ async def add_card(body: dict) -> dict:
 async def get_deck() -> dict:
     """Return current deck and removed list (empty deck if none loaded yet)."""
     return _deck_to_response(_current_deck)
+
+
+@app.get("/api/deck/meta")
+async def get_deck_meta() -> dict:
+    """Return only deck metadata (name, colors, description, format) without card lists."""
+    return {
+        "name": _current_deck.name,
+        "colors": list(_current_deck.colors),
+        "description": _current_deck.description,
+        "format": _current_deck.format,
+    }
 
 
 def _run_price_update_then_notify() -> None:
@@ -549,6 +583,9 @@ async def update_deck(body: dict) -> dict:
     description: str = _current_deck.description
     if "description" in body and isinstance(body["description"], str):
         description = body["description"]
+    deck_format: str = _current_deck.format
+    if "format" in body and isinstance(body["format"], str):
+        deck_format = body["format"]
 
     creatures: list[str] = body["creatures"] if "creatures" in body and isinstance(body["creatures"], list) else []
     non_creatures: list[str] = (
@@ -575,6 +612,7 @@ async def update_deck(body: dict) -> dict:
         name=name,
         colors=colors,
         description=description,
+        format=deck_format,
         cards=cards_list,
         maybe=maybe_cards,
         sideboard=sideboard_cards,

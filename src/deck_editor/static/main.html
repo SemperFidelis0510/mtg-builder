@@ -15,6 +15,58 @@
   <header class="header">
     <h1>MTG Deck Editor</h1>
   </header>
+  <div class="deck-settings section" id="deckSettingsSection">
+    <div class="section-header deck-settings-header" id="deckSettingsHeader">
+      <span class="section-header-label">Deck settings</span>
+    </div>
+    <div class="section-body deck-settings-body" id="deckSettingsBody">
+      <div class="deck-settings-row">
+        <div class="deck-settings-field">
+          <label for="deckName">Name</label>
+          <input type="text" id="deckName" placeholder="Deck name">
+        </div>
+        <div class="deck-settings-field">
+          <label>Colors</label>
+          <div class="deck-settings-colors colors-row">
+            <label class="color-chip color-W" title="White"><input type="checkbox" name="deckColor" value="W" id="deckColorW"></label>
+            <label class="color-chip color-U" title="Blue"><input type="checkbox" name="deckColor" value="U" id="deckColorU"></label>
+            <label class="color-chip color-B" title="Black"><input type="checkbox" name="deckColor" value="B" id="deckColorB"></label>
+            <label class="color-chip color-R" title="Red"><input type="checkbox" name="deckColor" value="R" id="deckColorR"></label>
+            <label class="color-chip color-G" title="Green"><input type="checkbox" name="deckColor" value="G" id="deckColorG"></label>
+          </div>
+        </div>
+        <div class="deck-settings-field">
+          <label for="deckFormat">Format</label>
+          <select id="deckFormat" name="deckFormat">
+            <option value="">None</option>
+            <option value="standard">Standard</option>
+            <option value="modern">Modern</option>
+            <option value="pioneer">Pioneer</option>
+            <option value="explorer">Explorer</option>
+            <option value="legacy">Legacy</option>
+            <option value="vintage">Vintage</option>
+            <option value="commander">Commander</option>
+            <option value="pauper">Pauper</option>
+            <option value="brawl">Brawl</option>
+            <option value="historic">Historic</option>
+            <option value="historicbrawl">Historic Brawl</option>
+            <option value="alchemy">Alchemy</option>
+            <option value="oldschool">Old School</option>
+            <option value="premodern">Premodern</option>
+            <option value="duel">Duel Commander</option>
+            <option value="paupercommander">Pauper Commander</option>
+            <option value="penny">Penny Dreadful</option>
+            <option value="future">Future</option>
+            <option value="gladiator">Gladiator</option>
+          </select>
+        </div>
+        <div class="deck-settings-field deck-settings-field-description">
+          <label for="deckDescription">Description</label>
+          <input type="text" id="deckDescription" placeholder="Optional description">
+        </div>
+      </div>
+    </div>
+  </div>
   <div class="tabs">
     <div class="tab-buttons">
       <button type="button" class="tab-btn active" data-tab="board" id="tabBoard">Board</button>

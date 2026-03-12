@@ -2,6 +2,7 @@
 
 import { TYPE_KEYS, TYPE_LABELS, SIDE_LABELS } from './constants.js';
 import { scryfallImageUrl } from './utils.js';
+import { getSettings } from './settings.js';
 
 let syncToServerTimer = null;
 
@@ -229,26 +230,24 @@ export function syncDeckToServer() {
   if (syncToServerTimer) clearTimeout(syncToServerTimer);
   syncToServerTimer = setTimeout(() => {
     syncToServerTimer = null;
-    getDeckMeta()
-      .then((meta) => {
-        const state = collectState();
-        const body = {
-          name: meta.name,
-          colors: meta.colors,
-          description: meta.description,
-          creatures: state.creatures,
-          non_creatures: state.non_creatures,
-          spells: state.spells,
-          lands: state.lands,
-          maybe: state.maybe,
-          sideboard: state.sideboard,
-        };
-        return fetch('/api/deck', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        });
-      })
+    const state = collectState();
+    const body = {
+      name: state.name,
+      colors: state.colors,
+      description: state.description,
+      format: state.format,
+      creatures: state.creatures,
+      non_creatures: state.non_creatures,
+      spells: state.spells,
+      lands: state.lands,
+      maybe: state.maybe,
+      sideboard: state.sideboard,
+    };
+    fetch('/api/deck', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
       .then((r) => {
         if (r.ok) return r.json();
       })
@@ -267,7 +266,13 @@ export function collectState() {
     });
     return arr;
   }
-  const deck = { name: '', colors: [], description: '' };
+  const meta = getSettings();
+  const deck = {
+    name: meta.name,
+    colors: meta.colors,
+    description: meta.description,
+    format: meta.format,
+  };
   TYPE_KEYS.forEach((key) => {
     deck[key] = expandList(document.getElementById('list-' + key));
   });
@@ -277,20 +282,16 @@ export function collectState() {
 }
 
 export function getDeckMeta() {
-  return fetch('/api/deck')
+  return fetch('/api/deck/meta')
     .then((r) => {
-      if (!r.ok) return { deck: null, removed: [] };
+      if (!r.ok) return { name: '', colors: [], description: '', format: '' };
       return r.json();
     })
-    .then((data) => {
-      if (data.deck) {
-        return {
-          name: data.deck.name,
-          colors: data.deck.colors || [],
-          description: data.deck.description || '',
-        };
-      }
-      return { name: '', colors: [], description: '' };
-    })
-    .catch(() => ({ name: '', colors: [], description: '' }));
+    .then((data) => ({
+      name: data.name != null ? data.name : '',
+      colors: Array.isArray(data.colors) ? data.colors : [],
+      description: data.description != null ? data.description : '',
+      format: data.format != null ? data.format : '',
+    }))
+    .catch(() => ({ name: '', colors: [], description: '', format: '' }));
 }

@@ -8,6 +8,7 @@ import {
   updateTotalsPanel,
 } from './deck.js';
 import { initSortable } from './sortable.js';
+import { populateSettings } from './settings.js';
 
 let statsPieChartInstance = null;
 let statsMvChartInstance = null;
@@ -78,6 +79,13 @@ function renderStatsCharts(stats) {
 export function renderDeck(data) {
   const container = document.getElementById('deckSections');
   const statsContainer = document.getElementById('statisticsContainer');
+  const collapsedTypes = new Set();
+  if (container) {
+    container.querySelectorAll('.section.collapsed[data-type]').forEach((el) => {
+      const t = el.getAttribute('data-type');
+      if (t) collapsedTypes.add(t);
+    });
+  }
   if (statsPieChartInstance) {
     statsPieChartInstance.destroy();
     statsPieChartInstance = null;
@@ -107,6 +115,7 @@ export function renderDeck(data) {
     stacks.forEach((s) => {
       list.appendChild(makeCardStackEl(s.name, s.count));
     });
+    if (collapsedTypes.has(key)) section.classList.add('collapsed');
     container.appendChild(section);
   });
 
@@ -157,6 +166,7 @@ export function renderDeck(data) {
   });
 
   document.getElementById('saveBtn').disabled = false;
+  populateSettings(deck);
   updateTotalsPanel();
   initSortable();
 }

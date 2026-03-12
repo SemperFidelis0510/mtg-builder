@@ -403,6 +403,25 @@
     updateSubtypeOptions();
 
     (function () {
+      var params = new URLSearchParams(window.location.search);
+      var deckColors = params.get('deck_colors');
+      var deckFormat = params.get('deck_format');
+      if (deckColors) {
+        var colors = deckColors.split(',').map(function (c) { return c.trim().toUpperCase(); }).filter(Boolean);
+        document.querySelectorAll('input[name="color"]').forEach(function (input) {
+          input.checked = colors.indexOf(input.value) !== -1;
+        });
+        document.querySelectorAll('input[name="color_identity"]').forEach(function (input) {
+          input.checked = colors.indexOf(input.value) !== -1;
+        });
+      }
+      if (deckFormat) {
+        var formatEl = document.getElementById('format_legal');
+        if (formatEl && deckFormat.trim()) formatEl.value = deckFormat.trim();
+      }
+    })();
+
+    (function () {
       var container = document.getElementById('oracleTextEntries');
       var addRow = document.getElementById('oracleAddRow');
       if (!container || !addRow) return;

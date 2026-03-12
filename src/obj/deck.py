@@ -121,6 +121,7 @@ class Deck:
         name: Deck name.
         colors: Deck colors (e.g. list of "W", "U", "B", "R", "G").
         description: Optional deck description.
+        format: Deck format (e.g. "commander", "standard", "modern").
         cards: Full list of Card objects in the main deck (duplicates for multiple copies).
         maybe: Maybe board: list of Card (same form as cards); not counted in type buckets.
         sideboard: Sideboard: list of Card (same form as cards); not counted in type buckets.
@@ -143,6 +144,7 @@ class Deck:
         name: str = "",
         colors: list[str] | None = None,
         description: str = "",
+        format: str = "",
         cards: list["Card"] | list[dict] | None = None,
         maybe: list["Card"] | list[dict] | None = None,
         sideboard: list["Card"] | list[dict] | None = None,
@@ -152,6 +154,7 @@ class Deck:
         self.name: str = name
         self.colors: list[str] = list(colors) if colors is not None else []
         self.description: str = description
+        self.format: str = format
         self.cards: list["Card"] = _normalize_cards_arg(cards, CardCls)
         self.maybe: list["Card"] = _normalize_cards_arg(maybe, CardCls)
         self.sideboard: list["Card"] = _normalize_cards_arg(sideboard, CardCls)
@@ -299,6 +302,7 @@ class Deck:
             "name": self.name,
             "colors": list(self.colors),
             "description": self.description,
+            "format": self.format,
             "cards": [c.name for c in self.cards],
             "maybe": [c.name for c in self.maybe],
             "sideboard": [c.name for c in self.sideboard],
@@ -357,6 +361,7 @@ class Deck:
             name=data["name"] if "name" in data else "",
             colors=data["colors"] if "colors" in data else None,
             description=data["description"] if "description" in data else "",
+            format=data["format"] if "format" in data else "",
             cards=cards_arg,
             maybe=maybe_arg,
             sideboard=sideboard_arg,
