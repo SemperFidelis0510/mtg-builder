@@ -34,19 +34,22 @@ document.addEventListener('click', (e) => {
     toolsSection.classList.toggle('collapsed');
   }
 });
-document.querySelector('.removed-column').addEventListener('click', (e) => {
-  if (e.target.closest('button')) return;
-  const header = e.target.closest('.section-header');
-  if (header) {
-    const section = header.closest('.section');
-    if (section) section.classList.toggle('collapsed');
+[document.getElementById('section-maybe'), document.getElementById('section-sideboard')].forEach((el) => {
+  if (el) {
+    el.addEventListener('click', (e) => {
+      const header = e.target.closest('.section-header');
+      if (header) {
+        const section = header.closest('.section');
+        if (section) section.classList.toggle('collapsed');
+      }
+    });
   }
 });
 document.getElementById('collapseAllBtn').addEventListener('click', () => {
-  document.querySelectorAll('#deckSections .section').forEach((s) => s.classList.add('collapsed'));
+  document.querySelectorAll('#deckSections .section, #section-maybe, #section-sideboard').forEach((s) => s.classList.add('collapsed'));
 });
 document.getElementById('expandAllBtn').addEventListener('click', () => {
-  document.querySelectorAll('#deckSections .section').forEach((s) => s.classList.remove('collapsed'));
+  document.querySelectorAll('#deckSections .section, #section-maybe, #section-sideboard').forEach((s) => s.classList.remove('collapsed'));
 });
 
 document.getElementById('clearAllBtn').addEventListener('click', () => {
@@ -83,26 +86,6 @@ document.getElementById('clearAllBtn').addEventListener('click', () => {
     .then((r) => r.ok ? r.json() : Promise.reject(new Error('Clear sync failed')))
     .then(renderDeck)
     .catch(() => {});
-});
-
-document.getElementById('clearMaybeBtn').addEventListener('click', (e) => {
-  e.stopPropagation();
-  if (!confirm('Clear all cards from the maybe board?')) return;
-  const listEl = document.getElementById('list-maybe');
-  if (listEl) {
-    listEl.innerHTML = '';
-    updateSectionHeaderTotal(listEl);
-  }
-});
-
-document.getElementById('clearSideboardBtn').addEventListener('click', (e) => {
-  e.stopPropagation();
-  if (!confirm('Clear all cards from the sideboard?')) return;
-  const listEl = document.getElementById('list-sideboard');
-  if (listEl) {
-    listEl.innerHTML = '';
-    updateSectionHeaderTotal(listEl);
-  }
 });
 
 document.getElementById('saveBtn').addEventListener('click', () => {

@@ -141,10 +141,36 @@ export function makeMaybeBoardCardEl(name, count) {
   return li;
 }
 
+function sumListPriceUsd(listEl) {
+  if (!listEl) return 0;
+  const prices = window._deckPrices || {};
+  let sum = 0;
+  listEl.querySelectorAll('.card-stack[data-name]').forEach((el) => {
+    const name = el.getAttribute('data-name');
+    const count = parseInt(el.getAttribute('data-count') || '1', 10);
+    const p = prices[name];
+    if (p != null && typeof p === 'number' && p >= 0) sum += p * count;
+  });
+  return sum;
+}
+
 export function updateTotalsPanel() {
-  const totalPrice = (window._lastStats && window._lastStats.total_price_usd != null) ? window._lastStats.total_price_usd : null;
+  const prices = window._deckPrices || {};
+  let mainAndSideboardTotal = 0;
+  TYPE_KEYS.forEach((key) => {
+    mainAndSideboardTotal += sumListPriceUsd(document.getElementById('list-' + key));
+  });
+  mainAndSideboardTotal += sumListPriceUsd(document.getElementById('list-sideboard'));
+  const maybeTotal = sumListPriceUsd(document.getElementById('list-maybe'));
+
   const bannerEl = document.getElementById('deckBannerPrice');
-  if (bannerEl) bannerEl.textContent = totalPrice != null ? '$' + Number(totalPrice).toFixed(2) : '—';
+  if (bannerEl) {
+    bannerEl.textContent = '$' + Number(mainAndSideboardTotal).toFixed(2);
+  }
+  const maybePriceEl = document.getElementById('maybeBoardPrice');
+  if (maybePriceEl) {
+    maybePriceEl.textContent = '$' + Number(maybeTotal).toFixed(2);
+  }
 
   const statsSection = document.getElementById('deckStatisticsSection');
   if (!statsSection) return;
@@ -164,12 +190,11 @@ export function updateTotalsPanel() {
   const nonLand = total - landCount;
   const totalsEl = statsSection.querySelector('.deck-stats-totals');
   if (totalsEl) {
-    const totalPrice = (window._lastStats && window._lastStats.total_price_usd != null) ? window._lastStats.total_price_usd : 0;
     totalsEl.innerHTML =
       '<span class="deck-total-item"><strong>Total cards:</strong> ' + total + '</span>' +
       '<span class="deck-total-item"><strong>Non-land:</strong> ' + nonLand + '</span>' +
       '<span class="deck-total-item"><strong>Lands:</strong> ' + landCount + '</span>' +
-      '<span class="deck-total-item"><strong>Total price (USD):</strong> $' + Number(totalPrice).toFixed(2) + '</span>';
+      '<span class="deck-total-item"><strong>Total price (USD):</strong> $' + Number(mainAndSideboardTotal).toFixed(2) + '</span>';
   }
 }
 

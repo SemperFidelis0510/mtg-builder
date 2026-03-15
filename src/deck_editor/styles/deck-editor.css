@@ -498,7 +498,18 @@ body {
   flex: 1;
   overflow: auto;
   padding: 1rem;
-  border-right: 1px solid var(--border);
+}
+.deck-global-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.5rem;
+  background: var(--border);
+  border-radius: 6px 6px 0 0;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text);
+  margin-bottom: 0.75rem;
 }
 .deck-sections-zone {
   position: relative;
@@ -523,6 +534,9 @@ body {
 }
 .deck-sections-zone #deckSections {
   margin-top: 0.75rem;
+}
+.deck-sections-zone > .section {
+  margin-top: 1rem;
 }
 .deck-sections-zone-title-label { flex: 1; }
 .deck-banner-price {
@@ -557,11 +571,8 @@ body {
   pointer-events: auto;
   z-index: 10;
 }
-.removed-column {
-  width: 280px;
-  flex-shrink: 0;
-  padding: 1rem;
-  background: var(--panel);
+.deck-column > .section {
+  margin-top: 1rem;
 }
 .section {
   margin-bottom: 1rem;
@@ -616,6 +627,9 @@ body {
 .deck-section-controls .clear-btn { background: #5a1a2a; color: #ff8a8a; border-color: #7a2a3a; }
 .deck-section-controls .clear-btn:hover { background: #7a1a2a; }
 .section-header-label { flex: 1; }
+.maybe-board-price {
+  margin-left: auto;
+}
 .section-clear-btn {
   background: transparent;
   border: none;

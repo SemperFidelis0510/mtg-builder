@@ -99,28 +99,28 @@
       </div>
       <main class="main">
         <div class="deck-column">
+          <div class="deck-global-controls" id="deckGlobalControls">
+            <div class="deck-section-controls">
+              <button type="button" id="collapseAllBtn">Collapse All</button>
+              <button type="button" id="expandAllBtn">Expand All</button>
+              <button type="button" id="clearAllBtn" class="clear-btn">Clear</button>
+            </div>
+          </div>
           <div class="deck-sections-zone" id="deckSectionsZone">
             <div class="deck-sections-zone-title">
               <span class="deck-sections-zone-title-label">Main Deck</span>
               <span class="deck-banner-price" id="deckBannerPrice">—</span>
-              <div class="deck-section-controls">
-                <button type="button" id="collapseAllBtn">Collapse All</button>
-                <button type="button" id="expandAllBtn">Expand All</button>
-                <button type="button" id="clearAllBtn" class="clear-btn">Clear</button>
-              </div>
             </div>
             <div id="deckSections"></div>
+            <div class="section collapsed" id="section-sideboard" data-type="sideboard">
+              <div class="section-header"><span class="section-header-label">Sideboard (0)</span></div>
+              <div class="section-body"><ul class="removed-list" id="list-sideboard"></ul></div>
+            </div>
             <ul class="deck-drop-target" id="deckDropTarget"></ul>
           </div>
-        </div>
-        <div class="removed-column">
           <div class="section collapsed" id="section-maybe" data-type="maybe">
-            <div class="section-header"><span class="section-header-label">Maybe Board (0)</span><button type="button" class="section-clear-btn" id="clearMaybeBtn" title="Clear maybe board">Clear</button></div>
+            <div class="section-header"><span class="section-header-label">Maybe Board (0)</span><span class="deck-banner-price maybe-board-price" id="maybeBoardPrice">$0.00</span></div>
             <div class="section-body"><ul class="removed-list" id="list-maybe"></ul></div>
-          </div>
-          <div class="section collapsed" id="section-sideboard" data-type="sideboard">
-            <div class="section-header"><span class="section-header-label">Sideboard (0)</span><button type="button" class="section-clear-btn" id="clearSideboardBtn" title="Clear sideboard">Clear</button></div>
-            <div class="section-body"><ul class="removed-list" id="list-sideboard"></ul></div>
           </div>
         </div>
       </main>
