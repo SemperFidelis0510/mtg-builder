@@ -27,20 +27,15 @@ function openPanel() {
   panel.classList.add('open');
   panel.setAttribute('aria-hidden', 'false');
   document.body.classList.add('agent-panel-open');
-  toggleBtn.classList.add('active');
 }
 
 function closePanel() {
   panel.classList.remove('open');
   panel.setAttribute('aria-hidden', 'true');
   document.body.classList.remove('agent-panel-open');
-  toggleBtn.classList.remove('active');
 }
 
-toggleBtn.addEventListener('click', () => {
-  if (panel.classList.contains('open')) closePanel();
-  else openPanel();
-});
+toggleBtn.addEventListener('click', () => openPanel());
 closeBtn.addEventListener('click', closePanel);
 
 // -----------------------------------------------------------------------

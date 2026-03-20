@@ -1004,22 +1004,21 @@ body {
    ========================================================================= */
 .agent-toggle-btn {
   margin-left: auto;
-  padding: 0.35rem 0.8rem;
+  margin-bottom: 4px;
+  padding: 0.5rem 0.5rem;
   background: var(--border);
   color: var(--text);
   border: 1px solid var(--border);
-  border-radius: 4px;
-  font-size: 0.85rem;
+  border-radius: 3px;
+  font-size: 0.72rem;
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
+  line-height: 1.1;
+  align-self: center;
 }
 .agent-toggle-btn:hover { background: #1a4a7a; }
-.agent-toggle-btn.active {
-  background: var(--accent);
-  color: #fff;
-  border-color: var(--accent);
-}
+body.agent-panel-open .agent-toggle-btn { display: none; }
 
 /* =========================================================================
    Agent right-side panel
@@ -1072,19 +1071,20 @@ body.agent-panel-open {
   color: #a0a0a0;
   white-space: nowrap;
 }
+.agent-model-badge:empty { display: none; }
 .agent-panel-close {
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  background: var(--border);
+  padding: 0.2rem 0.6rem;
+  background: #a02020;
   border: none;
   border-radius: 4px;
-  color: var(--text);
-  font-size: 1.15rem;
-  line-height: 1;
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.2;
   cursor: pointer;
+  white-space: nowrap;
 }
-.agent-panel-close:hover { background: var(--accent); }
+.agent-panel-close:hover { background: #c02020; }
 
 .agent-panel-header-controls {
   display: flex;
@@ -1104,7 +1104,7 @@ body.agent-panel-open {
   width: 30px;
   height: 30px;
   padding: 0;
-  background: var(--accent);
+  background: #2a8a2a;
   border: none;
   border-radius: 4px;
   color: #fff;
@@ -1113,7 +1113,7 @@ body.agent-panel-open {
   cursor: pointer;
   flex-shrink: 0;
 }
-.agent-new-conv-btn:hover { opacity: 0.85; }
+.agent-new-conv-btn:hover { background: #35a035; }
 
 /* Chat messages area */
 .agent-chat-messages {
