@@ -4,7 +4,7 @@ set "CONDA_ENV=mtg-rag"
 cd /d "%~dp0"
 
 REM --- Parse arguments ---
-REM   Usage: install.bat [install|download|build] [--force] [--cuda 11|12|cpu]
+REM   Usage: install.bat [install|download|build|prices|uninstall|reinstall] [--force] [--cuda 11|12|cpu]
 REM   Default (no stage): run all three stages in order.
 
 set "STAGE="
@@ -13,10 +13,12 @@ set "CUDA=12"
 
 :parse_args
 if "%~1"=="" goto args_done
-if /i "%~1"=="install"  ( set "STAGE=install"  & shift & goto parse_args )
-if /i "%~1"=="download" ( set "STAGE=download" & shift & goto parse_args )
-if /i "%~1"=="build"    ( set "STAGE=build"    & shift & goto parse_args )
-if /i "%~1"=="prices"   ( set "STAGE=prices"   & shift & goto parse_args )
+if /i "%~1"=="install"    ( set "STAGE=install"    & shift & goto parse_args )
+if /i "%~1"=="download"   ( set "STAGE=download"   & shift & goto parse_args )
+if /i "%~1"=="build"      ( set "STAGE=build"      & shift & goto parse_args )
+if /i "%~1"=="prices"     ( set "STAGE=prices"     & shift & goto parse_args )
+if /i "%~1"=="uninstall"  ( set "STAGE=uninstall"  & shift & goto parse_args )
+if /i "%~1"=="reinstall"  ( set "STAGE=reinstall"  & shift & goto parse_args )
 if /i "%~1"=="--force"  ( set "FORCE=1"        & shift & goto parse_args )
 if /i "%~1"=="--cuda"   (
     if "%~2"=="" (
@@ -68,10 +70,12 @@ if "%STAGE%"=="" (
     if errorlevel 1 exit /b 1
     goto end
 )
-if /i "%STAGE%"=="install"  ( call :do_install  & if errorlevel 1 exit /b 1 & goto end )
-if /i "%STAGE%"=="download" ( call :do_download & if errorlevel 1 exit /b 1 & goto end )
-if /i "%STAGE%"=="build"    ( call :do_build    & if errorlevel 1 exit /b 1 & goto end )
-if /i "%STAGE%"=="prices"   ( call :do_prices   & if errorlevel 1 exit /b 1 & goto end )
+if /i "%STAGE%"=="install"    ( call :do_install    & if errorlevel 1 exit /b 1 & goto end )
+if /i "%STAGE%"=="download"   ( call :do_download   & if errorlevel 1 exit /b 1 & goto end )
+if /i "%STAGE%"=="build"      ( call :do_build      & if errorlevel 1 exit /b 1 & goto end )
+if /i "%STAGE%"=="prices"     ( call :do_prices     & if errorlevel 1 exit /b 1 & goto end )
+if /i "%STAGE%"=="uninstall"  ( call :do_uninstall  & if errorlevel 1 exit /b 1 & goto end )
+if /i "%STAGE%"=="reinstall"  ( call :do_reinstall  & if errorlevel 1 exit /b 1 & goto end )
 
 :do_install
 echo.
@@ -150,20 +154,80 @@ if errorlevel 1 (
 echo === [prices] Done ===
 exit /b 0
 
+:do_uninstall
+echo.
+echo === [uninstall] Removing all installed dependencies ===
+call "%_ACTIVATE%" base
+
+REM Remove conda environment
+conda env list | findstr /b /c:"%CONDA_ENV% " >nul 2>&1
+if !errorlevel!==0 (
+    echo Removing conda environment "%CONDA_ENV%"...
+    call conda env remove -n %CONDA_ENV% -y
+    if errorlevel 1 (
+        echo ERROR: Failed to remove conda environment.
+        exit /b 1
+    )
+    echo Conda environment removed.
+) else (
+    echo Conda environment "%CONDA_ENV%" not found. Skipping.
+)
+
+REM Remove downloaded data files
+if exist "data\AtomicCards.json" (
+    echo Deleting data\AtomicCards.json...
+    del "data\AtomicCards.json"
+) else (
+    echo data\AtomicCards.json not found. Skipping.
+)
+if exist "data\prices.json" (
+    echo Deleting data\prices.json...
+    del "data\prices.json"
+) else (
+    echo data\prices.json not found. Skipping.
+)
+
+REM Remove ChromaDB vector index
+if exist "chroma_db" (
+    echo Deleting chroma_db\...
+    rmdir /s /q "chroma_db"
+) else (
+    echo chroma_db\ not found. Skipping.
+)
+
+echo === [uninstall] Done ===
+exit /b 0
+
+:do_reinstall
+echo.
+echo === [reinstall] Full uninstall then install ===
+call :do_uninstall
+if errorlevel 1 exit /b 1
+call :do_install
+if errorlevel 1 exit /b 1
+call :do_download
+if errorlevel 1 exit /b 1
+call :do_build
+if errorlevel 1 exit /b 1
+echo === [reinstall] Done ===
+exit /b 0
+
 :usage
 echo.
-echo Usage: .\%~nx0 [install^|download^|build^|prices] [--force] [--cuda 11^|12^|cpu]
+echo Usage: .\%~nx0 [install^|download^|build^|prices^|uninstall^|reinstall] [--force] [--cuda 11^|12^|cpu]
 echo.
 echo   (no stage)           Run all stages: install, download, build
 echo   install              Create conda env and install Python deps
 echo   download             Download AtomicCards.json
 echo   build                Ingest data and build ChromaDB vector index
 echo   prices               Update card prices from Scryfall to data/prices.json
+echo   uninstall            Remove conda env, downloaded data, and ChromaDB index
+echo   reinstall            Full uninstall then full install (install + download + build)
 echo.
 echo   --force              Skip-checks override:
 echo                          install  : remove and recreate the conda env
 echo                          download : re-download even if file exists
-echo   --cuda 11^|12^|cpu    PyTorch variant for install stage (default: 12)
+echo   --cuda 11^|12^|cpu    PyTorch variant for install/reinstall stage (default: 12)
 echo                          11  = CUDA 11.8 (PyTorch 2.1.2)
 echo                          12  = CUDA 12.8 (latest PyTorch, default)
 echo                          cpu = CPU-only (no GPU)
