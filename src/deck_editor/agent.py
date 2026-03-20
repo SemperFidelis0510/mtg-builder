@@ -257,6 +257,47 @@ _TOOL_DECLARATIONS: list[types.FunctionDeclaration] = [
             "required": ["query"],
         },
     ),
+    types.FunctionDeclaration(
+        name="search_online_decks",
+        description=(
+            "Search for MTG decklists on popular sites (Archidekt, DotGG, Moxfield, Spicerack, MTGGoldfish). "
+            "Returns compact metadata (name, author, format, colors, URL)."
+        ),
+        parameters_json_schema={
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Text search for deck name or archetype (e.g. 'burn', 'atraxa superfriends')."},
+                "format": {"type": "string", "description": "MTG format filter (standard, modern, pioneer, commander, legacy, vintage, pauper)."},
+                "colors": {"type": "string", "description": "Comma-separated color letters (W,U,B,R,G)."},
+                "commander": {"type": "string", "description": "Commander card name (Archidekt only)."},
+                "source": {"type": "string", "description": "Limit to one site: archidekt, dotgg, moxfield, spicerack, mtggoldfish. Empty for all."},
+                "n_results": {"type": "integer", "description": "Max results per source (default 10)."},
+            },
+            "required": [],
+        },
+    ),
+    types.FunctionDeclaration(
+        name="get_online_deck",
+        description="Fetch full card list of an MTG deck from a supported site by URL. Returns mainboard and sideboard.",
+        parameters_json_schema={
+            "type": "object",
+            "properties": {
+                "url": {"type": "string", "description": "Full deck URL from Archidekt, DotGG, Moxfield, or MTGGoldfish."},
+            },
+            "required": ["url"],
+        },
+    ),
+    types.FunctionDeclaration(
+        name="import_online_deck",
+        description="Import an MTG deck from a supported site URL into the current deck editor session, replacing the current deck.",
+        parameters_json_schema={
+            "type": "object",
+            "properties": {
+                "url": {"type": "string", "description": "Full deck URL from Archidekt, DotGG, Moxfield, or MTGGoldfish."},
+            },
+            "required": ["url"],
+        },
+    ),
 ]
 
 GEMINI_TOOL: types.Tool = types.Tool(function_declarations=_TOOL_DECLARATIONS)
@@ -334,6 +375,46 @@ def execute_tool_call(name: str, args: dict[str, Any]) -> str:
                 query=args["query"],
                 n_results=int(args.get("n_results") or 10),
             )
+        if name == "search_online_decks":
+            from src.lib.deck_search import search_decks as _search_decks
+            return _search_decks(
+                query=args.get("query") or "",
+                format=args.get("format") or "",
+                colors=args.get("colors") or "",
+                commander=args.get("commander") or "",
+                source=args.get("source") or "",
+                n_results=int(args.get("n_results") or 10),
+            )
+        if name == "get_online_deck":
+            from src.lib.deck_search import get_deck as _get_deck
+            return _get_deck(url=args["url"])
+        if name == "import_online_deck":
+            from src.lib.deck_search import get_deck_as_card_list
+            from src.deck_editor.app import _current_deck, _notify_deck_updated, _compute_deck_card_colors
+            from src.obj.deck import Deck
+
+            mainboard_raw, sideboard_raw = get_deck_as_card_list(url=args["url"])
+            main_names: list[str] = []
+            for cname, qty in mainboard_raw.items():
+                for _ in range(qty):
+                    main_names.append(cname)
+            sb_names: list[str] = []
+            for cname, qty in sideboard_raw.items():
+                for _ in range(qty):
+                    sb_names.append(cname)
+
+            new_deck: Deck = Deck()
+            new_deck.add_cards(main_names)
+            if sb_names:
+                from src.obj.deck import _cards_from_names
+                new_deck.sideboard = _cards_from_names(sb_names)
+
+            _current_deck.cards = new_deck.cards
+            _current_deck.sideboard = new_deck.sideboard
+            card_colors = _compute_deck_card_colors(_current_deck)
+            _current_deck.colors = list(card_colors)
+            _notify_deck_updated()
+            return f"Imported deck with {len(main_names)} mainboard and {len(sb_names)} sideboard cards from {args['url']}."
         LOGGER.error("Unknown agent tool: %s", name)
         raise ValueError(f"Unknown tool: {name}")
     except Exception as e:

@@ -13,6 +13,9 @@ You have access to the following tools:
 - **append_cards_to_deck**: Add cards directly to the user's deck. Use this when the user agrees to add a card or asks you to add it.
 - **search_triggers**: Find cards whose triggers match a query semantically. Use this to find cards that respond to specific game events.
 - **search_effects**: Find cards whose effects match a query semantically. Use this to find cards that produce specific outcomes.
+- **search_online_decks**: Search for decklists on popular MTG deck sites (Archidekt, DotGG/playingmtg, Moxfield, Spicerack, MTGGoldfish). Use this when the user asks about meta decks, popular decks, tournament results, or wants to find decks by format/archetype/colors. Returns compact metadata with links.
+- **get_online_deck**: Fetch the full card list of a deck from a URL (Archidekt, DotGG, Moxfield, or MTGGoldfish). Use this after search_online_decks to show the user the contents of a specific deck.
+- **import_online_deck**: Import a deck from a URL into the current deck editor session, replacing the current deck. Use this when the user wants to load/import an online deck they found.
 
 ## Guidelines
 

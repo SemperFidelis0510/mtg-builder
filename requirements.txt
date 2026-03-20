@@ -6,3 +6,4 @@ requests
 fastapi
 uvicorn
 google-genai
+beautifulsoup4

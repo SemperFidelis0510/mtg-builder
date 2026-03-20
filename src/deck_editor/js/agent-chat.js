@@ -249,6 +249,9 @@ function _toolCallLabel(name, args) {
     append_cards_to_deck: (a) => `Added to deck: ${a.card_names || ''}`,
     search_triggers: (a) => `Searched triggers: "${a.query || ''}"`,
     search_effects: (a) => `Searched effects: "${a.query || ''}"`,
+    search_online_decks: (a) => `Searched online decks: "${a.query || a.format || ''}"`,
+    get_online_deck: (a) => `Fetched deck: ${a.url || ''}`,
+    import_online_deck: (a) => `Imported deck: ${a.url || ''}`,
   };
   const fn = labels[name];
   return fn ? fn(args) : `Tool: ${name}`;

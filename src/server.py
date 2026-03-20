@@ -196,9 +196,87 @@ def run_server() -> None:
         LOGGER.info("Request completed tool=search_effects query=%r", query)
         return result
 
+    # ------------------------------------------------------------------
+    # Online deck search tools
+    # ------------------------------------------------------------------
+
+    @mcp.tool()
+    def search_online_decks(
+        query: str = "",
+        format: str = "",
+        colors: str = "",
+        commander: str = "",
+        source: str = "",
+        n_results: int = 10,
+    ) -> str:
+        """Search for MTG decklists on popular deck-building sites (Archidekt, DotGG/playingmtg, Moxfield, Spicerack, MTGGoldfish).
+        Returns compact metadata (deck name, author, format, colors, URL) for each result.
+        query: text search for deck name or archetype (e.g. 'burn', 'atraxa superfriends').
+        format: MTG format filter (standard, modern, pioneer, commander, legacy, vintage, pauper, historic, explorer).
+        colors: comma-separated color letters to filter (W,U,B,R,G).
+        commander: commander card name (Archidekt only, for Commander format).
+        source: limit to one site (archidekt, dotgg, moxfield, spicerack, mtggoldfish), or leave empty for all.
+        n_results: max results per source (default 10)."""
+        LOGGER.info(
+            "Request received tool=search_online_decks query=%r format=%r source=%r",
+            query, format, source,
+        )
+        from src.lib.deck_search import search_decks as _search_decks
+        result: str = _search_decks(
+            query=query, format=format, colors=colors,
+            commander=commander, source=source, n_results=n_results,
+        )
+        LOGGER.info("Request completed tool=search_online_decks")
+        return result
+
+    @mcp.tool()
+    def get_online_deck(url: str) -> str:
+        """Fetch the full card list of an MTG deck from a supported site by URL.
+        Supports Archidekt, DotGG/playingmtg, Moxfield, and MTGGoldfish URLs.
+        Returns the complete mainboard and sideboard with card names and quantities."""
+        LOGGER.info("Request received tool=get_online_deck url=%r", url)
+        from src.lib.deck_search import get_deck as _get_deck
+        result: str = _get_deck(url=url)
+        LOGGER.info("Request completed tool=get_online_deck url=%r", url)
+        return result
+
+    @mcp.tool()
+    def import_online_deck(url: str) -> str:
+        """Import an MTG deck from a supported site URL into the deck editor.
+        Fetches the deck, resolves card names, and loads it as the current deck.
+        The deck editor must be running. Supports Archidekt, DotGG/playingmtg, Moxfield, MTGGoldfish URLs."""
+        LOGGER.info("Request received tool=import_online_deck url=%r", url)
+        from src.lib.deck_search import get_deck_as_card_list
+        mainboard, sideboard = get_deck_as_card_list(url=url)
+        main_names: list[str] = []
+        for card_name, qty in mainboard.items():
+            for _ in range(qty):
+                main_names.append(card_name)
+        sb_names: list[str] = []
+        for card_name, qty in sideboard.items():
+            for _ in range(qty):
+                sb_names.append(card_name)
+        payload: dict = {"mainboard": main_names, "sideboard": sb_names}
+        import_url: str = f"{DECK_EDITOR_BASE_URL.rstrip('/')}/api/import_deck"
+        try:
+            r = requests.post(import_url, json=payload, timeout=15)
+        except requests.RequestException as e:
+            LOGGER.error("import_online_deck: request failed: %s", e)
+            return f"Error: deck editor unreachable at {import_url}. Is the deck editor running?"
+        if r.status_code != 200:
+            try:
+                detail = r.json().get("detail", r.text)
+            except Exception:
+                detail = r.text
+            LOGGER.error("import_online_deck: %s %s", r.status_code, detail)
+            return f"Error: {r.status_code} {detail}"
+        LOGGER.info("Request completed tool=import_online_deck main=%d sb=%d", len(main_names), len(sb_names))
+        return f"Imported deck with {len(main_names)} mainboard and {len(sb_names)} sideboard cards from {url}."
+
     LOGGER.info(
         "Tools registered: semantic_search_card, plain_search_card, get_card_info, "
-        "extract_card_mechanics, append_cards_to_deck, search_triggers, search_effects; entering mcp.run(transport=stdio)",
+        "extract_card_mechanics, append_cards_to_deck, search_triggers, search_effects, "
+        "search_online_decks, get_online_deck, import_online_deck; entering mcp.run(transport=stdio)",
     )
     mcp.run(transport="stdio")
 
