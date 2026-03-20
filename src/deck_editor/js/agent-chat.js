@@ -324,12 +324,18 @@ async function sendMessage() {
 
           if (eventType === 'text_delta') {
             if (!streamingEl) {
-              streamingEl = _createStreamingAssistantMessage();
+              accumulatedText = '';
             }
             accumulatedText += data.content;
-            streamingEl.innerHTML = _renderMarkdown(accumulatedText);
-            _scrollToBottom();
+            if (accumulatedText.trim()) {
+              if (!streamingEl) {
+                streamingEl = _createStreamingAssistantMessage();
+              }
+              streamingEl.innerHTML = _renderMarkdown(accumulatedText);
+              _scrollToBottom();
+            }
           } else if (eventType === 'tool_call') {
+            streamingEl = null;
             _appendToolCall(data.name, data.args);
             _scrollToBottom();
           } else if (eventType === 'tool_result') {
