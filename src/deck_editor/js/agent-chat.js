@@ -13,6 +13,7 @@ const chatInput = document.getElementById('agentChatInput');
 const sendBtn = document.getElementById('agentSendBtn');
 const convSelect = document.getElementById('agentConversationSelect');
 const newConvBtn = document.getElementById('agentNewConvBtn');
+const deleteConvBtn = document.getElementById('agentDeleteConvBtn');
 const modelBadge = document.getElementById('agentModelBadge');
 const keySetup = document.getElementById('agentKeySetup');
 const keySaveBtn = document.getElementById('agentKeySaveBtn');
@@ -108,6 +109,7 @@ async function loadConversation(convId) {
     if (!r.ok) { _startNewConversation(); return; }
     const conv = await r.json();
     _currentConvId = conv.id;
+    deleteConvBtn.disabled = false;
     if (conv.model) modelBadge.textContent = conv.model;
     _clearMessages();
     for (const msg of conv.messages) {
@@ -131,6 +133,7 @@ function _startNewConversation() {
   _clearMessages();
   welcomeMsg.style.display = 'block';
   convSelect.value = '';
+  deleteConvBtn.disabled = true;
 }
 
 convSelect.addEventListener('change', () => {
@@ -140,6 +143,16 @@ convSelect.addEventListener('change', () => {
 newConvBtn.addEventListener('click', () => {
   _startNewConversation();
   loadConversationList();
+});
+
+deleteConvBtn.addEventListener('click', async () => {
+  if (!_currentConvId) return;
+  if (!confirm('Delete this conversation? This cannot be undone.')) return;
+  try {
+    await fetch(`/api/agent/conversation/${_currentConvId}`, { method: 'DELETE' });
+  } catch { /* silent */ }
+  _startNewConversation();
+  await loadConversationList();
 });
 
 // -----------------------------------------------------------------------
@@ -327,7 +340,10 @@ async function sendMessage() {
               if (body) body.textContent += `\n\nResult:\n${data.result}`;
             }
           } else if (eventType === 'done') {
-            if (data.conversation_id) _currentConvId = data.conversation_id;
+            if (data.conversation_id) {
+              _currentConvId = data.conversation_id;
+              deleteConvBtn.disabled = false;
+            }
             if (data.model) modelBadge.textContent = data.model;
             await loadConversationList();
           } else if (eventType === 'error') {
