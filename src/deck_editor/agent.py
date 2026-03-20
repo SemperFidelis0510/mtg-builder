@@ -462,30 +462,23 @@ def _get_client(api_key: str) -> genai.Client:
     return genai.Client(api_key=api_key)
 
 
-async def resolve_model(api_key: str) -> str:
-    """Try PRIMARY_MODEL; fall back to FALLBACK_MODEL. Caches the result."""
-    global _resolved_model
-    if _resolved_model is not None:
-        return _resolved_model
+def _is_model_not_found(exc: Exception) -> bool:
+    """Return True if the exception indicates the model doesn't exist (404), as opposed to quota/auth/other errors."""
+    msg: str = str(exc).lower()
+    return "404" in msg or "not found" in msg or "not_found" in msg
 
-    client: genai.Client = _get_client(api_key)
-    for model_name in (PRIMARY_MODEL, FALLBACK_MODEL):
-        try:
-            async for _ in await client.aio.models.generate_content_stream(
-                model=model_name,
-                contents="Say OK",
-                config=types.GenerateContentConfig(
-                    max_output_tokens=5,
-                ),
-            ):
-                pass
-            _resolved_model = model_name
-            LOGGER.info("Resolved agent model: %s", model_name)
-            return model_name
-        except Exception as e:
-            LOGGER.warning("Model %s unavailable: %s", model_name, e)
-    LOGGER.error("No Gemini model available")
-    raise RuntimeError("No Gemini model available. Check your API key and model access.")
+
+def resolve_model() -> str:
+    """Return the cached resolved model, or PRIMARY_MODEL if not yet resolved."""
+    return _resolved_model or PRIMARY_MODEL
+
+
+def set_resolved_model(model_name: str) -> None:
+    """Cache the resolved model after a successful API call."""
+    global _resolved_model
+    if _resolved_model != model_name:
+        _resolved_model = model_name
+        LOGGER.info("Resolved agent model: %s", model_name)
 
 
 def get_resolved_model() -> str | None:
@@ -519,7 +512,7 @@ async def chat_stream(
         yield {"type": "error", "message": "No API key configured."}
         return
 
-    model_name: str = await resolve_model(api_key)
+    model_name: str = resolve_model()
     client: genai.Client = _get_client(api_key)
 
     conv["messages"].append({
@@ -565,9 +558,19 @@ async def chat_stream(
                                     fc: types.FunctionCall = part.function_call
                                     function_calls_this_round.append(fc)
                                     model_content_parts.append(part)
+            set_resolved_model(model_name)
         except Exception as e:
+            if _round == 0 and model_name == PRIMARY_MODEL and _is_model_not_found(e):
+                LOGGER.warning("Model %s not found, falling back to %s", model_name, FALLBACK_MODEL)
+                model_name = FALLBACK_MODEL
+                continue
             LOGGER.error("Gemini streaming error: %s", e)
-            yield {"type": "error", "message": f"Gemini API error: {e}"}
+            err_str: str = str(e)
+            if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
+                yield {"type": "error", "message": "Gemini API rate limit exceeded. Please wait a minute and try again, or check your API key quota at https://ai.dev/rate-limit"}
+            else:
+                yield {"type": "error", "message": f"Gemini API error: {err_str}"}
+            conv["messages"].pop()
             return
 
         if not function_calls_this_round:

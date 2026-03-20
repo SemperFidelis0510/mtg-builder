@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles/deck-editor.css?v=4">
+  <link rel="stylesheet" href="/styles/deck-editor.css?v=5">
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -133,6 +133,17 @@
     </div>
     <div class="tab-panel" id="agentTab">
       <div class="agent-rules-container">
+        <div class="agent-config-section">
+          <h3 class="agent-rules-title">API Key</h3>
+          <p class="agent-rules-description">Enter your Google Gemini API key. Get one at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a>.</p>
+          <div class="agent-key-status" id="agentTabKeyStatus"></div>
+          <div class="agent-rules-add-row">
+            <input type="password" id="agentTabKeyInput" class="agent-rule-input" placeholder="Paste new API key..." autocomplete="off">
+            <button type="button" class="agent-key-replace-btn" id="agentTabKeySaveBtn">Save</button>
+          </div>
+          <p class="agent-key-tab-error" id="agentTabKeyError"></p>
+        </div>
+        <hr class="agent-config-divider">
         <h3 class="agent-rules-title">Agent Rules</h3>
         <p class="agent-rules-description">Configure rules that customize the AI assistant's behavior. These are appended to the system prompt.</p>
         <div class="agent-rules-add-row">

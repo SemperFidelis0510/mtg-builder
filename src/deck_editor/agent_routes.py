@@ -150,8 +150,13 @@ async def agent_chat(request: Request) -> StreamingResponse:
     deck_state: dict = _get_deck_state()
 
     async def stream():
-        async for event in chat_stream(conv, message.strip(), deck_state):
-            yield f"event: {event['type']}\ndata: {json.dumps(event)}\n\n"
+        try:
+            async for event in chat_stream(conv, message.strip(), deck_state):
+                yield f"event: {event['type']}\ndata: {json.dumps(event)}\n\n"
+        except Exception as exc:
+            LOGGER.error("agent_chat stream wrapper error: %s", exc)
+            err = json.dumps({"type": "error", "message": str(exc)})
+            yield f"event: error\ndata: {err}\n\n"
 
     return StreamingResponse(
         stream(),
