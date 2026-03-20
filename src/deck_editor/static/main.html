@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="/styles/deck-editor.css">
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
   <header class="header">
@@ -83,6 +84,8 @@
     <div class="tab-buttons">
       <button type="button" class="tab-btn active" data-tab="board" id="tabBoard">Board</button>
       <button type="button" class="tab-btn" data-tab="statistics" id="tabStatistics">Statistics</button>
+      <button type="button" class="tab-btn" data-tab="agent" id="tabAgent">Agent</button>
+      <button type="button" class="agent-toggle-btn" id="agentPanelToggle" title="Toggle AI Assistant">AI Assistant</button>
     </div>
     <div class="tab-panel active" id="boardTab">
       <div class="search-bar">
@@ -128,6 +131,17 @@
     <div class="tab-panel" id="statisticsTab">
       <div id="statisticsContainer"></div>
     </div>
+    <div class="tab-panel" id="agentTab">
+      <div class="agent-rules-container">
+        <h3 class="agent-rules-title">Agent Rules</h3>
+        <p class="agent-rules-description">Configure rules that customize the AI assistant's behavior. These are appended to the system prompt.</p>
+        <div class="agent-rules-add-row">
+          <input type="text" id="agentRuleInput" class="agent-rule-input" placeholder="Add a new rule..." autocomplete="off">
+          <button type="button" class="agent-rule-add-btn" id="agentRuleAddBtn" title="Add rule">+</button>
+        </div>
+        <div id="agentRulesList" class="agent-rules-list"></div>
+      </div>
+    </div>
   </div>
   <div id="cardPreview" class="card-preview" aria-hidden="true"><img src="" alt=""></div>
 
@@ -172,6 +186,47 @@
     <div class="modal-content">
       <button type="button" class="modal-close" id="importFormatModalClose" aria-label="Close">×</button>
       <iframe class="modal-iframe" id="importFormatIframe" src="about:blank" title="Import deck"></iframe>
+    </div>
+  </div>
+
+  <div class="agent-panel" id="agentPanel" aria-hidden="true">
+    <div class="agent-panel-header">
+      <div class="agent-panel-header-top">
+        <span class="agent-panel-title">AI Assistant</span>
+        <span class="agent-model-badge" id="agentModelBadge"></span>
+        <button type="button" class="agent-panel-close" id="agentPanelClose" title="Close">&times;</button>
+      </div>
+      <div class="agent-panel-header-controls">
+        <select id="agentConversationSelect" class="agent-conversation-select" title="Select conversation">
+          <option value="">New conversation</option>
+        </select>
+        <button type="button" class="agent-new-conv-btn" id="agentNewConvBtn" title="New conversation">+</button>
+      </div>
+    </div>
+    <div class="agent-chat-messages" id="agentChatMessages">
+      <div class="agent-welcome-msg" id="agentWelcomeMsg">
+        <p>Ask me anything about deck building. I can search for cards, check synergies, and add cards to your deck.</p>
+      </div>
+    </div>
+    <div class="agent-key-setup" id="agentKeySetup" style="display:none;">
+      <div class="agent-key-warning">
+        <strong>No API Key Configured</strong>
+        <p>To use the AI assistant, you need a Google Gemini API key.</p>
+        <ol>
+          <li>Go to <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a></li>
+          <li>Sign in and click "Create API Key"</li>
+          <li>Copy the key and paste it below</li>
+        </ol>
+        <div class="agent-key-input-row">
+          <input type="password" id="agentKeyInput" class="agent-key-input" placeholder="Paste your API key here...">
+          <button type="button" class="agent-key-save-btn" id="agentKeySaveBtn">Save</button>
+        </div>
+        <p class="agent-key-error" id="agentKeyError"></p>
+      </div>
+    </div>
+    <div class="agent-chat-input-area" id="agentChatInputArea">
+      <textarea id="agentChatInput" class="agent-chat-input" placeholder="Ask the AI assistant..." rows="1"></textarea>
+      <button type="button" class="agent-send-btn" id="agentSendBtn" title="Send message">&#9654;</button>
     </div>
   </div>
 

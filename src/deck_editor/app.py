@@ -21,6 +21,10 @@ from src.utils.logger import LOGGER
 
 app = FastAPI(title="MTG Deck Editor")
 
+from src.deck_editor.agent_routes import agent_router  # noqa: E402  (after app creation to avoid circular)
+
+app.include_router(agent_router)
+
 # ---------------------------------------------------------------------------
 # In-memory state (always a deck; starts empty; POST replaces it)
 # ---------------------------------------------------------------------------

@@ -9,6 +9,8 @@ import { renderDeck } from './render.js';
 import { initSearch } from './search.js';
 import { initAdvSearchModal, initSemanticSearchModal, initSynergyCheckerModal, initExportModal, initImportModal } from './modals.js';
 import { initSettings, populateSettings } from './settings.js';
+import { initAgentChat } from './agent-chat.js';
+import { initAgentRules } from './agent-rules.js';
 
 initCardPreview();
 initContextMenu();
@@ -19,6 +21,8 @@ initSemanticSearchModal();
 initSynergyCheckerModal();
 initExportModal();
 initImportModal();
+initAgentChat();
+initAgentRules();
 
 document.getElementById('deckSections').addEventListener('click', (e) => {
   const header = e.target.closest('.section-header');
