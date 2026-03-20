@@ -8,12 +8,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, AsyncGenerator
 
-import requests
 from google import genai
 from google.genai import types
 
 from src.lib.cardDB import CardDB
-from src.lib.config import DECK_EDITOR_BASE_URL
 from src.utils.logger import LOGGER
 
 # ---------------------------------------------------------------------------
@@ -316,18 +314,15 @@ def execute_tool_call(name: str, args: dict[str, Any]) -> str:
             names_list: list[str] = [n.strip() for n in card_names_str.split(",") if n.strip()]
             if not names_list:
                 return "Error: card_names must contain at least one card name."
-            url: str = f"{DECK_EDITOR_BASE_URL.rstrip('/')}/api/add_card"
-            try:
-                r = requests.post(url, json={"names": names_list}, timeout=10)
-            except requests.RequestException as e:
-                LOGGER.error("append_cards_to_deck: request failed: %s", e)
-                return f"Error: deck editor unreachable at {url}."
-            if r.status_code != 200:
-                try:
-                    detail = r.json()["detail"]
-                except Exception:
-                    detail = r.text
-                return f"Error: {r.status_code} {detail}"
+            from src.deck_editor.app import _current_deck, _notify_deck_updated, _compute_deck_card_colors
+            from src.obj.deck import _cards_from_names
+            cards_to_append = _cards_from_names(names_list)
+            for card in cards_to_append:
+                _current_deck.cards.append(card)
+            card_colors = _compute_deck_card_colors(_current_deck)
+            existing = set(_current_deck.colors)
+            _current_deck.colors = list(existing | card_colors)
+            _notify_deck_updated()
             return f"Added {len(names_list)} card(s) to the deck: {', '.join(names_list)}."
         if name == "search_triggers":
             return CardDB.inst().search_triggers(
