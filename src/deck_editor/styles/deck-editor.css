@@ -1195,18 +1195,20 @@ body.agent-panel-open {
 
 /* Tool call blocks */
 .agent-tool-call {
-  align-self: flex-start;
-  max-width: 92%;
+  width: 100%;
+  flex-shrink: 0;
   border: 1px solid var(--border);
   border-radius: 6px;
   overflow: hidden;
   font-size: 0.82rem;
+  box-sizing: border-box;
 }
 .agent-tool-call-header {
   display: flex;
   align-items: center;
   gap: 0.4rem;
   padding: 0.3rem 0.6rem;
+  min-height: 28px;
   background: var(--border);
   cursor: pointer;
   user-select: none;

@@ -319,6 +319,10 @@ async function sendMessage() {
 
       let eventType = null;
       for (const line of lines) {
+        if (line.trim() === '') {
+          eventType = null;
+          continue;
+        }
         if (line.startsWith('event: ')) {
           eventType = line.slice(7).trim();
         } else if (line.startsWith('data: ') && eventType) {
@@ -338,8 +342,9 @@ async function sendMessage() {
               _scrollToBottom();
             }
           } else if (eventType === 'tool_call') {
+            if (!data.name) { eventType = null; continue; }
             streamingEl = null;
-            _appendToolCall(data.name, data.args);
+            _appendToolCall(data.name, data.args || {});
             _scrollToBottom();
           } else if (eventType === 'tool_result') {
             const toolEls = messagesEl.querySelectorAll('.agent-tool-call');

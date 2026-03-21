@@ -1,22 +1,52 @@
 ---
-description: "When the user asks to add a card to the deck or open deck, use the MCP tool append_cards_to_deck"
+description: "When the user asks to add, remove, or move cards in the deck, use the deck management MCP tools"
 alwaysApply: true
 ---
-# Adding Cards to the Deck (Deck Editor)
+# Deck Card Management (Deck Editor)
 
-When the user asks to add a card (or cards) to **"the deck"**, **"the open deck"**, **"the loaded deck"**, **"my deck"**, or any similar phrasing that refers to a deck they have open in the deck editor, the agent must:
+When the user asks to add, remove, or move cards in **"the deck"**, **"the open deck"**, **"the loaded deck"**, **"my deck"**, or any similar phrasing that refers to a deck they have open in the deck editor, the agent must use the appropriate MCP tool so the deck editor UI updates via SSE.
 
-1. **Use the MCP tool** `append_cards_to_deck` to add the requested card(s) to the deck editor's currently loaded deck.
-2. **Do not** only suggest code, curl commands, or manual steps—actually invoke the tool (when the agent has MCP access) so the cards are added and the deck editor UI updates via SSE.
+**Do not** only suggest code, curl commands, or manual steps — actually invoke the tool (when the agent has MCP access).
 
-## Tool usage
+**Prerequisite:** The deck editor server must be running (e.g. `python deck_editor.py` or `main.bat deck-editor`). If a tool returns an error that the editor is unreachable, tell the user to start the deck editor first.
 
-- **Tool name:** `append_cards_to_deck`
-- **Parameter:** `card_names` — a single string with one or more card names, comma-separated (e.g. `"Sol Ring"` or `"Lightning Bolt, Counterspell"`).
-- **Prerequisite:** The deck editor server must be running (e.g. `python deck_editor.py` or `main.bat deck-editor`). If the tool returns an error that the editor is unreachable, tell the user to start the deck editor first.
+---
 
-## Examples of user intent
+## Adding cards: `append_cards_to_deck`
 
-- "Add Soul Warden to the deck" → call `append_cards_to_deck("Soul Warden")`
-- "Add Sol Ring to the open deck" → call `append_cards_to_deck("Sol Ring")`
-- "Put Lightning Bolt and Counterspell in my deck" → call `append_cards_to_deck("Lightning Bolt, Counterspell")`
+- **`card_names`** (required) — comma-separated card names (e.g. `"Sol Ring"` or `"Lightning Bolt, Counterspell"`).
+- **`board`** (optional, default `"main"`) — which board to add to: `"main"`, `"maybe"`, or `"sideboard"`.
+
+### Examples
+
+- "Add Soul Warden to the deck" → `append_cards_to_deck(card_names="Soul Warden")`
+- "Add Sol Ring to the sideboard" → `append_cards_to_deck(card_names="Sol Ring", board="sideboard")`
+- "Put Lightning Bolt in the maybe board" → `append_cards_to_deck(card_names="Lightning Bolt", board="maybe")`
+
+---
+
+## Removing cards: `remove_cards_from_deck`
+
+- **`card_names`** (required) — comma-separated card names to remove.
+- **`board`** (optional, default `"main"`) — which board to remove from: `"main"`, `"maybe"`, or `"sideboard"`.
+- **`count`** (optional, default `1`) — how many copies to remove per card name.
+
+### Examples
+
+- "Remove Lightning Bolt from the deck" → `remove_cards_from_deck(card_names="Lightning Bolt")`
+- "Remove 2 copies of Sol Ring" → `remove_cards_from_deck(card_names="Sol Ring", count=2)`
+- "Remove Counterspell from the sideboard" → `remove_cards_from_deck(card_names="Counterspell", board="sideboard")`
+
+---
+
+## Moving cards: `move_cards_in_deck`
+
+- **`card_names`** (required) — comma-separated card names to move.
+- **`from_board`** (required) — source board: `"main"`, `"maybe"`, or `"sideboard"`.
+- **`to_board`** (required) — destination board: `"main"`, `"maybe"`, or `"sideboard"`.
+- **`count`** (optional, default `1`) — how many copies to move per card name.
+
+### Examples
+
+- "Move Sol Ring to the sideboard" → `move_cards_in_deck(card_names="Sol Ring", from_board="main", to_board="sideboard")`
+- "Move Lightning Bolt from the maybe board to the main deck" → `move_cards_in_deck(card_names="Lightning Bolt", from_board="maybe", to_board="main")`

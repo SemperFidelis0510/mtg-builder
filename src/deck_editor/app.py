@@ -113,6 +113,38 @@ def _compute_deck_card_colors(deck: Deck) -> set[str]:
     return colors
 
 
+_VALID_BOARDS: frozenset[str] = frozenset({"main", "maybe", "sideboard"})
+
+
+def _get_board_list(deck: Deck, board: str) -> list[Card]:
+    """Return the card list for the given board name. Raises ValueError for unknown boards."""
+    if board == "main":
+        return deck.cards
+    if board == "maybe":
+        return deck.maybe
+    if board == "sideboard":
+        return deck.sideboard
+    raise ValueError(f"Unknown board: {board!r}. Must be 'main', 'maybe', or 'sideboard'.")
+
+
+def _recompute_and_set_colors(deck: Deck) -> None:
+    """Recompute deck colors from all boards (main + maybe + sideboard) and update deck.colors."""
+    colors: set[str] = set()
+    for card in deck.cards:
+        for c in getattr(card, "color_identity", []) or []:
+            if c in "WUBRG":
+                colors.add(c)
+    for card in deck.maybe:
+        for c in getattr(card, "color_identity", []) or []:
+            if c in "WUBRG":
+                colors.add(c)
+    for card in deck.sideboard:
+        for c in getattr(card, "color_identity", []) or []:
+            if c in "WUBRG":
+                colors.add(c)
+    deck.colors = list(colors)
+
+
 def _compute_deck_stats(deck: Deck) -> dict:
     """Compute total cards, non_land, lands, and W/U/B/R/G symbol distribution as percentages."""
     total_cards: int = 0
@@ -583,18 +615,106 @@ def _parse_add_card_names(body: dict) -> list[str]:
 
 @app.post("/api/add_card")
 async def add_card(body: dict) -> dict:
-    """Add one or more cards by name. Resolves to Card from local card data and appends to deck.cards. Broadcasts deck_updated via SSE."""
+    """Add one or more cards by name to a board (default: main deck). Broadcasts deck_updated via SSE."""
     global _current_deck
     names_to_add: list[str] = _parse_add_card_names(body)
+    board: str = body["board"] if "board" in body and isinstance(body["board"], str) else "main"
+    if board not in _VALID_BOARDS:
+        raise HTTPException(status_code=400, detail=f"Invalid board: {board!r}. Must be 'main', 'maybe', or 'sideboard'.")
     try:
         cards_to_append: list[Card] = _cards_from_names(names_to_add)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
+    target_list: list[Card] = _get_board_list(_current_deck, board)
     for card in cards_to_append:
-        _current_deck.cards.append(card)
-    card_colors = _compute_deck_card_colors(_current_deck)
-    existing = set(_current_deck.colors)
-    _current_deck.colors = list(existing | card_colors)
+        target_list.append(card)
+    _recompute_and_set_colors(_current_deck)
+    _notify_deck_updated()
+    return _deck_to_response(_current_deck)
+
+
+@app.post("/api/remove_card")
+async def remove_card(body: dict) -> dict:
+    """Remove copies of one or more cards from a board (default: main). Broadcasts deck_updated via SSE.
+
+    Body: {"names": [...], "board": "main"|"maybe"|"sideboard", "count": 1}
+    """
+    global _current_deck
+    names_to_remove: list[str] = _parse_add_card_names(body)
+    board: str = body["board"] if "board" in body and isinstance(body["board"], str) else "main"
+    if board not in _VALID_BOARDS:
+        raise HTTPException(status_code=400, detail=f"Invalid board: {board!r}. Must be 'main', 'maybe', or 'sideboard'.")
+    count: int = int(body["count"]) if "count" in body and body["count"] is not None else 1
+    if count < 1:
+        raise HTTPException(status_code=400, detail="count must be >= 1")
+    target_list: list[Card] = _get_board_list(_current_deck, board)
+    not_found: list[str] = []
+    for name in names_to_remove:
+        name_lower: str = name.strip().lower()
+        removed: int = 0
+        for _ in range(count):
+            idx: int | None = None
+            for i, card in enumerate(target_list):
+                if card.name.lower() == name_lower:
+                    idx = i
+                    break
+            if idx is None:
+                break
+            target_list.pop(idx)
+            removed += 1
+        if removed == 0:
+            not_found.append(name)
+    if not_found:
+        raise HTTPException(status_code=404, detail=f"Card(s) not found in {board} board: {', '.join(not_found)}")
+    _recompute_and_set_colors(_current_deck)
+    _notify_deck_updated()
+    return _deck_to_response(_current_deck)
+
+
+@app.post("/api/move_card")
+async def move_card(body: dict) -> dict:
+    """Move copies of one or more cards from one board to another. Broadcasts deck_updated via SSE.
+
+    Body: {"names": [...], "from_board": "main"|"maybe"|"sideboard", "to_board": "main"|"maybe"|"sideboard", "count": 1}
+    """
+    global _current_deck
+    names_to_move: list[str] = _parse_add_card_names(body)
+    if "from_board" not in body or not isinstance(body["from_board"], str):
+        raise HTTPException(status_code=400, detail="'from_board' is required (string: 'main', 'maybe', or 'sideboard')")
+    if "to_board" not in body or not isinstance(body["to_board"], str):
+        raise HTTPException(status_code=400, detail="'to_board' is required (string: 'main', 'maybe', or 'sideboard')")
+    from_board: str = body["from_board"]
+    to_board: str = body["to_board"]
+    if from_board not in _VALID_BOARDS:
+        raise HTTPException(status_code=400, detail=f"Invalid from_board: {from_board!r}. Must be 'main', 'maybe', or 'sideboard'.")
+    if to_board not in _VALID_BOARDS:
+        raise HTTPException(status_code=400, detail=f"Invalid to_board: {to_board!r}. Must be 'main', 'maybe', or 'sideboard'.")
+    if from_board == to_board:
+        raise HTTPException(status_code=400, detail=f"from_board and to_board must differ (both are {from_board!r})")
+    count: int = int(body["count"]) if "count" in body and body["count"] is not None else 1
+    if count < 1:
+        raise HTTPException(status_code=400, detail="count must be >= 1")
+    source_list: list[Card] = _get_board_list(_current_deck, from_board)
+    dest_list: list[Card] = _get_board_list(_current_deck, to_board)
+    not_found: list[str] = []
+    for name in names_to_move:
+        name_lower: str = name.strip().lower()
+        moved: int = 0
+        for _ in range(count):
+            idx: int | None = None
+            for i, card in enumerate(source_list):
+                if card.name.lower() == name_lower:
+                    idx = i
+                    break
+            if idx is None:
+                break
+            dest_list.append(source_list.pop(idx))
+            moved += 1
+        if moved == 0:
+            not_found.append(name)
+    if not_found:
+        raise HTTPException(status_code=404, detail=f"Card(s) not found in {from_board} board: {', '.join(not_found)}")
+    _recompute_and_set_colors(_current_deck)
     _notify_deck_updated()
     return _deck_to_response(_current_deck)
 

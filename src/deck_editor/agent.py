@@ -229,8 +229,36 @@ _TOOL_DECLARATIONS: list[types.FunctionDeclaration] = [
             "type": "object",
             "properties": {
                 "card_names": {"type": "string", "description": "Comma-separated card names to add (e.g. 'Sol Ring, Lightning Bolt')."},
+                "board": {"type": "string", "description": "Which board to add to: 'main' (default), 'maybe', or 'sideboard'."},
             },
             "required": ["card_names"],
+        },
+    ),
+    types.FunctionDeclaration(
+        name="remove_cards_from_deck",
+        description="Remove one or more cards from the user's currently loaded deck.",
+        parameters_json_schema={
+            "type": "object",
+            "properties": {
+                "card_names": {"type": "string", "description": "Comma-separated card names to remove."},
+                "board": {"type": "string", "description": "Which board to remove from: 'main' (default), 'maybe', or 'sideboard'."},
+                "count": {"type": "integer", "description": "How many copies to remove per card name (default 1)."},
+            },
+            "required": ["card_names"],
+        },
+    ),
+    types.FunctionDeclaration(
+        name="move_cards_in_deck",
+        description="Move one or more cards between boards (main deck, maybe board, sideboard) in the user's currently loaded deck.",
+        parameters_json_schema={
+            "type": "object",
+            "properties": {
+                "card_names": {"type": "string", "description": "Comma-separated card names to move."},
+                "from_board": {"type": "string", "description": "Source board: 'main', 'maybe', or 'sideboard'."},
+                "to_board": {"type": "string", "description": "Destination board: 'main', 'maybe', or 'sideboard'."},
+                "count": {"type": "integer", "description": "How many copies to move per card name (default 1)."},
+            },
+            "required": ["card_names", "from_board", "to_board"],
         },
     ),
     types.FunctionDeclaration(
@@ -355,16 +383,84 @@ def execute_tool_call(name: str, args: dict[str, Any]) -> str:
             names_list: list[str] = [n.strip() for n in card_names_str.split(",") if n.strip()]
             if not names_list:
                 return "Error: card_names must contain at least one card name."
-            from src.deck_editor.app import _current_deck, _notify_deck_updated, _compute_deck_card_colors
+            board: str = args["board"] if "board" in args and args["board"] else "main"
+            from src.deck_editor.app import _current_deck, _notify_deck_updated, _get_board_list, _recompute_and_set_colors
             from src.obj.deck import _cards_from_names
+            target_list = _get_board_list(_current_deck, board)
             cards_to_append = _cards_from_names(names_list)
             for card in cards_to_append:
-                _current_deck.cards.append(card)
-            card_colors = _compute_deck_card_colors(_current_deck)
-            existing = set(_current_deck.colors)
-            _current_deck.colors = list(existing | card_colors)
+                target_list.append(card)
+            _recompute_and_set_colors(_current_deck)
             _notify_deck_updated()
-            return f"Added {len(names_list)} card(s) to the deck: {', '.join(names_list)}."
+            board_label: str = "main deck" if board == "main" else f"{board} board"
+            return f"Added {len(names_list)} card(s) to the {board_label}: {', '.join(names_list)}."
+        if name == "remove_cards_from_deck":
+            card_names_str = args["card_names"]
+            names_list = [n.strip() for n in card_names_str.split(",") if n.strip()]
+            if not names_list:
+                return "Error: card_names must contain at least one card name."
+            board = args["board"] if "board" in args and args["board"] else "main"
+            count: int = int(args["count"]) if "count" in args and args["count"] is not None else 1
+            from src.deck_editor.app import _current_deck, _notify_deck_updated, _get_board_list, _recompute_and_set_colors
+            target_list = _get_board_list(_current_deck, board)
+            not_found: list[str] = []
+            for card_name in names_list:
+                name_lower: str = card_name.strip().lower()
+                removed: int = 0
+                for _ in range(count):
+                    idx: int | None = None
+                    for i, c in enumerate(target_list):
+                        if c.name.lower() == name_lower:
+                            idx = i
+                            break
+                    if idx is None:
+                        break
+                    target_list.pop(idx)
+                    removed += 1
+                if removed == 0:
+                    not_found.append(card_name)
+            if not_found:
+                return f"Error: card(s) not found in {board} board: {', '.join(not_found)}"
+            _recompute_and_set_colors(_current_deck)
+            _notify_deck_updated()
+            board_label = "main deck" if board == "main" else f"{board} board"
+            return f"Removed {len(names_list)} card(s) from the {board_label}: {', '.join(names_list)}."
+        if name == "move_cards_in_deck":
+            card_names_str = args["card_names"]
+            names_list = [n.strip() for n in card_names_str.split(",") if n.strip()]
+            if not names_list:
+                return "Error: card_names must contain at least one card name."
+            from_board: str = args["from_board"]
+            to_board: str = args["to_board"]
+            count = int(args["count"]) if "count" in args and args["count"] is not None else 1
+            if from_board == to_board:
+                return f"Error: from_board and to_board must differ (both are {from_board!r})"
+            from src.deck_editor.app import _current_deck, _notify_deck_updated, _get_board_list, _recompute_and_set_colors
+            source_list = _get_board_list(_current_deck, from_board)
+            dest_list = _get_board_list(_current_deck, to_board)
+            not_found = []
+            for card_name in names_list:
+                name_lower = card_name.strip().lower()
+                moved: int = 0
+                for _ in range(count):
+                    idx = None
+                    for i, c in enumerate(source_list):
+                        if c.name.lower() == name_lower:
+                            idx = i
+                            break
+                    if idx is None:
+                        break
+                    dest_list.append(source_list.pop(idx))
+                    moved += 1
+                if moved == 0:
+                    not_found.append(card_name)
+            if not_found:
+                return f"Error: card(s) not found in {from_board} board: {', '.join(not_found)}"
+            _recompute_and_set_colors(_current_deck)
+            _notify_deck_updated()
+            from_label: str = "main deck" if from_board == "main" else f"{from_board} board"
+            to_label: str = "main deck" if to_board == "main" else f"{to_board} board"
+            return f"Moved {len(names_list)} card(s) from {from_label} to {to_label}: {', '.join(names_list)}."
         if name == "search_triggers":
             return CardDB.inst().search_triggers(
                 query=args["query"],
@@ -615,6 +711,7 @@ async def chat_stream(
     for _round in range(MAX_TOOL_ROUNDS):
         function_calls_this_round: list[types.FunctionCall] = []
         model_content_parts: list[types.Part] = []
+        last_candidate_content: types.Content | None = None
 
         try:
             async for chunk in await client.aio.models.generate_content_stream(
@@ -628,12 +725,15 @@ async def chat_stream(
 
                 if chunk.candidates:
                     for candidate in chunk.candidates:
-                        if candidate.content and candidate.content.parts:
-                            for part in candidate.content.parts:
-                                if part.function_call:
-                                    fc: types.FunctionCall = part.function_call
-                                    function_calls_this_round.append(fc)
-                                    model_content_parts.append(part)
+                        if candidate.content:
+                            last_candidate_content = candidate.content
+
+            if last_candidate_content and last_candidate_content.parts:
+                for part in last_candidate_content.parts:
+                    if part.function_call:
+                        function_calls_this_round.append(part.function_call)
+                        model_content_parts.append(part)
+
             set_resolved_model(model_name)
         except Exception as e:
             if _round == 0 and model_name == PRIMARY_MODEL and _is_model_not_found(e):
