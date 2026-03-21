@@ -2,8 +2,7 @@
 # Project-specific
 # =============================================================================
 data/*
-data/prices.json
-chroma_db/
+chroma_db/*
 logs/
 output/
 
@@ -18,26 +17,6 @@ __pycache__/
 
 # C extensions
 *.so
-
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
 
 # PyInstaller
 *.manifest
@@ -80,7 +59,6 @@ instance/
 .scrapy
 
 # Sphinx documentation
-docs/_build/
 
 # PyBuilder
 .pybuilder/
@@ -217,4 +195,3 @@ __marimo__/
 
 decks/*
 chrome_db/
-src/config/deck_sites_keys.json
