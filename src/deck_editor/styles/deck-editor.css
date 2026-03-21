@@ -513,11 +513,7 @@ body {
 }
 .deck-sections-zone {
   position: relative;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 0.5rem;
   min-height: 120px;
-  background: var(--panel);
 }
 .deck-sections-zone-title {
   display: flex;
@@ -525,18 +521,21 @@ body {
   gap: 0.4rem;
   padding: 0.4rem 0.5rem;
   background: var(--border);
-  border-radius: 6px 6px 0 0;
+  border-radius: 4px;
   font-weight: 600;
   font-size: 0.9rem;
-  margin: -0.5rem -0.5rem 0.5rem -0.5rem;
+  margin: 0 0 0.5rem 0;
   color: var(--text);
   position: relative;
 }
 .deck-sections-zone #deckSections {
   margin-top: 0.75rem;
+  padding: 0 0.75rem;
 }
 .deck-sections-zone > .section {
   margin-top: 1rem;
+  margin-left: 0.75rem;
+  margin-right: 0.75rem;
 }
 .deck-sections-zone-title-label { flex: 1; }
 .deck-banner-price {
@@ -994,7 +993,6 @@ body:has(#sideboardToggle:not(:checked)) #section-sideboard { display: none; }
   inset: 0;
   display: flex;
   align-items: center;
-  justify-content: center;
   font-size: 1rem;
   font-weight: 700;
   color: #222;
@@ -1054,8 +1052,8 @@ body:has(#sideboardToggle:not(:checked)) #section-sideboard { display: none; }
    ========================================================================= */
 .agent-toggle-btn {
   margin-left: auto;
-  margin-bottom: 4px;
-  padding: 0.5rem 0.5rem;
+  margin-bottom: 1px;
+  padding: 0.4rem 0.5rem;
   background: var(--border);
   color: var(--text);
   border: 1px solid var(--border);
@@ -1064,7 +1062,7 @@ body:has(#sideboardToggle:not(:checked)) #section-sideboard { display: none; }
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
-  line-height: 1.1;
+  line-height: 1.2;
   align-self: center;
 }
 .agent-toggle-btn:hover { background: #1a4a7a; }
