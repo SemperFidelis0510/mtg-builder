@@ -4,7 +4,6 @@
 data/*
 chroma_db/*
 logs/
-output/
 
 # =============================================================================
 # Python (GitHub default template)
@@ -12,8 +11,6 @@ output/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
-*.py[codz]
-*$py.class
 
 # C extensions
 *.so
@@ -138,7 +135,6 @@ venv.bak/
 .ropeproject
 
 # mkdocs documentation
-/site
 
 # mypy
 .mypy_cache/
@@ -194,4 +190,4 @@ __marimo__/
 
 
 decks/*
-chrome_db/
+chrome_db/*
