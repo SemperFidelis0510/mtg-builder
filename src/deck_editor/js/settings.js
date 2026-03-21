@@ -1,8 +1,9 @@
-/** Deck settings panel: name, description, colors, format, colorless. Syncs to server on change. */
+/** Deck settings panel: name, description, colors, format, colorless, sideboard toggle. Syncs to server on change. */
 
 import { createColorPalette, getColorPaletteValues, setColorPaletteValues } from './color-palette.js';
 
 let settingsDebounceTimer = null;
+let _prevSideboardHasCards = null;
 
 export function getSettings() {
   const nameEl = document.getElementById('deckName');
@@ -25,6 +26,18 @@ export function populateSettings(deck) {
   if (descEl) descEl.value = deck.description != null ? String(deck.description) : '';
   if (formatEl) formatEl.value = deck.format != null ? String(deck.format) : '';
   if (container) setColorPaletteValues(container, deck.colors, deck.colorless_only);
+
+  const sideboardNames = Array.isArray(deck.sideboard_names)
+    ? deck.sideboard_names
+    : (Array.isArray(deck.sideboard) ? deck.sideboard : []);
+  const hasCards = sideboardNames.length > 0;
+  const toggle = document.getElementById('sideboardToggle');
+  if (toggle) {
+    if (_prevSideboardHasCards === null || _prevSideboardHasCards !== hasCards) {
+      toggle.checked = hasCards;
+    }
+    _prevSideboardHasCards = hasCards;
+  }
 }
 
 function fireChange(callback) {
@@ -59,4 +72,5 @@ export function initSettings(onChangeCallback) {
       el.addEventListener('change', () => fireChange(onChangeCallback));
     }
   });
+
 }

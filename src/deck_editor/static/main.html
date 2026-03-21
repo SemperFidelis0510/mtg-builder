@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles/deck-editor.css?v=7">
+  <link rel="stylesheet" href="/styles/deck-editor.css?v=9">
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -54,6 +54,13 @@
             <option value="future">Future</option>
             <option value="gladiator">Gladiator</option>
           </select>
+        </div>
+        <div class="deck-settings-field deck-settings-field-toggle">
+          <label>Sideboard</label>
+          <label class="toggle-switch">
+            <input type="checkbox" id="sideboardToggle">
+            <span class="toggle-slider"></span>
+          </label>
         </div>
         <div class="deck-settings-field deck-settings-field-description">
           <label for="deckDescription">Description</label>
