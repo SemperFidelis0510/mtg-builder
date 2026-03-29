@@ -12,6 +12,7 @@ from google import genai
 from google.genai import types
 
 from src.lib.cardDB import CardDB
+from src.lib.card_name_parser import parse_card_names_arg
 from src.utils.logger import LOGGER
 
 # ---------------------------------------------------------------------------
@@ -369,7 +370,7 @@ def execute_tool_call(name: str, args: dict[str, Any]) -> str:
             )
         if name == "get_card_info":
             card_names: str = args["card_names"]
-            names: list[str] = [n.strip() for n in card_names.split(",") if n.strip()]
+            names: list[str] = parse_card_names_arg(card_names)
             fields_str: str = args.get("fields") or _DEFAULT_CARD_FIELDS
             card_fields: list[str] = [f.strip() for f in fields_str.split(",") if f.strip()]
             return CardDB.inst().get_cards_info(names=names, card_fields=card_fields)
@@ -380,23 +381,40 @@ def execute_tool_call(name: str, args: dict[str, Any]) -> str:
             )
         if name == "append_cards_to_deck":
             card_names_str: str = args["card_names"]
-            names_list: list[str] = [n.strip() for n in card_names_str.split(",") if n.strip()]
+            names_list: list[str] = parse_card_names_arg(card_names_str)
             if not names_list:
                 return "Error: card_names must contain at least one card name."
             board: str = args["board"] if "board" in args and args["board"] else "main"
             from src.deck_editor.app import _current_deck, _notify_deck_updated, _get_board_list, _recompute_and_set_colors
             from src.obj.deck import _cards_from_names
             target_list = _get_board_list(_current_deck, board)
-            cards_to_append = _cards_from_names(names_list)
+            cards_to_append: list[Any] = []
+            not_found: list[str] = []
+            for card_name in names_list:
+                try:
+                    cards_to_append.extend(_cards_from_names([card_name]))
+                except ValueError:
+                    not_found.append(card_name)
+            if not cards_to_append:
+                return f"Error: card(s) not found: {', '.join(not_found)}"
             for card in cards_to_append:
                 target_list.append(card)
             _recompute_and_set_colors(_current_deck)
             _notify_deck_updated()
             board_label: str = "main deck" if board == "main" else f"{board} board"
+            if not_found:
+                added_names: list[str] = list(names_list)
+                for missing_name in not_found:
+                    if missing_name in added_names:
+                        added_names.remove(missing_name)
+                return (
+                    f"Added {len(added_names)} card(s) to the {board_label}: {', '.join(added_names)}. "
+                    f"Could not find {len(not_found)} card(s): {', '.join(not_found)}."
+                )
             return f"Added {len(names_list)} card(s) to the {board_label}: {', '.join(names_list)}."
         if name == "remove_cards_from_deck":
             card_names_str = args["card_names"]
-            names_list = [n.strip() for n in card_names_str.split(",") if n.strip()]
+            names_list = parse_card_names_arg(card_names_str)
             if not names_list:
                 return "Error: card_names must contain at least one card name."
             board = args["board"] if "board" in args and args["board"] else "main"
@@ -427,7 +445,7 @@ def execute_tool_call(name: str, args: dict[str, Any]) -> str:
             return f"Removed {len(names_list)} card(s) from the {board_label}: {', '.join(names_list)}."
         if name == "move_cards_in_deck":
             card_names_str = args["card_names"]
-            names_list = [n.strip() for n in card_names_str.split(",") if n.strip()]
+            names_list = parse_card_names_arg(card_names_str)
             if not names_list:
                 return "Error: card_names must contain at least one card name."
             from_board: str = args["from_board"]

@@ -621,16 +621,32 @@ async def add_card(body: dict) -> dict:
     board: str = body["board"] if "board" in body and isinstance(body["board"], str) else "main"
     if board not in _VALID_BOARDS:
         raise HTTPException(status_code=400, detail=f"Invalid board: {board!r}. Must be 'main', 'maybe', or 'sideboard'.")
-    try:
-        cards_to_append: list[Card] = _cards_from_names(names_to_add)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
+    cards_to_append: list[Card] = []
+    not_found: list[str] = []
+    for name in names_to_add:
+        try:
+            cards_to_append.extend(_cards_from_names([name]))
+        except ValueError:
+            not_found.append(name)
+    if not cards_to_append:
+        raise HTTPException(status_code=404, detail=f"Card(s) not found: {', '.join(not_found)}")
     target_list: list[Card] = _get_board_list(_current_deck, board)
     for card in cards_to_append:
         target_list.append(card)
+    if not_found:
+        LOGGER.warning(
+            "add_card: partially added=%s requested=%s board=%s not_found=%s",
+            len(cards_to_append),
+            len(names_to_add),
+            board,
+            not_found,
+        )
     _recompute_and_set_colors(_current_deck)
     _notify_deck_updated()
-    return _deck_to_response(_current_deck)
+    response: dict = _deck_to_response(_current_deck)
+    if not_found:
+        response["not_found"] = not_found
+    return response
 
 
 @app.post("/api/remove_card")

@@ -10,6 +10,7 @@ import threading
 
 import requests
 
+from src.lib.card_name_parser import parse_card_names_arg
 from src.lib.config import (
     CHROMA_PATH,
     COLLECTION_NAME,
@@ -102,15 +103,15 @@ def run_server() -> None:
         LOGGER.info("Request completed tool=plain_search_card")
         return result
 
-    def _post_deck_editor(tool_name: str, endpoint: str, payload: dict) -> tuple[bool, str]:
-        """POST to a deck editor endpoint. Returns (success, message)."""
+    def _post_deck_editor(tool_name: str, endpoint: str, payload: dict) -> tuple[bool, str, dict | None]:
+        """POST to a deck editor endpoint. Returns (success, message, response_json)."""
         url: str = f"{DECK_EDITOR_BASE_URL.rstrip('/')}{endpoint}"
         LOGGER.info("Request received tool=%s payload=%s", tool_name, payload)
         try:
             r = requests.post(url, json=payload, timeout=10)
         except requests.RequestException as e:
             LOGGER.error("%s: request failed: %s", tool_name, e)
-            return False, f"Error: deck editor unreachable at {url}. Is the deck editor running (e.g. python deck_editor.py)?"
+            return False, f"Error: deck editor unreachable at {url}. Is the deck editor running (e.g. python deck_editor.py)?", None
         if r.status_code in (400, 404):
             try:
                 detail = r.json().get("detail", r.text)
@@ -118,7 +119,7 @@ def run_server() -> None:
                 LOGGER.debug("%s: r.json() failed: %s", tool_name, e)
                 detail = r.text
             LOGGER.warning("%s: %s %s", tool_name, r.status_code, detail)
-            return False, f"Error: {detail}"
+            return False, f"Error: {detail}", None
         if r.status_code != 200:
             try:
                 detail = r.json().get("detail", r.text)
@@ -126,8 +127,15 @@ def run_server() -> None:
                 LOGGER.debug("%s: r.json() failed: %s", tool_name, e)
                 detail = r.text
             LOGGER.error("%s: %s %s", tool_name, r.status_code, detail)
-            return False, f"Error: {r.status_code} {detail}"
-        return True, ""
+            return False, f"Error: {r.status_code} {detail}", None
+        try:
+            response_json: dict | None = r.json()
+            if response_json is not None and not isinstance(response_json, dict):
+                LOGGER.error("%s: expected JSON object response, got %s", tool_name, type(response_json).__name__)
+                raise TypeError(f"{tool_name}: expected JSON object response, got {type(response_json).__name__}")
+        except ValueError:
+            response_json = None
+        return True, "", response_json
 
     @mcp.tool()
     def append_cards_to_deck(card_names: str, board: str = "main") -> str:
@@ -135,14 +143,37 @@ def run_server() -> None:
         card_names: comma-separated list of card names (e.g. 'Lightning Bolt, Counterspell').
         board: which board to add to — 'main' (default), 'maybe', or 'sideboard'.
         The deck editor must be running (e.g. python deck_editor.py). Returns a short status or error message."""
-        names: list[str] = [n.strip() for n in card_names.split(",") if n.strip()]
+        names: list[str] = parse_card_names_arg(card_names)
         if not names:
             return "Error: card_names must contain at least one card name (comma-separated)."
-        ok, err = _post_deck_editor("append_cards_to_deck", "/api/add_card", {"names": names, "board": board})
+        ok, err, response_json = _post_deck_editor("append_cards_to_deck", "/api/add_card", {"names": names, "board": board})
         if not ok:
             return err
         board_label: str = "main deck" if board == "main" else f"{board} board"
-        LOGGER.info("Request completed tool=append_cards_to_deck added=%s board=%s", len(names), board)
+        missing: list[str] = []
+        if response_json is not None and "not_found" in response_json:
+            raw_missing = response_json["not_found"]
+            if isinstance(raw_missing, list):
+                for value in raw_missing:
+                    if isinstance(value, str):
+                        missing.append(value)
+        added_count: int = len(names) - len(missing)
+        LOGGER.info(
+            "Request completed tool=append_cards_to_deck added=%s requested=%s board=%s missing=%s",
+            added_count,
+            len(names),
+            board,
+            missing,
+        )
+        if missing:
+            added_names: list[str] = list(names)
+            for missing_name in missing:
+                if missing_name in added_names:
+                    added_names.remove(missing_name)
+            return (
+                f"Added {added_count} card(s) to the {board_label}: {', '.join(added_names)}. "
+                f"Could not find {len(missing)} card(s): {', '.join(missing)}."
+            )
         return f"Added {len(names)} card(s) to the {board_label}: {', '.join(names)}."
 
     @mcp.tool()
@@ -152,10 +183,10 @@ def run_server() -> None:
         board: which board to remove from — 'main' (default), 'maybe', or 'sideboard'.
         count: how many copies to remove per card name (default 1).
         The deck editor must be running. Returns a short status or error message."""
-        names: list[str] = [n.strip() for n in card_names.split(",") if n.strip()]
+        names: list[str] = parse_card_names_arg(card_names)
         if not names:
             return "Error: card_names must contain at least one card name (comma-separated)."
-        ok, err = _post_deck_editor("remove_cards_from_deck", "/api/remove_card", {"names": names, "board": board, "count": count})
+        ok, err, _ = _post_deck_editor("remove_cards_from_deck", "/api/remove_card", {"names": names, "board": board, "count": count})
         if not ok:
             return err
         board_label: str = "main deck" if board == "main" else f"{board} board"
@@ -170,10 +201,10 @@ def run_server() -> None:
         to_board: destination board — 'main', 'maybe', or 'sideboard'.
         count: how many copies to move per card name (default 1).
         The deck editor must be running. Returns a short status or error message."""
-        names: list[str] = [n.strip() for n in card_names.split(",") if n.strip()]
+        names: list[str] = parse_card_names_arg(card_names)
         if not names:
             return "Error: card_names must contain at least one card name (comma-separated)."
-        ok, err = _post_deck_editor("move_cards_in_deck", "/api/move_card", {"names": names, "from_board": from_board, "to_board": to_board, "count": count})
+        ok, err, _ = _post_deck_editor("move_cards_in_deck", "/api/move_card", {"names": names, "from_board": from_board, "to_board": to_board, "count": count})
         if not ok:
             return err
         from_label: str = "main deck" if from_board == "main" else f"{from_board} board"
@@ -193,7 +224,7 @@ def run_server() -> None:
         fields: comma-separated Card field names to include in the response (default covers the most common fields).
         Available fields: name, type_line, types, subtypes, supertypes, text, mana_cost, mana_value, colors, color_identity, power, toughness, keywords, loyalty, defense, legalities, triggers, effects, price_usd.
         Returns a JSON array with the requested fields for each card. Cards not found get an error entry."""
-        names: list[str] = [n.strip() for n in card_names.split(",") if n.strip()]
+        names: list[str] = parse_card_names_arg(card_names)
         if not names:
             return "Error: card_names must contain at least one card name (comma-separated)."
         card_fields: list[str] = [f.strip() for f in fields.split(",") if f.strip()]
