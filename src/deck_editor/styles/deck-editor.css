@@ -1175,8 +1175,41 @@ body.agent-panel-open {
   word-wrap: break-word;
   overflow-wrap: break-word;
 }
-.agent-msg-user {
+.agent-msg-user-row {
   align-self: flex-end;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.35rem;
+  max-width: 92%;
+}
+.agent-msg-user-row .agent-msg-user {
+  flex: 1;
+  min-width: 0;
+  align-self: stretch;
+}
+.agent-msg-edit-btn {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  margin-top: 2px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: #a0a0a0;
+  font-size: 0.85rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.agent-msg-edit-btn:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--accent);
+}
+.agent-msg-edit-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.agent-msg-user {
   background: var(--accent);
   color: #fff;
   border-bottom-right-radius: 2px;
@@ -1389,6 +1422,28 @@ body.agent-panel-open {
 }
 .agent-send-btn:hover { opacity: 0.85; }
 .agent-send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.agent-chat-send-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  align-self: flex-end;
+  flex-shrink: 0;
+}
+.agent-stop-btn {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  background: #8b2942;
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 0.75rem;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.agent-stop-btn:hover:not(:disabled) { opacity: 0.9; }
+.agent-stop-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* =========================================================================
    Agent Rules Tab

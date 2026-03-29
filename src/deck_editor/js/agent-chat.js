@@ -2,6 +2,11 @@
 
 let _currentConvId = null;
 let _sending = false;
+let _abortController = null;
+/** Server message count for the loaded/synchronized conversation (length of messages[]). */
+let _convMessageCount = 0;
+/** If set, next send will truncate conversation at this index before appending the user message. */
+let _truncateFromIndex = null;
 
 const panel = document.getElementById('agentPanel');
 const toggleBtn = document.getElementById('agentPanelToggle');
@@ -11,6 +16,7 @@ const welcomeMsg = document.getElementById('agentWelcomeMsg');
 const inputArea = document.getElementById('agentChatInputArea');
 const chatInput = document.getElementById('agentChatInput');
 const sendBtn = document.getElementById('agentSendBtn');
+const stopBtn = document.getElementById('agentStopBtn');
 const convSelect = document.getElementById('agentConversationSelect');
 const newConvBtn = document.getElementById('agentNewConvBtn');
 const deleteConvBtn = document.getElementById('agentDeleteConvBtn');
@@ -109,12 +115,14 @@ async function loadConversation(convId) {
     if (!r.ok) { _startNewConversation(); return; }
     const conv = await r.json();
     _currentConvId = conv.id;
+    _convMessageCount = conv.messages.length;
     deleteConvBtn.disabled = false;
     if (conv.model) modelBadge.textContent = conv.model;
     _clearMessages();
-    for (const msg of conv.messages) {
+    for (let i = 0; i < conv.messages.length; i++) {
+      const msg = conv.messages[i];
       if (msg.role === 'user') {
-        _appendUserMessage(msg.content);
+        _appendUserMessage(msg.content, i);
       } else if (msg.role === 'assistant') {
         if (msg.tool_calls) {
           for (const tc of msg.tool_calls) {
@@ -130,6 +138,8 @@ async function loadConversation(convId) {
 
 function _startNewConversation() {
   _currentConvId = null;
+  _convMessageCount = 0;
+  _truncateFromIndex = null;
   _clearMessages();
   welcomeMsg.style.display = 'block';
   convSelect.value = '';
@@ -165,12 +175,62 @@ function _clearMessages() {
   welcomeMsg.style.display = 'block';
 }
 
-function _appendUserMessage(text) {
+function _setEditButtonsDisabled(disabled) {
+  messagesEl.querySelectorAll('.agent-msg-edit-btn').forEach((b) => {
+    b.disabled = disabled;
+  });
+}
+
+function _onEditUserMessage(row, messageIndex) {
+  if (_sending) return;
+  const bubble = row.querySelector('.agent-msg-user');
+  if (!bubble) return;
+  const text = bubble.textContent;
+  chatInput.value = text;
+  chatInput.style.height = 'auto';
+  chatInput.style.height = Math.min(chatInput.scrollHeight, 100) + 'px';
+  chatInput.focus();
+  _truncateFromIndex = messageIndex;
+  let n = row.nextSibling;
+  while (n) {
+    const next = n.nextSibling;
+    n.remove();
+    n = next;
+  }
+  row.remove();
+  _convMessageCount = messageIndex;
+  if (messageIndex === 0) {
+    welcomeMsg.style.display = 'block';
+  }
+}
+
+/**
+ * @param {string} text
+ * @param {number} messageIndex index in server messages[] for this user turn
+ * @returns {HTMLElement} row wrapper
+ */
+function _appendUserMessage(text, messageIndex) {
   welcomeMsg.style.display = 'none';
-  const el = document.createElement('div');
-  el.className = 'agent-msg agent-msg-user';
-  el.textContent = text;
-  messagesEl.appendChild(el);
+  const row = document.createElement('div');
+  row.className = 'agent-msg-user-row';
+  row.dataset.messageIndex = String(messageIndex);
+
+  const bubble = document.createElement('div');
+  bubble.className = 'agent-msg agent-msg-user';
+  bubble.textContent = text;
+
+  const editBtn = document.createElement('button');
+  editBtn.type = 'button';
+  editBtn.className = 'agent-msg-edit-btn';
+  editBtn.title = 'Edit and resend';
+  editBtn.setAttribute('aria-label', 'Edit and resend');
+  editBtn.textContent = '\u270E';
+  editBtn.addEventListener('click', () => _onEditUserMessage(row, messageIndex));
+
+  row.appendChild(bubble);
+  row.appendChild(editBtn);
+  messagesEl.appendChild(row);
+  return row;
 }
 
 function _appendAssistantMessage(html) {
@@ -259,6 +319,29 @@ function _toolCallLabel(name, args) {
   return fn ? fn(args) : `Tool: ${name}`;
 }
 
+/** Remove partial assistant output after an aborted send (everything after user row). */
+function _cleanupPartialReplyAfterUserRow(userRow) {
+  let n = userRow.nextSibling;
+  while (n) {
+    const next = n.nextSibling;
+    n.remove();
+    n = next;
+  }
+}
+
+function _setStreamingControls(active) {
+  sendBtn.style.display = active ? 'none' : '';
+  stopBtn.style.display = active ? '' : 'none';
+  stopBtn.disabled = !active;
+}
+
+function _restorePromptToInput(promptText) {
+  chatInput.value = promptText;
+  chatInput.style.height = 'auto';
+  chatInput.style.height = Math.min(chatInput.scrollHeight, 100) + 'px';
+  chatInput.focus();
+}
+
 // -----------------------------------------------------------------------
 // Auto-resize textarea
 // -----------------------------------------------------------------------
@@ -271,35 +354,53 @@ chatInput.addEventListener('input', () => {
 // Send message (streaming SSE)
 // -----------------------------------------------------------------------
 
+stopBtn.addEventListener('click', () => {
+  if (_abortController) _abortController.abort();
+});
+
 async function sendMessage() {
-  const text = chatInput.value.trim();
+  const rawMessage = chatInput.value;
+  const text = rawMessage.trim();
   if (!text || _sending) return;
+
+  const savedTruncate = _truncateFromIndex;
+  _truncateFromIndex = null;
 
   _sending = true;
   sendBtn.disabled = true;
+  _setStreamingControls(true);
+  _setEditButtonsDisabled(true);
   chatInput.value = '';
   chatInput.style.height = 'auto';
 
-  _appendUserMessage(text);
+  const userRow = _appendUserMessage(text, _convMessageCount);
   _showTypingIndicator();
   _scrollToBottom();
 
   const body = { message: text };
   if (_currentConvId) body.conversation_id = _currentConvId;
+  if (savedTruncate !== null) body.truncate_from_index = savedTruncate;
+
+  _abortController = new AbortController();
+  const signal = _abortController.signal;
 
   try {
     const resp = await fetch('/api/agent/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      signal,
     });
 
     if (!resp.ok) {
       _removeTypingIndicator();
       const err = await resp.json().catch(() => ({ detail: 'Request failed' }));
+      userRow.remove();
+      if (savedTruncate !== null && _currentConvId) {
+        await loadConversation(_currentConvId);
+      }
       _appendAssistantMessage(`Error: ${err.detail || resp.statusText}`);
-      _sending = false;
-      sendBtn.disabled = false;
+      _scrollToBottom();
       return;
     }
 
@@ -352,10 +453,15 @@ async function sendMessage() {
             const toolEls = messagesEl.querySelectorAll('.agent-tool-call');
             const lastTool = toolEls[toolEls.length - 1];
             if (lastTool) {
-              const body = lastTool.querySelector('.agent-tool-call-body');
-              if (body) body.textContent += `\n\nResult:\n${data.result}`;
+              const bodyEl = lastTool.querySelector('.agent-tool-call-body');
+              if (bodyEl) bodyEl.textContent += `\n\nResult:\n${data.result}`;
             }
           } else if (eventType === 'done') {
+            if (savedTruncate !== null) {
+              _convMessageCount = savedTruncate + 2;
+            } else {
+              _convMessageCount += 2;
+            }
             if (data.conversation_id) {
               _currentConvId = data.conversation_id;
               deleteConvBtn.disabled = false;
@@ -376,12 +482,34 @@ async function sendMessage() {
     }
   } catch (e) {
     _removeTypingIndicator();
-    _appendAssistantMessage(`Network error: ${e.message}`);
+    if (e.name === 'AbortError') {
+      _cleanupPartialReplyAfterUserRow(userRow);
+      userRow.remove();
+      if (_currentConvId) {
+        await loadConversation(_currentConvId);
+      } else {
+        _convMessageCount = savedTruncate !== null ? savedTruncate : 0;
+        if (_convMessageCount === 0) welcomeMsg.style.display = 'block';
+      }
+      _restorePromptToInput(rawMessage);
+    } else {
+      userRow.remove();
+      if (savedTruncate !== null && _currentConvId) {
+        await loadConversation(_currentConvId);
+      } else if (!_currentConvId) {
+        _convMessageCount = savedTruncate !== null ? savedTruncate : 0;
+        if (_convMessageCount === 0) welcomeMsg.style.display = 'block';
+      }
+      _appendAssistantMessage(`Network error: ${e.message}`);
+    }
+  } finally {
+    _abortController = null;
+    _sending = false;
+    sendBtn.disabled = false;
+    _setStreamingControls(false);
+    _setEditButtonsDisabled(false);
+    _scrollToBottom();
   }
-
-  _sending = false;
-  sendBtn.disabled = false;
-  _scrollToBottom();
 }
 
 sendBtn.addEventListener('click', sendMessage);

@@ -19,6 +19,7 @@ from src.deck_editor.agent import (
     load_conversation,
     load_user_rules,
     save_api_key,
+    save_conversation,
 )
 from src.utils.logger import LOGGER
 
@@ -135,9 +136,22 @@ async def agent_chat(request: Request) -> StreamingResponse:
 
     conversation_id: str | None = body.get("conversation_id")
     message: str | None = body.get("message")
+    truncate_from_index: int | None = body.get("truncate_from_index")
 
     if not message or not isinstance(message, str) or not message.strip():
         raise HTTPException(status_code=400, detail="'message' must be a non-empty string")
+
+    if truncate_from_index is not None:
+        if not isinstance(truncate_from_index, int) or truncate_from_index < 0:
+            raise HTTPException(
+                status_code=400,
+                detail="'truncate_from_index' must be a non-negative integer",
+            )
+        if not conversation_id:
+            raise HTTPException(
+                status_code=400,
+                detail="'truncate_from_index' requires 'conversation_id'",
+            )
 
     if conversation_id:
         try:
@@ -146,6 +160,27 @@ async def agent_chat(request: Request) -> StreamingResponse:
             raise HTTPException(status_code=404, detail=str(e)) from e
     else:
         conv = create_conversation()
+
+    if truncate_from_index is not None:
+        msgs: list = conv["messages"]
+        if truncate_from_index > len(msgs):
+            raise HTTPException(
+                status_code=400,
+                detail="'truncate_from_index' is past the end of the conversation",
+            )
+        if len(msgs) > 0 and truncate_from_index == len(msgs):
+            raise HTTPException(
+                status_code=400,
+                detail="'truncate_from_index' must point to an existing message",
+            )
+        if len(msgs) > 0 and truncate_from_index < len(msgs):
+            if msgs[truncate_from_index]["role"] != "user":
+                raise HTTPException(
+                    status_code=400,
+                    detail="'truncate_from_index' must refer to a user message",
+                )
+        conv["messages"] = msgs[:truncate_from_index]
+        save_conversation(conv)
 
     deck_state: dict = _get_deck_state()
 

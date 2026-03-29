@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles/deck-editor.css?v=11">
+  <link rel="stylesheet" href="/styles/deck-editor.css?v=12">
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -238,10 +238,13 @@
     </div>
     <div class="agent-chat-input-area" id="agentChatInputArea">
       <textarea id="agentChatInput" class="agent-chat-input" placeholder="Ask the AI assistant..." rows="1"></textarea>
-      <button type="button" class="agent-send-btn" id="agentSendBtn" title="Send message">&#9654;</button>
+      <div class="agent-chat-send-col">
+        <button type="button" class="agent-send-btn" id="agentSendBtn" title="Send message">&#9654;</button>
+        <button type="button" class="agent-stop-btn" id="agentStopBtn" title="Stop" style="display:none" aria-label="Stop generating">&#9632;</button>
+      </div>
     </div>
   </div>
 
-  <script type="module" src="/js/main.js?v=3"></script>
+  <script type="module" src="/js/main.js?v=5"></script>
 </body>
 </html>
