@@ -769,7 +769,8 @@ body {
 }
 .removed-list li { margin: 0; padding: 0; }
 .removed-list .card-img { display: none !important; }
-.removed-list .card-stack:not(.maybe-board-item) {
+/* Folded text row for sideboard only — maybe full-card view uses main-deck .card-stack layout. */
+#list-sideboard .card-stack:not(.maybe-board-item) {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -779,7 +780,7 @@ body {
   border-radius: 6px;
   min-height: auto;
 }
-.removed-list .card-stack:not(.maybe-board-item)::before {
+#list-sideboard .card-stack:not(.maybe-board-item)::before {
   content: attr(data-name);
   flex: 1;
   min-width: 0;
