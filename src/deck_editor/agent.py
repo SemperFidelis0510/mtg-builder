@@ -164,20 +164,12 @@ def build_system_prompt(deck_state: dict) -> str:
 
 _TOOL_DECLARATIONS: list[types.FunctionDeclaration] = [
     types.FunctionDeclaration(
-        name="semantic_search_card",
-        description="Search for Magic: The Gathering cards by semantic meaning. Returns card names and rules text matching the query.",
-        parameters_json_schema={
-            "type": "object",
-            "properties": {
-                "query": {"type": "string", "description": "Semantic search query describing the kind of cards you want."},
-                "n_results": {"type": "integer", "description": "Number of results to return (default 5)."},
-            },
-            "required": ["query"],
-        },
-    ),
-    types.FunctionDeclaration(
         name="plain_search_card",
-        description="Filter MTG cards by exact properties. All filters are AND-combined. Returns card names and rules text.",
+        description=(
+            "Filter MTG cards by exact properties. All structural filters are AND-combined; at least one is required. "
+            "Optional semantic_query ranks results by meaning (RAG) among cards that match those filters; "
+            "search_type is general (full card text), trigger, or effect."
+        ),
         parameters_json_schema={
             "type": "object",
             "properties": {
@@ -198,6 +190,14 @@ _TOOL_DECLARATIONS: list[types.FunctionDeclaration] = [
                 "supertype": {"type": "string", "description": "Card supertype (e.g. 'Legendary')."},
                 "format_legal": {"type": "string", "description": "Format legality (e.g. 'standard', 'commander')."},
                 "n_results": {"type": "integer", "description": "Max number of results (default 20)."},
+                "semantic_query": {
+                    "type": "string",
+                    "description": "Optional natural-language query; when set, results are ranked by similarity within the filtered set (requires RAG loaded).",
+                },
+                "search_type": {
+                    "type": "string",
+                    "description": "When using semantic_query: general, trigger, or effect (default general).",
+                },
             },
             "required": [],
         },
@@ -358,11 +358,6 @@ def execute_tool_call(name: str, args: dict[str, Any]) -> str:
     """Execute a tool call by name, return the result as a string."""
     LOGGER.info("Agent tool call: %s args=%s", name, args)
     try:
-        if name == "semantic_search_card":
-            return CardDB.inst().search_cards(
-                query=args["query"],
-                n_results=int(args.get("n_results") or 5),
-            )
         if name == "plain_search_card":
             return CardDB.inst().filter_cards(
                 name=args.get("name") or "",
@@ -382,6 +377,8 @@ def execute_tool_call(name: str, args: dict[str, Any]) -> str:
                 supertype=args.get("supertype") or "",
                 format_legal=args.get("format_legal") or "",
                 n_results=int(args.get("n_results") or 20),
+                semantic_query=args.get("semantic_query") or "",
+                search_type=args.get("search_type") or "general",
             )
         if name == "get_card_info":
             card_names: str = args["card_names"]

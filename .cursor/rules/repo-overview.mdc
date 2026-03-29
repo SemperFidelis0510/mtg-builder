@@ -40,15 +40,13 @@ D:/scripts/MTG/
 
 ### A. MCP Server (`server.py`)
 -   Initializes the `FastMCP` server.
--   Registers two main tools:
-    1.  `semantic_search_card(query, n_results)`: Delegates to `CardDB.inst().search_cards` (RAG).
-    2.  `plain_search_card(...)`: Delegates to `CardDB.inst().filter_cards` (structured filter).
+-   Registers `plain_search_card(...)`: delegates to `CardDB.inst().filter_cards` (structured filters; optional `semantic_query` / `search_type` for RAG-ranked results within those filters).
 -   Handles server startup and stdio communication.
 
 ### B. CardDB (`src/lib/cardDB.py`)
 -   **Singleton**: `CardDB.inst()` returns the single instance; holds lazy-loaded AtomicCards list, embedding model, and ChromaDB client.
 -   **Structured Search**: `get_card_data()`, `filter_cards_list()`, `filter_cards()` — load `AtomicCards.json` and apply AND-based filters (name, oracle text, colors, type line, etc.).
--   **RAG / Semantic Search**: `get_embedding_model()`, `get_collection()`, `search_cards(query, n_results)` — lazy-load SentenceTransformer and ChromaDB, encode query, return formatted card text.
+-   **RAG / Semantic Search**: `get_embedding_model()`, Chroma collections, `_semantic_query`, and the semantic branch inside `filter_cards_list` — lazy-load SentenceTransformer and ChromaDB; optional semantic ranking combined with structured filters.
 
 ### C. Data Ingestion (`src/lib/build_rag.py` called via `main.bat`)
 -   **Download**: Fetches the latest `AtomicCards.json` from MTGJSON.

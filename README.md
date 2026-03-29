@@ -6,8 +6,7 @@ A [Model Context Protocol](https://modelcontextprotocol.io/) server that provide
 
 | Tool | Description |
 |------|-------------|
-| `semantic_search_card` | Natural-language search using sentence embeddings and ChromaDB (e.g. *"creatures that draw cards when they attack"*) |
-| `plain_search_card` | Structured filter by name, oracle text, type, colors, mana value, power/toughness, keywords, subtypes, supertypes, and format legality |
+| `plain_search_card` | Structured filter by name, oracle text, type, colors, mana value, power/toughness, keywords, subtypes, supertypes, and format legality. Optional `semantic_query` + `search_type` (`general` / `trigger` / `effect`) ranks matches by embedding similarity *among cards that pass the filters* |
 
 ## Prerequisites
 

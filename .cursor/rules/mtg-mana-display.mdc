@@ -4,7 +4,7 @@ alwaysApply: true
 ---
 # MTG Mana Display in Chat
 
-When displaying Magic: The Gathering mana costs or mana symbols in responses (e.g. when summarizing card info from semantic_search_card or plain_search_card), **always** use the following emoji conventions:
+When displaying Magic: The Gathering mana costs or mana symbols in responses (e.g. when summarizing card info from plain_search_card), **always** use the following emoji conventions:
 
 ## Generic mana (numbers)
 

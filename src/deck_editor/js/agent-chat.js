@@ -242,8 +242,10 @@ function _renderMarkdown(text) {
 
 function _toolCallLabel(name, args) {
   const labels = {
-    semantic_search_card: (a) => `Searched: "${a.query || ''}"`,
-    plain_search_card: () => 'Filtered cards by attributes',
+    plain_search_card: (a) =>
+      (a.semantic_query || '').trim()
+        ? `Filtered cards + semantic: "${(a.semantic_query || '').trim()}"`
+        : 'Filtered cards by attributes',
     get_card_info: (a) => `Looked up: ${a.card_names || ''}`,
     extract_card_mechanics: (a) => `Extracted ${a.extract_type || 'mechanics'} for ${a.card_name || ''}`,
     append_cards_to_deck: (a) => `Added to deck: ${a.card_names || ''}`,

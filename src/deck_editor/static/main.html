@@ -102,8 +102,7 @@
             <ul class="autocomplete-dropdown" id="autocompleteDropdown" style="display: none;"></ul>
           </div>
           <button type="button" class="add-card-btn" id="addCardBtn" title="Add the searched card to the deck">Add to deck</button>
-          <button type="button" class="add-card-btn" id="advancedSearchBtn" title="Open advanced search by criteria">Advanced Search</button>
-          <button type="button" class="add-card-btn" id="semanticSearchBtn" title="Open semantic search by meaning">Semantic Search</button>
+          <button type="button" class="add-card-btn" id="advancedSearchBtn" title="Open advanced search (filters and optional semantic ranking)">Advanced Search</button>
           <span class="search-msg" id="searchMsg"></span>
         </div>
       </div>
@@ -171,13 +170,6 @@
     </div>
   </div>
 
-  <div class="semantic-search-modal" id="semanticSearchModal" aria-hidden="true">
-    <div class="modal-content">
-      <button type="button" class="modal-close" id="semanticSearchModalClose" aria-label="Close">×</button>
-      <iframe class="modal-iframe" id="semanticSearchIframe" src="about:blank" title="Semantic Card Search"></iframe>
-    </div>
-  </div>
-
   <div class="synergy-checker-modal" id="synergyCheckerModal" aria-hidden="true">
     <div class="modal-content">
       <button type="button" class="modal-close" id="synergyCheckerModalClose" aria-label="Close">×</button>
@@ -188,8 +180,8 @@
   <div class="rag-loading-popup" id="ragLoadingPopup" aria-hidden="true" role="alertdialog" aria-labelledby="ragLoadingTitle" aria-describedby="ragLoadingText">
     <div class="rag-loading-popup-backdrop"></div>
     <div class="rag-loading-popup-content">
-      <h2 class="rag-loading-popup-title" id="ragLoadingTitle">Semantic Search</h2>
-      <p class="rag-loading-popup-text" id="ragLoadingText">RAG still loading. Please wait a moment and try again.</p>
+      <h2 class="rag-loading-popup-title" id="ragLoadingTitle">Embedding index</h2>
+      <p class="rag-loading-popup-text" id="ragLoadingText">RAG is still loading. Please wait a moment and try again.</p>
       <button type="button" class="rag-loading-popup-dismiss" id="ragLoadingPopupDismiss">OK</button>
     </div>
   </div>

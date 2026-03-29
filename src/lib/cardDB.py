@@ -24,6 +24,9 @@ from src.utils.logger import LOGGER
 # CardDB singleton: AtomicCards + ChromaDB + embedding model
 # ---------------------------------------------------------------------------
 
+# Max Chroma rows to pull when combining semantic ranking with structural filters.
+_CHROMA_SEMANTIC_FILTER_CAP: int = 25000
+
 
 class CardDB:
     """Unified card database: lazy-loaded AtomicCards list, structured filtering, and RAG semantic search."""
@@ -304,6 +307,261 @@ class CardDB:
             return set()
         return {c.strip().upper() for c in colors_str.split(",") if c.strip()}
 
+    @staticmethod
+    def _collection_name_for_search_type(search_type: str) -> str:
+        st: str = (search_type or "").strip().lower()
+        if st == "general":
+            return COLLECTION_NAME
+        if st == "trigger":
+            return TRIGGERS_COLLECTION_NAME
+        if st == "effect":
+            return EFFECTS_COLLECTION_NAME
+        LOGGER.error("filter_cards_list: search_type must be general/trigger/effect, got %r", search_type)
+        raise ValueError(f"search_type must be general/trigger/effect, got {search_type!r}")
+
+    def _face_matches_filters(
+        self,
+        card: Card,
+        *,
+        name_lower: str,
+        oracle_lower_list: list[str],
+        type_lower: str,
+        colors_filter: set[str],
+        color_identity_filter: set[str],
+        color_identity_colorless: bool,
+        colorless_only: bool,
+        mana_value: float,
+        mana_value_min: float,
+        mana_value_max: float,
+        price_usd_min: float,
+        price_usd_max: float,
+        power_val: str,
+        toughness_val: str,
+        keywords_lower: str,
+        subtype_lower: str,
+        supertype_lower: str,
+        format_lower: str,
+    ) -> bool:
+        """True if this card face satisfies all active structural filters (AND)."""
+        if name_lower and not self._name_query_matches_card(card, name_lower):
+            return False
+        if oracle_lower_list:
+            card_text_lower: str = card.text.lower()
+            if not all(phrase in card_text_lower for phrase in oracle_lower_list):
+                return False
+        if type_lower and type_lower not in card.type_line.lower():
+            return False
+        if colors_filter:
+            card_colors: set[str] = {c.upper() for c in card.colors}
+            if card_colors != colors_filter:
+                return False
+        if color_identity_filter or color_identity_colorless:
+            card_identity: set[str] = {c.upper() for c in card.color_identity}
+            if color_identity_filter and color_identity_colorless:
+                if not card_identity.issubset(color_identity_filter) and len(card_identity) > 0:
+                    return False
+            elif color_identity_filter:
+                if not card_identity.issubset(color_identity_filter):
+                    return False
+            elif color_identity_colorless:
+                if len(card_identity) > 0:
+                    return False
+        if colorless_only and len(card.colors) > 0:
+            return False
+        if mana_value >= 0 and card.mana_value != mana_value:
+            return False
+        if mana_value_min >= 0 and card.mana_value < mana_value_min:
+            return False
+        if mana_value_max >= 0 and card.mana_value > mana_value_max:
+            return False
+        if price_usd_min >= 0 and (card.price_usd < 0 or card.price_usd < price_usd_min):
+            return False
+        if price_usd_max >= 0 and (card.price_usd < 0 or card.price_usd > price_usd_max):
+            return False
+        if power_val and card.power.strip() != power_val:
+            return False
+        if toughness_val and card.toughness.strip() != toughness_val:
+            return False
+        if keywords_lower:
+            card_kw: list[str] = [k.lower() for k in card.keywords]
+            if keywords_lower not in card_kw and not any(keywords_lower in k for k in card_kw):
+                return False
+        if subtype_lower:
+            card_sub: list[str] = [s.lower() for s in card.subtypes]
+            if subtype_lower not in card_sub and not any(subtype_lower in s for s in card_sub):
+                return False
+        if supertype_lower:
+            card_super: list[str] = [s.lower() for s in card.supertypes]
+            if supertype_lower not in card_super and not any(supertype_lower in s for s in card_super):
+                return False
+        if format_lower:
+            legal_val: str = ""
+            for k, v in card.legalities.items():
+                if k.lower() == format_lower and v:
+                    legal_val = (v if isinstance(v, str) else str(v)).lower()
+                    break
+            if legal_val != "legal":
+                return False
+        return True
+
+    def _faces_for_chroma_card_name(self, chroma_name: str) -> list[Card] | None:
+        """Resolve Chroma metadata name to all faces for that card, or None if unknown."""
+        cn: str = chroma_name.strip()
+        if not cn:
+            return None
+        self._build_name_indexes()
+        assert self._canonical_to_faces is not None
+        if cn in self._canonical_to_faces:
+            return self._canonical_to_faces[cn]
+        al: str = cn.lower()
+        assert self._name_to_faces is not None
+        if al in self._name_to_faces:
+            return self._name_to_faces[al]
+        try:
+            prim: Card = self.resolve_primary_card(cn)
+            ckey: str = prim.canonical_name if prim.canonical_name else prim.name
+            return self._canonical_to_faces.get(ckey, [prim])
+        except ValueError:
+            return None
+
+    def _canonical_matches_structural_filters(
+        self,
+        chroma_name: str,
+        *,
+        name_lower: str,
+        oracle_lower_list: list[str],
+        type_lower: str,
+        colors_filter: set[str],
+        color_identity_filter: set[str],
+        color_identity_colorless: bool,
+        colorless_only: bool,
+        mana_value: float,
+        mana_value_min: float,
+        mana_value_max: float,
+        price_usd_min: float,
+        price_usd_max: float,
+        power_val: str,
+        toughness_val: str,
+        keywords_lower: str,
+        subtype_lower: str,
+        supertype_lower: str,
+        format_lower: str,
+    ) -> tuple[bool, Card | None]:
+        """True if any face matches filters; returns primary face for display when True."""
+        faces: list[Card] | None = self._faces_for_chroma_card_name(chroma_name)
+        if not faces:
+            return False, None
+        ordered: list[Card] = sorted(faces, key=lambda c: c.face_index)
+        primary: Card = ordered[0]
+        kw = dict(
+            name_lower=name_lower,
+            oracle_lower_list=oracle_lower_list,
+            type_lower=type_lower,
+            colors_filter=colors_filter,
+            color_identity_filter=color_identity_filter,
+            color_identity_colorless=color_identity_colorless,
+            colorless_only=colorless_only,
+            mana_value=mana_value,
+            mana_value_min=mana_value_min,
+            mana_value_max=mana_value_max,
+            price_usd_min=price_usd_min,
+            price_usd_max=price_usd_max,
+            power_val=power_val,
+            toughness_val=toughness_val,
+            keywords_lower=keywords_lower,
+            subtype_lower=subtype_lower,
+            supertype_lower=supertype_lower,
+            format_lower=format_lower,
+        )
+        for face in ordered:
+            if self._face_matches_filters(face, **kw):
+                return True, primary
+        return False, None
+
+    def _filter_cards_list_semantic_ranked(
+        self,
+        semantic_query: str,
+        collection_name: str,
+        *,
+        name_lower: str,
+        oracle_lower_list: list[str],
+        type_lower: str,
+        colors_filter: set[str],
+        color_identity_filter: set[str],
+        color_identity_colorless: bool,
+        colorless_only: bool,
+        mana_value: float,
+        mana_value_min: float,
+        mana_value_max: float,
+        price_usd_min: float,
+        price_usd_max: float,
+        power_val: str,
+        toughness_val: str,
+        keywords_lower: str,
+        subtype_lower: str,
+        supertype_lower: str,
+        format_lower: str,
+        n_results: int,
+        offset: int,
+    ) -> list[Card]:
+        """Chroma-ranked hits filtered by structural rules; dedupe by canonical; honor offset/limit."""
+        need: int = offset + n_results
+        n_chroma: int = min(_CHROMA_SEMANTIC_FILTER_CAP, max(100, need * 4))
+        filter_kw = dict(
+            name_lower=name_lower,
+            oracle_lower_list=oracle_lower_list,
+            type_lower=type_lower,
+            colors_filter=colors_filter,
+            color_identity_filter=color_identity_filter,
+            color_identity_colorless=color_identity_colorless,
+            colorless_only=colorless_only,
+            mana_value=mana_value,
+            mana_value_min=mana_value_min,
+            mana_value_max=mana_value_max,
+            price_usd_min=price_usd_min,
+            price_usd_max=price_usd_max,
+            power_val=power_val,
+            toughness_val=toughness_val,
+            keywords_lower=keywords_lower,
+            subtype_lower=subtype_lower,
+            supertype_lower=supertype_lower,
+            format_lower=format_lower,
+        )
+        while True:
+            ranked: list[tuple[str, str]] = self._semantic_query(collection_name, semantic_query, n_chroma)
+            seen_canonical: set[str] = set()
+            skipped_qualified: int = 0
+            out: list[Card] = []
+            for _doc, raw_name in ranked:
+                name_key: str = (raw_name or "").strip()
+                if not name_key:
+                    continue
+                if name_key in seen_canonical:
+                    continue
+                seen_canonical.add(name_key)
+                ok, primary = self._canonical_matches_structural_filters(name_key, **filter_kw)
+                if not ok or primary is None:
+                    continue
+                if skipped_qualified < offset:
+                    skipped_qualified += 1
+                    continue
+                out.append(primary)
+                if len(out) >= n_results:
+                    return out
+            if n_chroma >= _CHROMA_SEMANTIC_FILTER_CAP:
+                if need > len(out) + offset:
+                    LOGGER.warning(
+                        "filter_cards_list semantic: exhausted Chroma cap=%s (query=%r collection=%s); "
+                        "returning %s row(s), offset=%s",
+                        _CHROMA_SEMANTIC_FILTER_CAP,
+                        semantic_query,
+                        collection_name,
+                        len(out),
+                        offset,
+                    )
+                return out
+            n_chroma = min(_CHROMA_SEMANTIC_FILTER_CAP, n_chroma * 2)
+
     def filter_cards_list(
         self,
         name: str = "",
@@ -326,8 +584,14 @@ class CardDB:
         format_legal: str = "",
         n_results: int = 20,
         offset: int = 0,
+        semantic_query: str = "",
+        search_type: str = "general",
     ) -> list[Card]:
-        """Filter MTG cards by exact/filter properties. All filters are AND-combined. Returns list of Card. At least one filter must be set. offset/n_results support pagination."""
+        """Filter MTG cards by exact/filter properties. All filters are AND-combined. Returns list of Card. At least one filter must be set. offset/n_results support pagination.
+
+        If semantic_query is non-empty, results are Chroma-ranked by similarity within the given search_type
+        collection, intersected with the same structural filters (deduped by canonical card).
+        """
         _oracle_list: list[str] = (
             [s.strip() for s in oracle_text] if isinstance(oracle_text, list) else [oracle_text.strip()] if oracle_text else []
         )
@@ -356,7 +620,6 @@ class CardDB:
             LOGGER.error( "filter_cards_list: at least one filter parameter must be set")
             raise ValueError("filter_cards_list: at least one filter parameter must be set")
 
-        cards: list[Card] = self.get_card_data()
         name_lower: str = name.strip().lower() if name else ""
         oracle_lower_list: list[str] = [s.lower() for s in _oracle_list]
         type_lower: str = type_line.strip().lower() if type_line else ""
@@ -369,69 +632,63 @@ class CardDB:
         supertype_lower: str = supertype.strip().lower() if supertype else ""
         format_lower: str = format_legal.strip().lower() if format_legal else ""
 
+        sem: str = (semantic_query or "").strip()
+        if sem:
+            if not self.is_rag_ready():
+                LOGGER.error("filter_cards_list: semantic_query set but RAG is not ready")
+                raise ValueError("Semantic search requires RAG; the embedding index is not ready yet.")
+            coll: str = self._collection_name_for_search_type(search_type)
+            return self._filter_cards_list_semantic_ranked(
+                sem,
+                coll,
+                name_lower=name_lower,
+                oracle_lower_list=oracle_lower_list,
+                type_lower=type_lower,
+                colors_filter=colors_filter,
+                color_identity_filter=color_identity_filter,
+                color_identity_colorless=color_identity_colorless,
+                colorless_only=colorless_only,
+                mana_value=mana_value,
+                mana_value_min=mana_value_min,
+                mana_value_max=mana_value_max,
+                price_usd_min=price_usd_min,
+                price_usd_max=price_usd_max,
+                power_val=power_val,
+                toughness_val=toughness_val,
+                keywords_lower=keywords_lower,
+                subtype_lower=subtype_lower,
+                supertype_lower=supertype_lower,
+                format_lower=format_lower,
+                n_results=n_results,
+                offset=offset,
+            )
+
+        cards: list[Card] = self.get_card_data()
         results: list[Card] = []
         skipped: int = 0
+        fkw = dict(
+            name_lower=name_lower,
+            oracle_lower_list=oracle_lower_list,
+            type_lower=type_lower,
+            colors_filter=colors_filter,
+            color_identity_filter=color_identity_filter,
+            color_identity_colorless=color_identity_colorless,
+            colorless_only=colorless_only,
+            mana_value=mana_value,
+            mana_value_min=mana_value_min,
+            mana_value_max=mana_value_max,
+            price_usd_min=price_usd_min,
+            price_usd_max=price_usd_max,
+            power_val=power_val,
+            toughness_val=toughness_val,
+            keywords_lower=keywords_lower,
+            subtype_lower=subtype_lower,
+            supertype_lower=supertype_lower,
+            format_lower=format_lower,
+        )
         for card in cards:
-            if name_lower and not self._name_query_matches_card(card, name_lower):
+            if not self._face_matches_filters(card, **fkw):
                 continue
-            if oracle_lower_list:
-                card_text_lower: str = card.text.lower()
-                if not all(phrase in card_text_lower for phrase in oracle_lower_list):
-                    continue
-            if type_lower and type_lower not in card.type_line.lower():
-                continue
-            if colors_filter:
-                card_colors: set[str] = {c.upper() for c in card.colors}
-                if card_colors != colors_filter:
-                    continue
-            if color_identity_filter or color_identity_colorless:
-                card_identity: set[str] = {c.upper() for c in card.color_identity}
-                if color_identity_filter and color_identity_colorless:
-                    if not card_identity.issubset(color_identity_filter) and len(card_identity) > 0:
-                        continue
-                elif color_identity_filter:
-                    if not card_identity.issubset(color_identity_filter):
-                        continue
-                elif color_identity_colorless:
-                    if len(card_identity) > 0:
-                        continue
-            if colorless_only and len(card.colors) > 0:
-                continue
-            if mana_value >= 0 and card.mana_value != mana_value:
-                continue
-            if mana_value_min >= 0 and card.mana_value < mana_value_min:
-                continue
-            if mana_value_max >= 0 and card.mana_value > mana_value_max:
-                continue
-            if price_usd_min >= 0 and (card.price_usd < 0 or card.price_usd < price_usd_min):
-                continue
-            if price_usd_max >= 0 and (card.price_usd < 0 or card.price_usd > price_usd_max):
-                continue
-            if power_val and card.power.strip() != power_val:
-                continue
-            if toughness_val and card.toughness.strip() != toughness_val:
-                continue
-            if keywords_lower:
-                card_kw: list[str] = [k.lower() for k in card.keywords]
-                if keywords_lower not in card_kw and not any(keywords_lower in k for k in card_kw):
-                    continue
-            if subtype_lower:
-                card_sub: list[str] = [s.lower() for s in card.subtypes]
-                if subtype_lower not in card_sub and not any(subtype_lower in s for s in card_sub):
-                    continue
-            if supertype_lower:
-                card_super: list[str] = [s.lower() for s in card.supertypes]
-                if supertype_lower not in card_super and not any(supertype_lower in s for s in card_super):
-                    continue
-            if format_lower:
-                legal_val: str = ""
-                for k, v in card.legalities.items():
-                    if k.lower() == format_lower and v:
-                        legal_val = (v if isinstance(v, str) else str(v)).lower()
-                        break
-                if legal_val != "legal":
-                    continue
-
             if skipped < offset:
                 skipped += 1
                 continue
@@ -462,6 +719,8 @@ class CardDB:
         supertype: str = "",
         format_legal: str = "",
         n_results: int = 20,
+        semantic_query: str = "",
+        search_type: str = "general",
     ) -> str:
         """Filter MTG cards by exact/filter properties. All filters are AND-combined. At least one filter must be set."""
         results: list[Card] = self.filter_cards_list(
@@ -484,6 +743,8 @@ class CardDB:
             supertype=supertype,
             format_legal=format_legal,
             n_results=n_results,
+            semantic_query=semantic_query,
+            search_type=search_type,
         )
         parts: list[str] = [card.format_display(i, len(results)) for i, card in enumerate(results, 1)]
         return "\n\n".join(parts) if parts else "No cards found."

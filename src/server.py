@@ -28,7 +28,7 @@ os.chdir(REPO_ROOT)
 
 
 def run_server() -> None:
-    """Launch FastMCP server with search_cards tool, stdio transport."""
+    """Launch FastMCP server with card search tools, stdio transport."""
     init_logger("mcp")
     from fastmcp import FastMCP
 
@@ -45,15 +45,6 @@ def run_server() -> None:
     LOGGER.debug("RAG load started in background thread")
 
     mcp = FastMCP("MTG Card Search")
-
-    @mcp.tool()
-    def semantic_search_card(query: str, n_results: int = 5) -> str:
-        """Search for Magic: The Gathering cards by semantic meaning.
-        Returns card names and rules text matching the query."""
-        LOGGER.info("Request received tool=semantic_search_card query=%r n_results=%s", query, n_results)
-        result: str = CardDB.inst().search_cards(query=query, n_results=n_results)
-        LOGGER.info("Request completed tool=semantic_search_card query=%r", query)
-        return result
 
     @mcp.tool()
     def plain_search_card(
@@ -74,12 +65,15 @@ def run_server() -> None:
         supertype: str = "",
         format_legal: str = "",
         n_results: int = 20,
+        semantic_query: str = "",
+        search_type: str = "general",
     ) -> str:
         """Filter MTG cards by exact properties (name, type, colors, mana value, price range, power/toughness, keywords, etc.).
-        All filters are AND-combined. At least one filter must be provided. Returns card names and rules text."""
+        All filters are AND-combined. At least one structural filter must be provided.
+        Optional semantic_query ranks matches by embedding similarity (RAG) within those filters; search_type is general, trigger, or effect."""
         LOGGER.info(
-            "Request received tool=plain_search_card name=%r type_line=%r colors=%r n_results=%s",
-            name, type_line, colors, n_results,
+            "Request received tool=plain_search_card name=%r type_line=%r colors=%r n_results=%s semantic=%r",
+            name, type_line, colors, n_results, bool((semantic_query or "").strip()),
         )
         result: str = CardDB.inst().filter_cards(
             name=name,
@@ -99,6 +93,8 @@ def run_server() -> None:
             supertype=supertype,
             format_legal=format_legal,
             n_results=n_results,
+            semantic_query=semantic_query,
+            search_type=search_type,
         )
         LOGGER.info("Request completed tool=plain_search_card")
         return result
@@ -367,7 +363,7 @@ def run_server() -> None:
         return f"Imported deck with {len(main_names)} mainboard and {len(sb_names)} sideboard cards from {url}."
 
     LOGGER.info(
-        "Tools registered: semantic_search_card, plain_search_card, get_card_info, "
+        "Tools registered: plain_search_card, get_card_info, "
         "extract_card_mechanics, append_cards_to_deck, remove_cards_from_deck, move_cards_in_deck, "
         "search_triggers, search_effects, search_online_decks, get_online_deck, import_online_deck; "
         "entering mcp.run(transport=stdio)",

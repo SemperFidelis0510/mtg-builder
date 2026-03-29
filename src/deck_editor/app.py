@@ -475,20 +475,6 @@ async def serve_search() -> FileResponse:
     )
 
 
-@app.get("/semantic-search")
-async def serve_semantic_search() -> FileResponse:
-    """Serve the semantic search popup HTML page."""
-    static_dir: Path = Path(__file__).resolve().parent / "static"
-    path: Path = static_dir / "semantic-search.html"
-    if not path.is_file():
-        LOGGER.error( "Deck editor static file not found: %s", path)
-        raise FileNotFoundError(f"Static file not found: {path}")
-    return FileResponse(
-        path,
-        headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"},
-    )
-
-
 @app.get("/export-modal")
 async def serve_export_modal() -> FileResponse:
     """Serve the export format modal iframe page."""
@@ -527,7 +513,7 @@ async def serve_import_modal() -> FileResponse:
 
 @app.post("/api/search")
 async def search_cards_api(body: dict) -> dict:
-    """Advanced search: same filters as filter_cards. Returns JSON list of card dicts."""
+    """Advanced search: structural filters plus optional semantic_query / search_type (RAG-ranked within filters). Returns JSON list of card dicts."""
     name: str = body["name"] if "name" in body and isinstance(body["name"], str) else ""
     oracle_text: str | list[str] = ""
     if "oracle_text" in body:
@@ -572,6 +558,22 @@ async def search_cards_api(body: dict) -> dict:
     offset: int = int(body["offset"]) if "offset" in body and body["offset"] is not None else 0
     offset = max(0, offset)
 
+    semantic_query: str = ""
+    if "semantic_query" in body and isinstance(body["semantic_query"], str):
+        semantic_query = body["semantic_query"].strip()
+    search_type_raw: str = (
+        body["search_type"] if "search_type" in body and isinstance(body["search_type"], str) else "general"
+    )
+    search_type: str = search_type_raw.strip().lower()
+    if search_type not in ("general", "trigger", "effect"):
+        raise HTTPException(status_code=400, detail="search_type must be general, trigger, or effect")
+
+    if semantic_query and not CardDB.inst().is_rag_ready():
+        raise HTTPException(
+            status_code=503,
+            detail="Semantic search requires RAG; the embedding index is not ready yet.",
+        )
+
     try:
         results = CardDB.inst().filter_cards_list(
             name=name,
@@ -594,9 +596,14 @@ async def search_cards_api(body: dict) -> dict:
             format_legal=format_legal,
             n_results=n_results,
             offset=offset,
+            semantic_query=semantic_query,
+            search_type=search_type,
         )
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        msg: str = str(e)
+        if "not ready" in msg.lower() and "rag" in msg.lower():
+            raise HTTPException(status_code=503, detail=msg) from e
+        raise HTTPException(status_code=400, detail=msg) from e
     return {"results": [c.to_dict() for c in results]}
 
 
@@ -604,26 +611,6 @@ async def search_cards_api(body: dict) -> dict:
 async def rag_ready() -> dict:
     """Return whether RAG (embedding model + ChromaDB) is loaded and semantic search is available."""
     return {"ready": CardDB.inst().is_rag_ready()}
-
-
-@app.post("/api/semantic_search")
-async def semantic_search_api(body: dict) -> dict:
-    """Semantic search by query and type (general/trigger/effect). Returns list of {name, text}."""
-    query: str = (body["query"] or "").strip() if "query" in body and isinstance(body["query"], str) else ""
-    if not query:
-        raise HTTPException(status_code=400, detail="query is required and must be non-empty")
-    search_type: str = (
-        body["search_type"] if "search_type" in body and isinstance(body["search_type"], str) else "general"
-    ).strip().lower()
-    if search_type not in ("general", "trigger", "effect"):
-        raise HTTPException(status_code=400, detail="search_type must be general, trigger, or effect")
-    n_results: int = int(body["n_results"]) if "n_results" in body and body["n_results"] is not None else 10
-    n_results = max(1, min(50, n_results))
-    try:
-        results = CardDB.inst().semantic_search_structured(query, search_type, n_results)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-    return {"results": results}
 
 
 @app.get("/api/autocomplete")

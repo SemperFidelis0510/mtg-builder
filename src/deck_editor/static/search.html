@@ -185,11 +185,55 @@
       border-radius: 10px;
       display: block;
     }
+    .semantic-section { margin-top: 0.5rem; }
+    .semantic-section .search-hint {
+      font-size: 0.75rem;
+      color: #a0a0a0;
+      margin: 0 0 0.35rem 0;
+    }
+    .semantic-section textarea {
+      width: 100%;
+      min-height: 56px;
+      padding: 0.35rem 0.5rem;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      font-size: 0.9rem;
+      resize: vertical;
+      box-sizing: border-box;
+    }
+    .search-type-label { display: block; font-size: 0.8rem; margin: 0.5rem 0 4px 0; color: #a0a0a0; }
+    .search-type-toggle {
+      display: flex;
+      width: 100%;
+      max-width: 360px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .search-type-toggle button {
+      flex: 1;
+      padding: 0.45rem 0.5rem;
+      border: none;
+      background: var(--panel);
+      color: var(--text);
+      font-size: 0.8rem;
+      cursor: pointer;
+      border-right: 1px solid var(--border);
+    }
+    .search-type-toggle button:last-child { border-right: none; }
+    .search-type-toggle button:hover { background: var(--border); }
+    .search-type-toggle button.selected {
+      background: var(--accent);
+      color: #fff;
+      font-weight: 600;
+    }
   </style>
 </head>
 <body>
   <h1>Advanced Card Search</h1>
-  <p class="search-msg" id="searchMsg">Set at least one filter, then click Search. Double-click a card to add it to the deck.</p>
+  <p class="search-msg" id="searchMsg">Set at least one structural filter, then click Search. Optional semantic text ranks matches by meaning within those filters. Double-click a card to add it to the deck.</p>
 
   <form id="searchForm" class="form-grid">
     <div class="field-name">
@@ -350,6 +394,17 @@
         <input type="number" id="price_max" name="price_usd_max" min="0" step="0.01" placeholder="e.g. 10.00">
       </div>
     </div>
+    <div class="semantic-section">
+      <label for="semantic_query">Semantic search (optional)</label>
+      <p class="search-hint">When filled, results are ranked by similarity in the RAG index among cards that match the filters above (embedding index must be loaded).</p>
+      <textarea id="semantic_query" name="semantic_query" placeholder="e.g. draw cards when creatures enter the battlefield"></textarea>
+      <span class="search-type-label">Semantic scope</span>
+      <div class="search-type-toggle" id="searchTypeToggle" role="group" aria-label="Semantic search scope">
+        <button type="button" data-search-type="general" class="selected">Card text</button>
+        <button type="button" data-search-type="trigger">Triggers</button>
+        <button type="button" data-search-type="effect">Effects</button>
+      </div>
+    </div>
   </form>
 
   <div class="form-actions">
@@ -388,6 +443,21 @@
     document.getElementById('type').addEventListener('change', updateSubtypeOptions);
     updateSubtypeOptions();
 
+    function getSearchType() {
+      var sel = document.querySelector('#searchTypeToggle button.selected');
+      var t = sel && sel.getAttribute('data-search-type');
+      return t ? t : 'general';
+    }
+    (function initSearchTypeToggle() {
+      var toggle = document.getElementById('searchTypeToggle');
+      if (!toggle) return;
+      toggle.addEventListener('click', function (e) {
+        var btn = e.target.closest('button[data-search-type]');
+        if (!btn) return;
+        toggle.querySelectorAll('button').forEach(function (b) { b.classList.remove('selected'); });
+        btn.classList.add('selected');
+      });
+    })();
 
     (function () {
       var container = document.getElementById('oracleTextEntries');
@@ -532,6 +602,11 @@
       if (supertypeVal) body.supertype = supertypeVal;
       var format_legal = document.getElementById('format_legal').value.trim();
       if (format_legal) body.format_legal = format_legal;
+      var semEl = document.getElementById('semantic_query');
+      if (semEl && semEl.value.trim()) {
+        body.semantic_query = semEl.value.trim();
+        body.search_type = getSearchType();
+      }
       return body;
     }
 
@@ -594,9 +669,11 @@
 
     function doSearch(offset, append) {
       var body = buildBody();
-      var filterKeys = Object.keys(body).filter(function (k) { return k !== 'n_results' && k !== 'offset'; });
-      if (filterKeys.length === 0) {
-        setMsg('Set at least one search filter (name, type, colors, etc.).', true);
+      var structuralKeys = Object.keys(body).filter(function (k) {
+        return k !== 'n_results' && k !== 'offset' && k !== 'semantic_query' && k !== 'search_type';
+      });
+      if (structuralKeys.length === 0) {
+        setMsg('Set at least one structural filter (name, type, colors, etc.). Semantic text ranks within those filters only.', true);
         return;
       }
       body.offset = offset || 0;
@@ -610,7 +687,11 @@
       }).then(function (r) {
         return r.json().then(function (data) {
           if (!r.ok) {
-            setMsg(data.detail || 'Search failed', true);
+            var errText = typeof data.detail === 'string' ? data.detail : (data.detail ? JSON.stringify(data.detail) : 'Search failed');
+            if (r.status === 503) {
+              errText = typeof data.detail === 'string' ? data.detail : 'Semantic search is not ready; wait for the embedding index to finish loading.';
+            }
+            setMsg(errText, true);
             if (!append) renderResults([]);
             loadMoreInProgress = false;
             return;
