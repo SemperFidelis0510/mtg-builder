@@ -30,11 +30,12 @@ function ensureCommanderSlotVisibility() {
     '<div class="section-body"><ul class="card-list" id="list-commander"></ul></div>';
   if (commanderHost) {
     commanderHost.appendChild(section);
-    return;
-  }
-  if (deckSections) {
+  } else if (deckSections) {
     deckSections.prepend(section);
   }
+  import('./sortable.js')
+    .then((m) => m.initSortable())
+    .catch(() => {});
 }
 
 export function getSettings() {

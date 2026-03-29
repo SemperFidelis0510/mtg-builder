@@ -110,6 +110,28 @@ def _field_default(f: dataclasses.Field) -> Any:
     return f.default_factory()
 
 
+def _normalize_face_names(raw_face_names: list[str], fallback_name: str) -> list[str]:
+    cleaned: list[str] = []
+    for raw in raw_face_names:
+        face = (raw or "").strip()
+        if face:
+            cleaned.append(face)
+    if not cleaned:
+        cleaned = [fallback_name]
+    unique: list[str] = []
+    seen_lower: set[str] = set()
+    for face in cleaned:
+        lowered = face.lower()
+        if lowered not in seen_lower:
+            seen_lower.add(lowered)
+            unique.append(face)
+    if len(unique) == 1 and " // " in unique[0]:
+        split_faces: list[str] = [p.strip() for p in unique[0].split(" // ") if p.strip()]
+        if split_faces:
+            return split_faces
+    return unique
+
+
 @dataclass
 class Card:
     """Represents a Magic: The Gathering card (one face).
@@ -159,17 +181,56 @@ class Card:
         default=-1.0,
         metadata={"source": "price", "chroma": False},
     )
+    # Two-sided identity fields (derived from AtomicCards row context).
+    card_name: str = field(default="", metadata={"json_key": "cardName"})
+    face_name: str = field(default="", metadata={"json_key": "faceName"})
+    canonical_name: str = field(default="", metadata={"json_key": "canonicalName"})
+    face_index: int = field(default=0, metadata={"json_key": "faceIndex"})
+    face_count: int = field(default=1, metadata={"json_key": "faceCount"})
+    face_names: list[str] = field(default_factory=list, metadata={"json_key": "faceNames"})
 
     def __iter__(self):
         for f in fields(self):
             yield f.name, getattr(self, f.name)
+
+    def __post_init__(self) -> None:
+        if not self.face_name:
+            self.face_name = self.name
+        if not self.face_names:
+            if self.canonical_name and " // " in self.canonical_name:
+                self.face_names = [p.strip() for p in self.canonical_name.split(" // ") if p.strip()]
+            elif self.face_name:
+                self.face_names = [self.face_name]
+        if self.face_count < 1:
+            if self.face_names:
+                self.face_count = len(self.face_names)
+            else:
+                self.face_count = 1
+        if not self.canonical_name:
+            if self.face_count > 1 and self.face_names:
+                self.canonical_name = " // ".join(self.face_names)
+            elif self.face_name:
+                self.canonical_name = self.face_name
+            else:
+                self.canonical_name = self.name
+        if not self.card_name:
+            self.card_name = self.canonical_name
+        if not self.name:
+            self.name = self.face_name or self.canonical_name
 
     # ------------------------------------------------------------------
     # Factory methods
     # ------------------------------------------------------------------
 
     @classmethod
-    def from_json_face(cls, face: dict, card_name: str) -> "Card":
+    def from_json_face(
+        cls,
+        face: dict,
+        card_name: str,
+        face_index: int = 0,
+        face_count: int = 1,
+        face_names: list[str] | None = None,
+    ) -> "Card":
         """Parse a raw JSON face dict from AtomicCards.json into a Card."""
         kwargs: dict[str, Any] = {}
         for f in fields(cls):
@@ -184,6 +245,8 @@ class Card:
 
             if isinstance(default, float):
                 kwargs[f.name] = float(raw) if raw is not None else default
+            elif isinstance(default, int):
+                kwargs[f.name] = int(raw) if raw is not None else default
             elif isinstance(default, list):
                 kwargs[f.name] = raw if isinstance(raw, list) else []
             elif isinstance(default, dict):
@@ -193,6 +256,31 @@ class Card:
 
         if not kwargs["name"]:
             kwargs["name"] = card_name
+        resolved_face_names: list[str] = _normalize_face_names(
+            list(face_names) if face_names else [kwargs["name"]],
+            kwargs["name"],
+        )
+        resolved_face_count: int = face_count if face_count > 0 else len(resolved_face_names)
+        if resolved_face_count < len(resolved_face_names):
+            resolved_face_count = len(resolved_face_names)
+        face_name: str = kwargs["name"]
+        if resolved_face_names and resolved_face_count > 1:
+            idx = face_index
+            if idx < 0:
+                idx = 0
+            if idx >= len(resolved_face_names):
+                idx = len(resolved_face_names) - 1
+            face_name = resolved_face_names[idx]
+            kwargs["name"] = face_name
+        kwargs["card_name"] = card_name
+        kwargs["face_name"] = face_name
+        kwargs["face_index"] = face_index
+        kwargs["face_count"] = resolved_face_count
+        kwargs["face_names"] = resolved_face_names
+        if kwargs["face_count"] > 1:
+            kwargs["canonical_name"] = " // ".join(resolved_face_names)
+        else:
+            kwargs["canonical_name"] = resolved_face_names[0]
         return cls(**kwargs)
 
     @classmethod
@@ -215,6 +303,8 @@ class Card:
 
             if isinstance(default, float):
                 kwargs[f.name] = float(raw) if raw is not None else default
+            elif isinstance(default, int):
+                kwargs[f.name] = int(raw) if raw is not None else default
             elif isinstance(default, list):
                 if isinstance(raw, str):
                     kwargs[f.name] = [v.strip() for v in raw.split(",") if v.strip()] if raw else []
@@ -447,8 +537,9 @@ class Card:
         """Format this card for display in search / filter results."""
         text: str = self.text.strip() or "(No rules text)"
         price_str: str = f"${self.price_usd:.2f}" if self.price_usd >= 0 else "N/A"
+        display_name: str = self.canonical_name if self.canonical_name else self.name
         return (
             f"--- Card {index} of {total} ---\n"
-            f"Name: {self.name}\nMana Cost: {self.mana_cost}\nType: {self.type_line}\n"
+            f"Name: {display_name}\nMana Cost: {self.mana_cost}\nType: {self.type_line}\n"
             f"Price (USD): {price_str}\nOracle Text: {text}"
         )

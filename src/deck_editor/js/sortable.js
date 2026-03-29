@@ -25,13 +25,6 @@ function convertFullCardsInZone(zoneId) {
   });
 }
 
-function allowPutOnlyFromSideZones(to, from) {
-  if (!from) return false;
-  const fromEl = from.el || from;
-  const fromId = (fromEl && fromEl.id) || '';
-  return fromId === 'list-maybe' || fromId === 'list-sideboard' || fromId === 'list-commander';
-}
-
 function appendCardToList(listEl, name, count) {
   if (!listEl || !name) return;
   const n = Math.max(1, parseInt(count, 10) || 1);
@@ -42,10 +35,43 @@ function appendCardToList(listEl, name, count) {
   listEl.appendChild(makeCardStackEl(name, n));
 }
 
+function commanderSlotPresent() {
+  return !!document.getElementById('list-commander');
+}
+
+/** Typed main sections: commander hub when commander slot exists; else maybe/sideboard → main only. */
+function allowPutIntoMainTypedList(to, from) {
+  if (!from) return false;
+  const fromEl = from.el || from;
+  const fromId = (fromEl && fromEl.id) || '';
+  if (commanderSlotPresent()) {
+    return fromId === 'list-commander';
+  }
+  return fromId === 'list-maybe' || fromId === 'list-sideboard';
+}
+
+/** Maybe/sideboard: accept any in-group drag when no commander slot; else only from commander. */
+function allowPutIntoSideZone(to, from) {
+  if (!from) return false;
+  if (!commanderSlotPresent()) {
+    return true;
+  }
+  const fromEl = from.el || from;
+  const fromId = (fromEl && fromEl.id) || '';
+  return fromId === 'list-commander';
+}
+
+function allowPutDeckDropTarget(to, from) {
+  if (!from || commanderSlotPresent()) return false;
+  const fromEl = from.el || from;
+  const fromId = (fromEl && fromEl.id) || '';
+  return fromId === 'list-maybe' || fromId === 'list-sideboard';
+}
+
 function handleDeckDropTargetAdd(evt) {
   const item = evt.item;
   const dropTarget = document.getElementById('deckDropTarget');
-  if (!dropTarget) return;
+  if (!dropTarget || commanderSlotPresent()) return;
   const stack = item.querySelector('.card-stack.maybe-board-item') || item.querySelector('.card-stack');
   if (!stack) return;
   const name = stack.getAttribute('data-name');
@@ -103,7 +129,7 @@ export function initSortable() {
   if (dropTargetEl) {
     sortables.push(
       Sortable.create(dropTargetEl, {
-        group: { name: 'cards', pull: false, put: allowPutOnlyFromSideZones },
+        group: { name: 'cards', pull: false, put: allowPutDeckDropTarget },
         animation: 150,
         ghostClass: 'sortable-ghost',
         dragClass: 'sortable-drag',
@@ -120,7 +146,7 @@ export function initSortable() {
     if (el) {
       sortables.push(
         Sortable.create(el, {
-          group: { name: 'cards', pull: true, put: allowPutOnlyFromSideZones },
+          group: { name: 'cards', pull: true, put: allowPutIntoMainTypedList },
           handle: '.card-img',
           animation: 150,
           ghostClass: 'sortable-ghost',
@@ -178,7 +204,7 @@ export function initSortable() {
     if (el) {
       sortables.push(
         Sortable.create(el, {
-          group: { name: 'cards', pull: true, put: true },
+          group: { name: 'cards', pull: true, put: allowPutIntoSideZone },
           handle: '.card-img, .maybe-board-item',
           animation: 150,
           ghostClass: 'sortable-ghost',

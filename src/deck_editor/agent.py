@@ -111,10 +111,13 @@ def _format_deck_summary(deck_state: dict) -> str:
         "creature", "instant", "sorcery", "artifact",
         "enchantment", "planeswalker", "battle", "land",
     ]
+    commander_raw: str = (deck.get("commander") or "").strip()
+    commander_line: str = commander_raw if commander_raw else "(none)"
     lines: list[str] = [
         "## Current Deck State",
         f"- **Name**: {name}",
         f"- **Format**: {fmt}",
+        f"- **Commander**: {commander_line}",
         f"- **Colors**: {', '.join(colors) if colors else '(none)'}",
     ]
     total: int = 0
@@ -230,7 +233,10 @@ _TOOL_DECLARATIONS: list[types.FunctionDeclaration] = [
             "type": "object",
             "properties": {
                 "card_names": {"type": "string", "description": "Comma-separated card names to add (e.g. 'Sol Ring, Lightning Bolt')."},
-                "board": {"type": "string", "description": "Which board to add to: 'main' (default), 'maybe', or 'sideboard'."},
+                "board": {
+                    "type": "string",
+                    "description": "Which board to add to: 'main' (default), 'maybe', 'sideboard', or 'commander' (exactly one card name).",
+                },
             },
             "required": ["card_names"],
         },
@@ -242,7 +248,10 @@ _TOOL_DECLARATIONS: list[types.FunctionDeclaration] = [
             "type": "object",
             "properties": {
                 "card_names": {"type": "string", "description": "Comma-separated card names to remove."},
-                "board": {"type": "string", "description": "Which board to remove from: 'main' (default), 'maybe', or 'sideboard'."},
+                "board": {
+                    "type": "string",
+                    "description": "Which board to remove from: 'main' (default), 'maybe', 'sideboard', or 'commander' (count must be 1, one name).",
+                },
                 "count": {"type": "integer", "description": "How many copies to remove per card name (default 1)."},
             },
             "required": ["card_names"],
@@ -250,13 +259,19 @@ _TOOL_DECLARATIONS: list[types.FunctionDeclaration] = [
     ),
     types.FunctionDeclaration(
         name="move_cards_in_deck",
-        description="Move one or more cards between boards (main deck, maybe board, sideboard) in the user's currently loaded deck.",
+        description="Move one or more cards between boards (main deck, maybe board, sideboard, commander slot) in the user's currently loaded deck.",
         parameters_json_schema={
             "type": "object",
             "properties": {
                 "card_names": {"type": "string", "description": "Comma-separated card names to move."},
-                "from_board": {"type": "string", "description": "Source board: 'main', 'maybe', or 'sideboard'."},
-                "to_board": {"type": "string", "description": "Destination board: 'main', 'maybe', or 'sideboard'."},
+                "from_board": {
+                    "type": "string",
+                    "description": "Source board: 'main', 'maybe', 'sideboard', or 'commander'.",
+                },
+                "to_board": {
+                    "type": "string",
+                    "description": "Destination board: 'main', 'maybe', 'sideboard', or 'commander'.",
+                },
                 "count": {"type": "integer", "description": "How many copies to move per card name (default 1)."},
             },
             "required": ["card_names", "from_board", "to_board"],
@@ -385,9 +400,17 @@ def execute_tool_call(name: str, args: dict[str, Any]) -> str:
             if not names_list:
                 return "Error: card_names must contain at least one card name."
             board: str = args["board"] if "board" in args and args["board"] else "main"
-            from src.deck_editor.app import _current_deck, _notify_deck_updated, _get_board_list, _recompute_and_set_colors
+            from src.deck_editor.app import (
+                _assign_commander_card,
+                _current_deck,
+                _get_board_list,
+                _notify_deck_updated,
+                _recompute_and_set_colors,
+                _VALID_BOARDS,
+            )
             from src.obj.deck import _cards_from_names
-            target_list = _get_board_list(_current_deck, board)
+            if board not in _VALID_BOARDS:
+                return f"Error: invalid board {board!r}. Must be main, maybe, sideboard, or commander."
             cards_to_append: list[Any] = []
             not_found: list[str] = []
             for card_name in names_list:
@@ -397,11 +420,22 @@ def execute_tool_call(name: str, args: dict[str, Any]) -> str:
                     not_found.append(card_name)
             if not cards_to_append:
                 return f"Error: card(s) not found: {', '.join(not_found)}"
-            for card in cards_to_append:
-                target_list.append(card)
+            if board == "commander":
+                if len(names_list) != 1 or len(cards_to_append) != 1:
+                    return "Error: board 'commander' accepts exactly one card name per request."
+                _assign_commander_card(_current_deck, cards_to_append[0])
+            else:
+                target_list = _get_board_list(_current_deck, board)
+                for card in cards_to_append:
+                    target_list.append(card)
             _recompute_and_set_colors(_current_deck)
             _notify_deck_updated()
-            board_label: str = "main deck" if board == "main" else f"{board} board"
+            if board == "main":
+                board_label = "main deck"
+            elif board == "commander":
+                board_label = "commander slot"
+            else:
+                board_label = f"{board} board"
             if not_found:
                 added_names: list[str] = list(names_list)
                 for missing_name in not_found:
@@ -419,29 +453,55 @@ def execute_tool_call(name: str, args: dict[str, Any]) -> str:
                 return "Error: card_names must contain at least one card name."
             board = args["board"] if "board" in args and args["board"] else "main"
             count: int = int(args["count"]) if "count" in args and args["count"] is not None else 1
-            from src.deck_editor.app import _current_deck, _notify_deck_updated, _get_board_list, _recompute_and_set_colors
-            target_list = _get_board_list(_current_deck, board)
-            not_found: list[str] = []
-            for card_name in names_list:
-                name_lower: str = card_name.strip().lower()
-                removed: int = 0
-                for _ in range(count):
-                    idx: int | None = None
-                    for i, c in enumerate(target_list):
-                        if c.name.lower() == name_lower:
-                            idx = i
+            from src.deck_editor.app import (
+                _commander_name_lower,
+                _current_deck,
+                _get_board_list,
+                _notify_deck_updated,
+                _recompute_and_set_colors,
+                _VALID_BOARDS,
+            )
+            if board not in _VALID_BOARDS:
+                return f"Error: invalid board {board!r}. Must be main, maybe, sideboard, or commander."
+            if board == "commander":
+                if count != 1:
+                    return "Error: board 'commander' only supports count=1."
+                cur_lower: str | None = _commander_name_lower(_current_deck)
+                if not cur_lower:
+                    return "Error: no commander set."
+                if len(names_list) != 1:
+                    return "Error: board 'commander' accepts exactly one card name per request."
+                if names_list[0].strip().lower() != cur_lower:
+                    return f"Error: card not found in commander slot: {names_list[0]!r}"
+                _current_deck.commander = ""
+            else:
+                target_list = _get_board_list(_current_deck, board)
+                not_found: list[str] = []
+                for card_name in names_list:
+                    name_lower: str = card_name.strip().lower()
+                    removed: int = 0
+                    for _ in range(count):
+                        idx: int | None = None
+                        for i, c in enumerate(target_list):
+                            if c.name.lower() == name_lower:
+                                idx = i
+                                break
+                        if idx is None:
                             break
-                    if idx is None:
-                        break
-                    target_list.pop(idx)
-                    removed += 1
-                if removed == 0:
-                    not_found.append(card_name)
-            if not_found:
-                return f"Error: card(s) not found in {board} board: {', '.join(not_found)}"
+                        target_list.pop(idx)
+                        removed += 1
+                    if removed == 0:
+                        not_found.append(card_name)
+                if not_found:
+                    return f"Error: card(s) not found in {board} board: {', '.join(not_found)}"
             _recompute_and_set_colors(_current_deck)
             _notify_deck_updated()
-            board_label = "main deck" if board == "main" else f"{board} board"
+            if board == "main":
+                board_label = "main deck"
+            elif board == "commander":
+                board_label = "commander slot"
+            else:
+                board_label = f"{board} board"
             return f"Removed {len(names_list)} card(s) from the {board_label}: {', '.join(names_list)}."
         if name == "move_cards_in_deck":
             card_names_str = args["card_names"]
@@ -453,31 +513,29 @@ def execute_tool_call(name: str, args: dict[str, Any]) -> str:
             count = int(args["count"]) if "count" in args and args["count"] is not None else 1
             if from_board == to_board:
                 return f"Error: from_board and to_board must differ (both are {from_board!r})"
-            from src.deck_editor.app import _current_deck, _notify_deck_updated, _get_board_list, _recompute_and_set_colors
-            source_list = _get_board_list(_current_deck, from_board)
-            dest_list = _get_board_list(_current_deck, to_board)
-            not_found = []
-            for card_name in names_list:
-                name_lower = card_name.strip().lower()
-                moved: int = 0
-                for _ in range(count):
-                    idx = None
-                    for i, c in enumerate(source_list):
-                        if c.name.lower() == name_lower:
-                            idx = i
-                            break
-                    if idx is None:
-                        break
-                    dest_list.append(source_list.pop(idx))
-                    moved += 1
-                if moved == 0:
-                    not_found.append(card_name)
-            if not_found:
-                return f"Error: card(s) not found in {from_board} board: {', '.join(not_found)}"
+            from src.deck_editor.app import (
+                DeckEditorError,
+                _current_deck,
+                _move_cards_between_boards,
+                _notify_deck_updated,
+                _recompute_and_set_colors,
+            )
+            try:
+                _move_cards_between_boards(_current_deck, names_list, from_board, to_board, count)
+            except DeckEditorError as e:
+                return f"Error: {e.detail}"
             _recompute_and_set_colors(_current_deck)
             _notify_deck_updated()
-            from_label: str = "main deck" if from_board == "main" else f"{from_board} board"
-            to_label: str = "main deck" if to_board == "main" else f"{to_board} board"
+
+            def _board_label(b: str) -> str:
+                if b == "main":
+                    return "main deck"
+                if b == "commander":
+                    return "commander slot"
+                return f"{b} board"
+
+            from_label: str = _board_label(from_board)
+            to_label: str = _board_label(to_board)
             return f"Moved {len(names_list)} card(s) from {from_label} to {to_label}: {', '.join(names_list)}."
         if name == "search_triggers":
             return CardDB.inst().search_triggers(

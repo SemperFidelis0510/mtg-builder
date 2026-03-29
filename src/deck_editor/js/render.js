@@ -5,6 +5,7 @@ import { collapseToStacks } from './utils.js';
 import {
   makeCardStackEl,
   makeMaybeBoardCardEl,
+  resetCardFaceState,
   updateTotalsPanel,
 } from './deck.js';
 import { initSortable } from './sortable.js';
@@ -77,6 +78,7 @@ function renderStatsCharts(stats) {
 }
 
 export function renderDeck(data) {
+  resetCardFaceState();
   const container = document.getElementById('deckSections');
   const commanderHost = document.getElementById('commanderSectionHost');
   const statsContainer = document.getElementById('statisticsContainer');

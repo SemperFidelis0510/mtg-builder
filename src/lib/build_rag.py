@@ -44,11 +44,37 @@ def _load_cards() -> list[Card]:
     for card_name, faces in data.items():
         if not isinstance(faces, list):
             continue
+        face_names: list[str] = []
         for face in faces:
             if not isinstance(face, dict):
                 continue
-            card: Card = Card.from_json_face(face, card_name)
-            card.price_usd = price_map.get(card_name, -1.0)
+            if "name" in face and isinstance(face["name"], str) and face["name"].strip():
+                face_names.append(face["name"].strip())
+            else:
+                face_names.append(card_name)
+        if not face_names:
+            face_names = [card_name]
+        face_count: int = len(face_names)
+        face_pos: int = 0
+        for face in faces:
+            if not isinstance(face, dict):
+                continue
+            card: Card = Card.from_json_face(
+                face=face,
+                card_name=card_name,
+                face_index=face_pos,
+                face_count=face_count,
+                face_names=face_names,
+            )
+            face_pos += 1
+            if card_name in price_map:
+                card.price_usd = price_map[card_name]
+            elif card.canonical_name in price_map:
+                card.price_usd = price_map[card.canonical_name]
+            elif card.name in price_map:
+                card.price_usd = price_map[card.name]
+            else:
+                card.price_usd = -1.0
             cards.append(card)
     LOGGER.info("build_rag: loaded %d card faces", len(cards))
     return cards
@@ -111,7 +137,8 @@ def _prepare_rows(
 
 def _name_only_meta(card: Card) -> dict:
     """Minimal metadata for triggers/effects collections: just the card name."""
-    return {"name": card.name}
+    display_name: str = card.canonical_name if card.canonical_name else card.name
+    return {"name": display_name, "canonicalName": display_name}
 
 
 # ---------------------------------------------------------------------------

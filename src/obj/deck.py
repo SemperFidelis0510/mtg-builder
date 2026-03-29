@@ -94,47 +94,28 @@ def _resolve_name_to_type_key(card_name: str) -> tuple[str, str]:
     name_clean: str = (card_name or "").strip()
     if not name_clean:
         raise ValueError("card name is empty")
-    data: list = CardDB.inst().get_card_data()
-    name_lower: str = name_clean.lower()
-    for c in data:
-        if c.name.lower() == name_lower:
-            key: str = _type_line_to_key(getattr(c, "type_line", "") or "")
-            return (c.name, key)
-    if " // " in name_clean:
-        first_part: str = name_clean.split(" // ", 1)[0].strip().lower()
-        for c in data:
-            if c.name.lower() == first_part:
-                key = _type_line_to_key(getattr(c, "type_line", "") or "")
-                return (c.name, key)
-    LOGGER.error("from_export_text: card not found: %s", name_clean)
-    raise ValueError(f"card not found: {name_clean!r}")
+    card = CardDB.inst().resolve_primary_card(name_clean)
+    key: str = _type_line_to_key(getattr(card, "type_line", "") or "")
+    return (CardDB.inst().card_display_name(card), key)
 
 
 def _cards_from_names(names: list[str]) -> list["Card"]:
     """Build list of Card from list of card names. Uses CardDB.get_card_data(); raises ValueError if any name not found."""
     from src.lib.cardDB import CardDB
-    from src.obj.card import Card
 
     if not names:
         return []
-    data: list["Card"] = CardDB.inst().get_card_data()
-    name_lower_to_card: dict[str, "Card"] = {}
-    for c in data:
-        key: str = c.name.lower()
-        if key not in name_lower_to_card:
-            name_lower_to_card[key] = c
     out: list["Card"] = []
     for raw_name in names:
         name_clean: str = (raw_name or "").strip()
         if not name_clean:
             continue
-        key = name_clean.lower()
-        if key not in name_lower_to_card and " // " in name_clean:
-            key = name_clean.split(" // ", 1)[0].strip().lower()
-        if key not in name_lower_to_card:
+        try:
+            card = CardDB.inst().resolve_primary_card(name_clean)
+        except ValueError:
             LOGGER.error("_cards_from_names: card not found: %s", name_clean)
             raise ValueError(f"_cards_from_names: card not found: {name_clean!r}")
-        out.append(name_lower_to_card[key])
+        out.append(card)
     return out
 
 
@@ -197,7 +178,8 @@ class Deck:
 
     def _names_by_type_key(self, key: str) -> list[str]:
         """Card names in self.cards whose type_line maps to the given type key."""
-        return [c.name for c in self.cards if _type_line_to_key(c.type_line) == key]
+        from src.lib.cardDB import CardDB
+        return [CardDB.inst().card_display_name(c) for c in self.cards if _type_line_to_key(c.type_line) == key]
 
     @property
     def creature(self) -> list[str]:
@@ -245,27 +227,14 @@ class Deck:
             FileNotFoundError: If AtomicCards.json is not available.
             ValueError: If any name does not match a card in the database.
         """
-        from src.lib.cardDB import CardDB
-
-        data: list["Card"] = CardDB.inst().get_card_data()
-        name_lower_to_card: dict[str, "Card"] = {}
-        for c in data:
-            key: str = c.name.lower()
-            if key not in name_lower_to_card:
-                name_lower_to_card[key] = c
-        for raw_name in names:
-            name_clean: str = raw_name.strip()
-            if not name_clean:
-                continue
-            key = name_clean.lower()
-            if key not in name_lower_to_card:
-                LOGGER.error("add_cards: card not found: %s", name_clean)
-                raise ValueError(f"add_cards: card not found: {name_clean!r}")
-            self.cards.append(name_lower_to_card[key])
+        resolved_cards: list["Card"] = _cards_from_names(names)
+        for card in resolved_cards:
+            self.cards.append(card)
 
     def _all_card_names(self) -> list[str]:
         """Return flat list of card names from self.cards."""
-        return [c.name for c in self.cards]
+        from src.lib.cardDB import CardDB
+        return [CardDB.inst().card_display_name(c) for c in self.cards]
 
     def export(self, format: str) -> str:
         """Export the deck as a string in the given format.
@@ -289,7 +258,8 @@ class Deck:
                 f"{n} {name}" for name, n in sorted(counts.items(), key=lambda x: (-x[1], x[0]))
             ]
             if self.sideboard:
-                sb_names: list[str] = [c.name for c in self.sideboard]
+                from src.lib.cardDB import CardDB
+                sb_names: list[str] = [CardDB.inst().card_display_name(c) for c in self.sideboard]
                 sb_counts: Counter[str] = Counter(sb_names)
                 if lines:
                     lines.append("")
@@ -310,7 +280,8 @@ class Deck:
                     goldfish_lines.append(f"{counts_g[name]} {name}")
                 goldfish_lines.append("")
             if self.sideboard:
-                sb_counts_g: Counter[str] = Counter(c.name for c in self.sideboard)
+                from src.lib.cardDB import CardDB
+                sb_counts_g: Counter[str] = Counter(CardDB.inst().card_display_name(c) for c in self.sideboard)
                 goldfish_lines.append("// Sideboard")
                 for name in sorted(sb_counts_g.keys()):
                     goldfish_lines.append(f"{sb_counts_g[name]} {name}")
@@ -324,7 +295,8 @@ class Deck:
             if self.sideboard:
                 mox_lines.append("")
                 mox_lines.append("Sideboard")
-                sb_counts_m: Counter[str] = Counter(c.name for c in self.sideboard)
+                from src.lib.cardDB import CardDB
+                sb_counts_m: Counter[str] = Counter(CardDB.inst().card_display_name(c) for c in self.sideboard)
                 for name in sorted(sb_counts_m.keys()):
                     mox_lines.append(f"{sb_counts_m[name]} {name}")
             return "\n".join(mox_lines)
@@ -348,6 +320,7 @@ class Deck:
 
     def to_dict(self) -> dict:
         """Serialize this Deck to a plain dict. cards/maybe/sideboard are stored as flat name lists."""
+        from src.lib.cardDB import CardDB
         return {
             "name": self.name,
             "colors": list(self.colors),
@@ -355,9 +328,9 @@ class Deck:
             "format": self.format,
             "commander": self.commander,
             "colorless_only": self.colorless_only,
-            "cards": [c.name for c in self.cards],
-            "maybe": [c.name for c in self.maybe],
-            "sideboard": [c.name for c in self.sideboard],
+            "cards": [CardDB.inst().card_display_name(c) for c in self.cards],
+            "maybe": [CardDB.inst().card_display_name(c) for c in self.maybe],
+            "sideboard": [CardDB.inst().card_display_name(c) for c in self.sideboard],
         }
 
     @classmethod

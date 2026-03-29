@@ -39,6 +39,8 @@ class CardDB:
     def __init__(self) -> None:
         self._card_data: list[Card] | None = None
         self._name_to_card: dict[str, Card] | None = None
+        self._name_to_faces: dict[str, list[Card]] | None = None
+        self._canonical_to_faces: dict[str, list[Card]] | None = None
         self._embedding_model = None
         self._chroma_client = None
         self._collections: dict[str, object] = {}
@@ -65,14 +67,42 @@ class CardDB:
             for card_name, faces in data.items():
                 if not isinstance(faces, list):
                     continue
+                face_names: list[str] = []
                 for face in faces:
                     if not isinstance(face, dict):
                         continue
-                    out.append(Card.from_json_face(face, card_name))
+                    if "name" in face and isinstance(face["name"], str) and face["name"].strip():
+                        face_names.append(face["name"].strip())
+                    else:
+                        face_names.append(card_name)
+                if not face_names:
+                    face_names = [card_name]
+                face_count: int = len(face_names)
+                face_pos: int = 0
+                for face in faces:
+                    if not isinstance(face, dict):
+                        continue
+                    out.append(
+                        Card.from_json_face(
+                            face=face,
+                            card_name=card_name,
+                            face_index=face_pos,
+                            face_count=face_count,
+                            face_names=face_names,
+                        )
+                    )
+                    face_pos += 1
             self._card_data = out
             price_map: dict[str, float] = load_prices()
             for c in self._card_data:
-                c.price_usd = price_map.get(c.name, -1.0)
+                if c.card_name in price_map:
+                    c.price_usd = price_map[c.card_name]
+                elif c.canonical_name in price_map:
+                    c.price_usd = price_map[c.canonical_name]
+                elif c.name in price_map:
+                    c.price_usd = price_map[c.name]
+                else:
+                    c.price_usd = -1.0
             LOGGER.info("Card data loaded faces=%s path=%s", len(self._card_data), ATOMIC_CARDS_PATH)
         return self._card_data
 
@@ -82,21 +112,100 @@ class CardDB:
             return
         price_map: dict[str, float] = load_prices()
         for c in self._card_data:
-            c.price_usd = price_map.get(c.name, -1.0)
+            if c.card_name in price_map:
+                c.price_usd = price_map[c.card_name]
+            elif c.canonical_name in price_map:
+                c.price_usd = price_map[c.canonical_name]
+            elif c.name in price_map:
+                c.price_usd = price_map[c.name]
+            else:
+                c.price_usd = -1.0
         LOGGER.info("reload_prices: updated %s cards", len(self._card_data))
 
+    def _build_name_indexes(self) -> None:
+        if self._name_to_card is not None and self._name_to_faces is not None and self._canonical_to_faces is not None:
+            return
+        cards: list[Card] = self.get_card_data()
+        canonical_to_faces: dict[str, list[Card]] = {}
+        for card in cards:
+            canonical: str = card.canonical_name if card.canonical_name else card.name
+            if canonical not in canonical_to_faces:
+                canonical_to_faces[canonical] = []
+            canonical_to_faces[canonical].append(card)
+
+        alias_to_primary: dict[str, Card] = {}
+        alias_to_faces: dict[str, list[Card]] = {}
+        for canonical, faces in canonical_to_faces.items():
+            ordered_faces: list[Card] = sorted(faces, key=lambda c: c.face_index)
+            primary: Card = ordered_faces[0]
+            aliases: set[str] = set()
+            aliases.add(canonical.lower())
+            for face in ordered_faces:
+                aliases.add(face.name.lower())
+                aliases.add(face.face_name.lower())
+                for fname in face.face_names:
+                    aliases.add(fname.lower())
+            for alias in aliases:
+                if alias not in alias_to_primary:
+                    alias_to_primary[alias] = primary
+                if alias not in alias_to_faces:
+                    alias_to_faces[alias] = ordered_faces
+
+        self._name_to_card = alias_to_primary
+        self._name_to_faces = alias_to_faces
+        self._canonical_to_faces = canonical_to_faces
+        LOGGER.info("Name indexes built aliases=%s canonicals=%s", len(alias_to_primary), len(canonical_to_faces))
+
     def _get_name_to_card(self) -> dict[str, Card]:
-        """Lazy-build case-insensitive name -> Card lookup from card data."""
-        if self._name_to_card is None:
-            cards: list[Card] = self.get_card_data()
-            mapping: dict[str, Card] = {}
-            for card in cards:
-                key: str = card.name.lower()
-                if key not in mapping:
-                    mapping[key] = card
-            self._name_to_card = mapping
-            LOGGER.info("Name-to-card map built entries=%s", len(mapping))
+        """Lazy-build case-insensitive alias -> primary face lookup."""
+        self._build_name_indexes()
+        assert self._name_to_card is not None, "_build_name_indexes must initialize _name_to_card"
         return self._name_to_card
+
+    def resolve_primary_card(self, name: str) -> Card:
+        """Resolve any alias (front/back/combined) to the primary face Card."""
+        if not name or not name.strip():
+            LOGGER.error("resolve_primary_card: name is empty")
+            raise ValueError("resolve_primary_card: name is empty")
+        key: str = name.strip().lower()
+        name_map: dict[str, Card] = self._get_name_to_card()
+        if key not in name_map:
+            LOGGER.error("resolve_primary_card: card not found: %r", name)
+            raise ValueError(f"Card not found: {name!r}")
+        return name_map[key]
+
+    def resolve_faces(self, name: str) -> list[Card]:
+        """Resolve any alias (front/back/combined) to all faces of the card."""
+        if not name or not name.strip():
+            LOGGER.error("resolve_faces: name is empty")
+            raise ValueError("resolve_faces: name is empty")
+        self._build_name_indexes()
+        assert self._name_to_faces is not None, "_build_name_indexes must initialize _name_to_faces"
+        key: str = name.strip().lower()
+        if key not in self._name_to_faces:
+            LOGGER.error("resolve_faces: card not found: %r", name)
+            raise ValueError(f"Card not found: {name!r}")
+        return list(self._name_to_faces[key])
+
+    @staticmethod
+    def card_display_name(card: Card) -> str:
+        if card.canonical_name:
+            return card.canonical_name
+        return card.name
+
+    @staticmethod
+    def _name_query_matches_card(card: Card, query_lower: str) -> bool:
+        aliases: list[str] = []
+        aliases.append(card.name.lower())
+        aliases.append(card.face_name.lower())
+        if card.canonical_name:
+            aliases.append(card.canonical_name.lower())
+        for face_name in card.face_names:
+            aliases.append(face_name.lower())
+        for alias in aliases:
+            if query_lower in alias:
+                return True
+        return False
 
     def get_cards_info(self, names: list[str], card_fields: list[str]) -> str:
         """Look up one or more cards by exact name and return requested fields as JSON.
@@ -131,17 +240,17 @@ class CardDB:
                 f"Valid fields: {sorted(valid_field_names)}"
             )
 
-        name_map: dict[str, Card] = self._get_name_to_card()
         results: list[dict[str, Any]] = []
         for name in names:
-            key: str = name.strip().lower()
-            if key not in name_map:
+            try:
+                card: Card = self.resolve_primary_card(name)
+            except ValueError:
                 results.append({"name": name, "error": "Card not found"})
                 LOGGER.warning("get_cards_info: card not found: %r", name)
-            else:
-                card: Card = name_map[key]
-                full: dict[str, Any] = card.to_dict()
-                results.append({f: full[f] for f in card_fields})
+                continue
+            full: dict[str, Any] = card.to_dict()
+            full["name"] = self.card_display_name(card)
+            results.append({f: full[f] for f in card_fields})
 
         LOGGER.info("get_cards_info: requested=%s found=%s",
                      len(names), sum(1 for r in results if "error" not in r))
@@ -164,12 +273,7 @@ class CardDB:
         if extract_clean not in ("triggers", "effects"):
             LOGGER.error("get_card_mechanics: extract_type must be 'triggers' or 'effects', got %r", extract_type)
             raise ValueError("get_card_mechanics: extract_type must be 'triggers' or 'effects'")
-        name_map: dict[str, Card] = self._get_name_to_card()
-        key: str = (name or "").strip().lower()
-        if key not in name_map:
-            LOGGER.error("get_card_mechanics: card not found: %r", name)
-            raise ValueError(f"Card not found: {name!r}")
-        card: Card = name_map[key]
+        card: Card = self.resolve_primary_card(name)
         items: list[str] = card.get_triggers() if extract_clean == "triggers" else card.get_effects()
         if not items:
             return "(none)"
@@ -181,20 +285,11 @@ class CardDB:
         Uses embedding model with cosine similarity: cos_sim(triggers_A, effects_B) + cos_sim(effects_A, triggers_B).
         Raises ValueError if either card is not found. Requires RAG (embedding model) to be loaded.
         """
-        name_map: dict[str, Card] = self._get_name_to_card()
-        key_a: str = (name_a or "").strip().lower()
-        key_b: str = (name_b or "").strip().lower()
-        if key_a not in name_map:
-            LOGGER.error("get_synergy_score: card not found: %r", name_a)
-            raise ValueError(f"Card not found: {name_a!r}")
-        if key_b not in name_map:
-            LOGGER.error("get_synergy_score: card not found: %r", name_b)
-            raise ValueError(f"Card not found: {name_b!r}")
+        card_a: Card = self.resolve_primary_card(name_a)
+        card_b: Card = self.resolve_primary_card(name_b)
         model = self.get_embedding_model()
         def encode_fn(texts: list[str]):
             return model.encode(texts).tolist()
-        card_a: Card = name_map[key_a]
-        card_b: Card = name_map[key_b]
         return card_a.synergy_with(card_b, encode_fn)
 
     @staticmethod
@@ -277,7 +372,7 @@ class CardDB:
         results: list[Card] = []
         skipped: int = 0
         for card in cards:
-            if name_lower and name_lower not in card.name.lower():
+            if name_lower and not self._name_query_matches_card(card, name_lower):
                 continue
             if oracle_lower_list:
                 card_text_lower: str = card.text.lower()
@@ -484,7 +579,14 @@ class CardDB:
         metas = (out.get("metadatas") or [[]])[0]
         results: list[tuple[str, str]] = []
         for doc, meta in zip(docs, metas):
-            name: str = (meta or {}).get("name", "")
+            if not isinstance(meta, dict):
+                meta = {}
+            if "canonicalName" in meta and isinstance(meta["canonicalName"], str) and meta["canonicalName"].strip():
+                name = meta["canonicalName"]
+            elif "name" in meta and isinstance(meta["name"], str):
+                name = meta["name"]
+            else:
+                name = ""
             results.append((doc, name))
         return results
 

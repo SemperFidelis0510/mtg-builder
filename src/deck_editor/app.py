@@ -16,8 +16,18 @@ from src.lib.cardDB import CardDB
 from src.lib.config import DECK_EDITOR_SAVE_DIR
 from src.lib.prices import prices_age_hours, update_all_prices
 from src.obj.card import Card
-from src.obj.deck import Deck, _cards_from_names, _normalize_cards_arg
+from src.obj.deck import Deck, _cards_from_names, _normalize_cards_arg, _resolve_name_to_type_key
 from src.utils.logger import LOGGER
+
+
+class DeckEditorError(Exception):
+    """Deck mutation error with HTTP-like status (used by API routes and in-process agent)."""
+
+    def __init__(self, status_code: int, detail: str) -> None:
+        self.status_code: int = status_code
+        self.detail: str = detail
+        super().__init__(detail)
+
 
 app = FastAPI(title="MTG Deck Editor")
 
@@ -123,7 +133,11 @@ def _compute_deck_card_colors(deck: Deck) -> set[str]:
     return colors
 
 
-_VALID_BOARDS: frozenset[str] = frozenset({"main", "maybe", "sideboard"})
+_VALID_BOARDS: frozenset[str] = frozenset({"main", "maybe", "sideboard", "commander"})
+
+
+def _valid_boards_detail() -> str:
+    return "'main', 'maybe', 'sideboard', or 'commander'"
 
 
 def _get_board_list(deck: Deck, board: str) -> list[Card]:
@@ -134,11 +148,108 @@ def _get_board_list(deck: Deck, board: str) -> list[Card]:
         return deck.maybe
     if board == "sideboard":
         return deck.sideboard
-    raise ValueError(f"Unknown board: {board!r}. Must be 'main', 'maybe', or 'sideboard'.")
+    raise ValueError(f"Unknown board: {board!r}. Must be {_valid_boards_detail()}.")
+
+
+def _push_previous_commander_to_main(deck: Deck) -> None:
+    """If deck.commander is set, resolve it to a Card and append one copy to main. Logs on resolve failure."""
+    prev: str = (deck.commander or "").strip()
+    if not prev:
+        return
+    try:
+        prev_cards: list[Card] = _cards_from_names([prev])
+    except ValueError:
+        LOGGER.warning("push_previous_commander_to_main: could not resolve previous commander %r", prev)
+        return
+    if prev_cards:
+        deck.cards.append(prev_cards[0])
+
+
+def _assign_commander_card(deck: Deck, card: Card) -> None:
+    """Set commander to *card*'s canonical name; previous commander (if any) is appended to main as one copy."""
+    _push_previous_commander_to_main(deck)
+    deck.commander = card.name
+
+
+def _commander_name_lower(deck: Deck) -> str | None:
+    c: str = (deck.commander or "").strip()
+    return c.lower() if c else None
+
+
+def _move_cards_between_boards(
+    deck: Deck,
+    names_to_move: list[str],
+    from_board: str,
+    to_board: str,
+    count: int,
+) -> None:
+    """Move cards between boards including commander slot. Raises DeckEditorError on failure."""
+    if from_board not in _VALID_BOARDS:
+        raise DeckEditorError(400, f"Invalid from_board: {from_board!r}. Must be {_valid_boards_detail()}.")
+    if to_board not in _VALID_BOARDS:
+        raise DeckEditorError(400, f"Invalid to_board: {to_board!r}. Must be {_valid_boards_detail()}.")
+    if from_board == to_board:
+        raise DeckEditorError(400, f"from_board and to_board must differ (both are {from_board!r})")
+    if count < 1:
+        raise DeckEditorError(400, "count must be >= 1")
+
+    if to_board == "commander":
+        if len(names_to_move) != 1 or count != 1:
+            raise DeckEditorError(400, "Moving to commander requires exactly one card name and count=1")
+        card_name: str = names_to_move[0]
+        name_lower: str = card_name.strip().lower()
+        source_list: list[Card] = _get_board_list(deck, from_board)
+        idx_move: int | None = None
+        for i, c in enumerate(source_list):
+            if c.name.lower() == name_lower:
+                idx_move = i
+                break
+        if idx_move is None:
+            raise DeckEditorError(404, f"Card(s) not found in {from_board} board: {card_name}")
+        moved_card: Card = source_list.pop(idx_move)
+        _assign_commander_card(deck, moved_card)
+    elif from_board == "commander":
+        if len(names_to_move) != 1 or count != 1:
+            raise DeckEditorError(400, "Moving from commander requires exactly one card name and count=1")
+        cur_lower: str | None = _commander_name_lower(deck)
+        if not cur_lower:
+            raise DeckEditorError(404, "No commander set")
+        req_lower: str = names_to_move[0].strip().lower()
+        if req_lower != cur_lower:
+            raise DeckEditorError(404, f"Card(s) not found in commander slot: {names_to_move[0]!r}")
+        try:
+            cmd_cards: list[Card] = _cards_from_names([(deck.commander or "").strip()])
+        except ValueError:
+            raise DeckEditorError(404, f"Commander not found in card DB: {deck.commander!r}") from None
+        cmd_card: Card = cmd_cards[0]
+        deck.commander = ""
+        dest_list: list[Card] = _get_board_list(deck, to_board)
+        dest_list.append(cmd_card)
+    else:
+        source_list = _get_board_list(deck, from_board)
+        dest_list = _get_board_list(deck, to_board)
+        not_found: list[str] = []
+        for name in names_to_move:
+            n_lower: str = name.strip().lower()
+            moved: int = 0
+            for _ in range(count):
+                idx: int | None = None
+                for i, card in enumerate(source_list):
+                    if card.name.lower() == n_lower:
+                        idx = i
+                        break
+                if idx is None:
+                    break
+                dest_list.append(source_list.pop(idx))
+                moved += 1
+            if moved == 0:
+                not_found.append(name)
+        if not_found:
+            raise DeckEditorError(404, f"Card(s) not found in {from_board} board: {', '.join(not_found)}")
 
 
 def _recompute_and_set_colors(deck: Deck) -> None:
-    """Recompute deck colors from all boards (main + maybe + sideboard) and update deck.colors."""
+    """Recompute deck colors from all boards (main + maybe + sideboard + commander) and update deck.colors."""
     colors: set[str] = set()
     for card in deck.cards:
         for c in getattr(card, "color_identity", []) or []:
@@ -152,6 +263,15 @@ def _recompute_and_set_colors(deck: Deck) -> None:
         for c in getattr(card, "color_identity", []) or []:
             if c in "WUBRG":
                 colors.add(c)
+    cmd_lower: str | None = _commander_name_lower(deck)
+    if cmd_lower:
+        try:
+            cmd_card: Card = _cards_from_names([(deck.commander or "").strip()])[0]
+            for c in getattr(cmd_card, "color_identity", []) or []:
+                if c in "WUBRG":
+                    colors.add(c)
+        except ValueError:
+            LOGGER.warning("_recompute_and_set_colors: commander %r not found in card DB", deck.commander)
     deck.colors = list(colors)
 
 
@@ -171,21 +291,16 @@ def _compute_deck_stats(deck: Deck) -> dict:
     non_land: int = total_cards - land_count
 
     color_counts: dict[str, int] = {c: 0 for c in _COLOR_SYMBOLS}
-    data: list = CardDB.inst().get_card_data()
-    name_lower_to_card: dict[str, Any] = {}
-    for c in data:
-        k: str = c.name.lower()
-        existing = name_lower_to_card.get(k)
-        if existing is None or (
-            (c.mana_cost or "").strip() and not (getattr(existing, "mana_cost", None) or "").strip()
-        ):
-            name_lower_to_card[k] = c
+    card_db = CardDB.inst()
+
+    def _resolve_for_stats(name: str) -> Card | None:
+        try:
+            return card_db.resolve_primary_card(name)
+        except ValueError:
+            return None
+
     for name in all_names:
-        key: str = (name or "").strip().lower()
-        card = name_lower_to_card.get(key)
-        if card is None and " // " in name:
-            key = name.split(" // ", 1)[0].strip().lower()
-            card = name_lower_to_card.get(key)
+        card = _resolve_for_stats(name)
         if card is None:
             continue
         cost_counts: dict[str, int] = _count_colored_mana_in_cost(card.mana_cost)
@@ -209,11 +324,7 @@ def _compute_deck_stats(deck: Deck) -> dict:
         if isinstance(lst, list):
             non_creature_non_land.extend(lst)
     for name in creature_names:
-        key = (name or "").strip().lower()
-        card = name_lower_to_card.get(key)
-        if card is None and " // " in name:
-            key = name.split(" // ", 1)[0].strip().lower()
-            card = name_lower_to_card.get(key)
+        card = _resolve_for_stats(name)
         if card is None:
             continue
         mv: float = getattr(card, "mana_value", -1.0) if hasattr(card, "mana_value") else -1.0
@@ -222,11 +333,7 @@ def _compute_deck_stats(deck: Deck) -> dict:
         idx = min(7, int(mv))
         mv_creatures[idx] += 1
     for name in non_creature_non_land:
-        key = (name or "").strip().lower()
-        card = name_lower_to_card.get(key)
-        if card is None and " // " in name:
-            key = name.split(" // ", 1)[0].strip().lower()
-            card = name_lower_to_card.get(key)
+        card = _resolve_for_stats(name)
         if card is None:
             continue
         mv = getattr(card, "mana_value", -1.0) if hasattr(card, "mana_value") else -1.0
@@ -261,37 +368,41 @@ def _deck_to_response(deck: Deck) -> dict:
     out: dict = deck.to_dict()
     for key in TYPE_KEYS:
         out[key] = list(getattr(deck, key, None) or [])
-    out["maybe_names"] = [c.name for c in deck.maybe]
-    out["sideboard_names"] = [c.name for c in deck.sideboard]
+    card_db = CardDB.inst()
+    out["maybe_names"] = [card_db.card_display_name(c) for c in deck.maybe]
+    out["sideboard_names"] = [card_db.card_display_name(c) for c in deck.sideboard]
     # Per-type lists for maybe/sideboard so client can show only sections that have cards
     maybe_by_type: dict[str, list[str]] = {k: [] for k in TYPE_KEYS}
     for c in deck.maybe:
         key = _type_line_to_key(getattr(c, "type_line", "") or "")
         if key in maybe_by_type:
-            maybe_by_type[key].append(c.name)
+            maybe_by_type[key].append(card_db.card_display_name(c))
     sideboard_by_type: dict[str, list[str]] = {k: [] for k in TYPE_KEYS}
     for c in deck.sideboard:
         key = _type_line_to_key(getattr(c, "type_line", "") or "")
         if key in sideboard_by_type:
-            sideboard_by_type[key].append(c.name)
+            sideboard_by_type[key].append(card_db.card_display_name(c))
     out["maybe_by_type"] = maybe_by_type
     out["sideboard_by_type"] = sideboard_by_type
     seen_names: set[str] = set()
     out["prices"] = {}
     for c in deck.cards:
-        if c.name not in seen_names:
-            seen_names.add(c.name)
-            out["prices"][c.name] = c.price_usd if c.price_usd >= 0 else None
+        display_name: str = card_db.card_display_name(c)
+        if display_name not in seen_names:
+            seen_names.add(display_name)
+            out["prices"][display_name] = c.price_usd if c.price_usd >= 0 else None
     for c in deck.maybe:
-        if c.name not in seen_names:
-            seen_names.add(c.name)
+        display_name = card_db.card_display_name(c)
+        if display_name not in seen_names:
+            seen_names.add(display_name)
             price = getattr(c, "price_usd", -1.0)
-            out["prices"][c.name] = price if price >= 0 else None
+            out["prices"][display_name] = price if price >= 0 else None
     for c in deck.sideboard:
-        if c.name not in seen_names:
-            seen_names.add(c.name)
+        display_name = card_db.card_display_name(c)
+        if display_name not in seen_names:
+            seen_names.add(display_name)
             price = getattr(c, "price_usd", -1.0)
-            out["prices"][c.name] = price if price >= 0 else None
+            out["prices"][display_name] = price if price >= 0 else None
     resp: dict = {"deck": out, "stats": _compute_deck_stats(deck)}
     return resp
 
@@ -327,17 +438,7 @@ def _type_line_to_key(type_line: str) -> str:
 
 def _resolve_type_key(card_name: str) -> tuple[str, str]:
     """Look up card_name in local data; return (canonical_name, type_key). Raises ValueError if not found."""
-    name_clean: str = (card_name or "").strip()
-    if not name_clean:
-        raise ValueError("add_card: card name is empty")
-    data: list = CardDB.inst().get_card_data()
-    name_lower: str = name_clean.lower()
-    for c in data:
-        if c.name.lower() == name_lower:
-            key: str = _type_line_to_key(c.type_line)
-            return (c.name, key)
-    LOGGER.error( "add_card: card not found: %s", name_clean)
-    raise ValueError(f"add_card: card not found: {name_clean!r}")
+    return _resolve_name_to_type_key(card_name)
 
 
 # ---------------------------------------------------------------------------
@@ -642,7 +743,7 @@ async def add_card(body: dict) -> dict:
     names_to_add: list[str] = _parse_add_card_names(body)
     board: str = body["board"] if "board" in body and isinstance(body["board"], str) else "main"
     if board not in _VALID_BOARDS:
-        raise HTTPException(status_code=400, detail=f"Invalid board: {board!r}. Must be 'main', 'maybe', or 'sideboard'.")
+        raise HTTPException(status_code=400, detail=f"Invalid board: {board!r}. Must be {_valid_boards_detail()}.")
     cards_to_append: list[Card] = []
     not_found: list[str] = []
     for name in names_to_add:
@@ -652,9 +753,17 @@ async def add_card(body: dict) -> dict:
             not_found.append(name)
     if not cards_to_append:
         raise HTTPException(status_code=404, detail=f"Card(s) not found: {', '.join(not_found)}")
-    target_list: list[Card] = _get_board_list(_current_deck, board)
-    for card in cards_to_append:
-        target_list.append(card)
+    if board == "commander":
+        if len(names_to_add) != 1 or len(cards_to_append) != 1:
+            raise HTTPException(
+                status_code=400,
+                detail="board 'commander' accepts exactly one card name per request",
+            )
+        _assign_commander_card(_current_deck, cards_to_append[0])
+    else:
+        target_list: list[Card] = _get_board_list(_current_deck, board)
+        for card in cards_to_append:
+            target_list.append(card)
     if not_found:
         LOGGER.warning(
             "add_card: partially added=%s requested=%s board=%s not_found=%s",
@@ -675,35 +784,50 @@ async def add_card(body: dict) -> dict:
 async def remove_card(body: dict) -> dict:
     """Remove copies of one or more cards from a board (default: main). Broadcasts deck_updated via SSE.
 
-    Body: {"names": [...], "board": "main"|"maybe"|"sideboard", "count": 1}
+    Body: {"names": [...], "board": "main"|"maybe"|"sideboard"|"commander", "count": 1}
     """
     global _current_deck
     names_to_remove: list[str] = _parse_add_card_names(body)
     board: str = body["board"] if "board" in body and isinstance(body["board"], str) else "main"
     if board not in _VALID_BOARDS:
-        raise HTTPException(status_code=400, detail=f"Invalid board: {board!r}. Must be 'main', 'maybe', or 'sideboard'.")
+        raise HTTPException(status_code=400, detail=f"Invalid board: {board!r}. Must be {_valid_boards_detail()}.")
     count: int = int(body["count"]) if "count" in body and body["count"] is not None else 1
     if count < 1:
         raise HTTPException(status_code=400, detail="count must be >= 1")
-    target_list: list[Card] = _get_board_list(_current_deck, board)
-    not_found: list[str] = []
-    for name in names_to_remove:
-        name_lower: str = name.strip().lower()
-        removed: int = 0
-        for _ in range(count):
-            idx: int | None = None
-            for i, card in enumerate(target_list):
-                if card.name.lower() == name_lower:
-                    idx = i
+    if board == "commander":
+        if count != 1:
+            raise HTTPException(status_code=400, detail="board 'commander' only supports count=1")
+        cur_lower: str | None = _commander_name_lower(_current_deck)
+        if not cur_lower:
+            raise HTTPException(status_code=404, detail="No commander set")
+        if len(names_to_remove) != 1:
+            raise HTTPException(status_code=400, detail="board 'commander' accepts exactly one card name per request")
+        if names_to_remove[0].strip().lower() != cur_lower:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Card not found in commander slot: {names_to_remove[0]!r}",
+            )
+        _current_deck.commander = ""
+    else:
+        target_list: list[Card] = _get_board_list(_current_deck, board)
+        not_found: list[str] = []
+        for name in names_to_remove:
+            name_lower: str = name.strip().lower()
+            removed: int = 0
+            for _ in range(count):
+                idx: int | None = None
+                for i, card in enumerate(target_list):
+                    if card.name.lower() == name_lower:
+                        idx = i
+                        break
+                if idx is None:
                     break
-            if idx is None:
-                break
-            target_list.pop(idx)
-            removed += 1
-        if removed == 0:
-            not_found.append(name)
-    if not_found:
-        raise HTTPException(status_code=404, detail=f"Card(s) not found in {board} board: {', '.join(not_found)}")
+                target_list.pop(idx)
+                removed += 1
+            if removed == 0:
+                not_found.append(name)
+        if not_found:
+            raise HTTPException(status_code=404, detail=f"Card(s) not found in {board} board: {', '.join(not_found)}")
     _recompute_and_set_colors(_current_deck)
     _notify_deck_updated()
     return _deck_to_response(_current_deck)
@@ -713,45 +837,30 @@ async def remove_card(body: dict) -> dict:
 async def move_card(body: dict) -> dict:
     """Move copies of one or more cards from one board to another. Broadcasts deck_updated via SSE.
 
-    Body: {"names": [...], "from_board": "main"|"maybe"|"sideboard", "to_board": "main"|"maybe"|"sideboard", "count": 1}
+    Body: {"names": [...], "from_board": "main"|"maybe"|"sideboard"|"commander", "to_board": same, "count": 1}
     """
     global _current_deck
     names_to_move: list[str] = _parse_add_card_names(body)
     if "from_board" not in body or not isinstance(body["from_board"], str):
-        raise HTTPException(status_code=400, detail="'from_board' is required (string: 'main', 'maybe', or 'sideboard')")
+        raise HTTPException(status_code=400, detail=f"'from_board' is required (string: {_valid_boards_detail()})")
     if "to_board" not in body or not isinstance(body["to_board"], str):
-        raise HTTPException(status_code=400, detail="'to_board' is required (string: 'main', 'maybe', or 'sideboard')")
+        raise HTTPException(status_code=400, detail=f"'to_board' is required (string: {_valid_boards_detail()})")
     from_board: str = body["from_board"]
     to_board: str = body["to_board"]
     if from_board not in _VALID_BOARDS:
-        raise HTTPException(status_code=400, detail=f"Invalid from_board: {from_board!r}. Must be 'main', 'maybe', or 'sideboard'.")
+        raise HTTPException(status_code=400, detail=f"Invalid from_board: {from_board!r}. Must be {_valid_boards_detail()}.")
     if to_board not in _VALID_BOARDS:
-        raise HTTPException(status_code=400, detail=f"Invalid to_board: {to_board!r}. Must be 'main', 'maybe', or 'sideboard'.")
+        raise HTTPException(status_code=400, detail=f"Invalid to_board: {to_board!r}. Must be {_valid_boards_detail()}.")
     if from_board == to_board:
         raise HTTPException(status_code=400, detail=f"from_board and to_board must differ (both are {from_board!r})")
     count: int = int(body["count"]) if "count" in body and body["count"] is not None else 1
     if count < 1:
         raise HTTPException(status_code=400, detail="count must be >= 1")
-    source_list: list[Card] = _get_board_list(_current_deck, from_board)
-    dest_list: list[Card] = _get_board_list(_current_deck, to_board)
-    not_found: list[str] = []
-    for name in names_to_move:
-        name_lower: str = name.strip().lower()
-        moved: int = 0
-        for _ in range(count):
-            idx: int | None = None
-            for i, card in enumerate(source_list):
-                if card.name.lower() == name_lower:
-                    idx = i
-                    break
-            if idx is None:
-                break
-            dest_list.append(source_list.pop(idx))
-            moved += 1
-        if moved == 0:
-            not_found.append(name)
-    if not_found:
-        raise HTTPException(status_code=404, detail=f"Card(s) not found in {from_board} board: {', '.join(not_found)}")
+
+    try:
+        _move_cards_between_boards(_current_deck, names_to_move, from_board, to_board, count)
+    except DeckEditorError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail) from None
     _recompute_and_set_colors(_current_deck)
     _notify_deck_updated()
     return _deck_to_response(_current_deck)

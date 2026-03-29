@@ -1,11 +1,41 @@
 /** Pure utility functions for Scryfall URLs, stack conversion, and naming. */
 
+export function splitCardFaces(name) {
+  if (!name || typeof name !== 'string') return [];
+  return name
+    .split(' // ')
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+}
+
+export function isTwoSidedCardName(name) {
+  return splitCardFaces(name).length > 1;
+}
+
+function faceNameForIndex(name, faceIndex) {
+  const faces = splitCardFaces(name);
+  if (faces.length <= 1) return name;
+  const idx = Number.isInteger(faceIndex) ? faceIndex : 0;
+  if (idx < 0 || idx >= faces.length) return faces[0];
+  return faces[idx];
+}
+
+export function scryfallImageUrlForSide(name, faceIndex) {
+  const exactName = faceNameForIndex(name, faceIndex);
+  return 'https://api.scryfall.com/cards/named?exact=' + encodeURIComponent(exactName) + '&format=image&version=normal';
+}
+
 export function scryfallImageUrl(name) {
-  return 'https://api.scryfall.com/cards/named?exact=' + encodeURIComponent(name) + '&format=image&version=normal';
+  return scryfallImageUrlForSide(name, 0);
+}
+
+export function scryfallImageUrlLargeForSide(name, faceIndex) {
+  const exactName = faceNameForIndex(name, faceIndex);
+  return 'https://api.scryfall.com/cards/named?exact=' + encodeURIComponent(exactName) + '&format=image&version=large';
 }
 
 export function scryfallImageUrlLarge(name) {
-  return 'https://api.scryfall.com/cards/named?exact=' + encodeURIComponent(name) + '&format=image&version=large';
+  return scryfallImageUrlLargeForSide(name, 0);
 }
 
 export function collapseToStacks(arr) {

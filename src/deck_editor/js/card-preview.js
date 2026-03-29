@@ -2,11 +2,12 @@
 
 import { scryfallImageUrlLarge } from './utils.js';
 
-export function showCardPreview(name, x, y) {
+export function showCardPreview(name, x, y, imageName = '') {
   const el = document.getElementById('cardPreview');
   if (!el || !name) return;
+  const imageNameResolved = imageName || name;
   const img = el.querySelector('img');
-  img.src = scryfallImageUrlLarge(name);
+  img.src = scryfallImageUrlLarge(imageNameResolved);
   img.alt = name;
   el.style.left = (x + 16) + 'px';
   el.style.top = (y + 16) + 'px';
@@ -30,11 +31,17 @@ export function initCardPreview() {
     const img = e.target.closest('.card-img');
     if (img) {
       const stack = img.closest('.card-stack');
-      if (stack && stack.dataset.name) name = stack.dataset.name;
+      if (stack) {
+        if (stack.dataset.currentFaceName) name = stack.dataset.currentFaceName;
+        else if (stack.dataset.name) name = stack.dataset.name;
+      }
     }
     if (!name) {
       const stack = e.target.closest('.card-stack[data-name]');
-      if (stack) name = stack.dataset.name;
+      if (stack) {
+        if (stack.dataset.currentFaceName) name = stack.dataset.currentFaceName;
+        else name = stack.dataset.name;
+      }
     }
     if (name) showCardPreview(name, e.clientX, e.clientY);
   });

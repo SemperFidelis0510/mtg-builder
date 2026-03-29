@@ -141,7 +141,7 @@ def run_server() -> None:
     def append_cards_to_deck(card_names: str, board: str = "main") -> str:
         """Append one or more cards to the currently loaded deck in the deck editor server.
         card_names: comma-separated list of card names (e.g. 'Lightning Bolt, Counterspell').
-        board: which board to add to — 'main' (default), 'maybe', or 'sideboard'.
+        board: which board to add to — 'main' (default), 'maybe', 'sideboard', or 'commander' (exactly one card name).
         The deck editor must be running (e.g. python deck_editor.py). Returns a short status or error message."""
         names: list[str] = parse_card_names_arg(card_names)
         if not names:
@@ -149,7 +149,12 @@ def run_server() -> None:
         ok, err, response_json = _post_deck_editor("append_cards_to_deck", "/api/add_card", {"names": names, "board": board})
         if not ok:
             return err
-        board_label: str = "main deck" if board == "main" else f"{board} board"
+        if board == "main":
+            board_label = "main deck"
+        elif board == "commander":
+            board_label = "commander slot"
+        else:
+            board_label = f"{board} board"
         missing: list[str] = []
         if response_json is not None and "not_found" in response_json:
             raw_missing = response_json["not_found"]
@@ -180,7 +185,7 @@ def run_server() -> None:
     def remove_cards_from_deck(card_names: str, board: str = "main", count: int = 1) -> str:
         """Remove one or more cards from the currently loaded deck in the deck editor server.
         card_names: comma-separated list of card names to remove.
-        board: which board to remove from — 'main' (default), 'maybe', or 'sideboard'.
+        board: which board to remove from — 'main' (default), 'maybe', 'sideboard', or 'commander' (count must be 1).
         count: how many copies to remove per card name (default 1).
         The deck editor must be running. Returns a short status or error message."""
         names: list[str] = parse_card_names_arg(card_names)
@@ -189,7 +194,12 @@ def run_server() -> None:
         ok, err, _ = _post_deck_editor("remove_cards_from_deck", "/api/remove_card", {"names": names, "board": board, "count": count})
         if not ok:
             return err
-        board_label: str = "main deck" if board == "main" else f"{board} board"
+        if board == "main":
+            board_label = "main deck"
+        elif board == "commander":
+            board_label = "commander slot"
+        else:
+            board_label = f"{board} board"
         LOGGER.info("Request completed tool=remove_cards_from_deck removed=%s board=%s", len(names), board)
         return f"Removed {len(names)} card(s) from the {board_label}: {', '.join(names)}."
 
@@ -197,8 +207,8 @@ def run_server() -> None:
     def move_cards_in_deck(card_names: str, from_board: str, to_board: str, count: int = 1) -> str:
         """Move one or more cards between boards in the currently loaded deck.
         card_names: comma-separated list of card names to move.
-        from_board: source board — 'main', 'maybe', or 'sideboard'.
-        to_board: destination board — 'main', 'maybe', or 'sideboard'.
+        from_board: source board — 'main', 'maybe', 'sideboard', or 'commander'.
+        to_board: destination board — 'main', 'maybe', 'sideboard', or 'commander'.
         count: how many copies to move per card name (default 1).
         The deck editor must be running. Returns a short status or error message."""
         names: list[str] = parse_card_names_arg(card_names)
@@ -207,8 +217,15 @@ def run_server() -> None:
         ok, err, _ = _post_deck_editor("move_cards_in_deck", "/api/move_card", {"names": names, "from_board": from_board, "to_board": to_board, "count": count})
         if not ok:
             return err
-        from_label: str = "main deck" if from_board == "main" else f"{from_board} board"
-        to_label: str = "main deck" if to_board == "main" else f"{to_board} board"
+        def _board_label(b: str) -> str:
+            if b == "main":
+                return "main deck"
+            if b == "commander":
+                return "commander slot"
+            return f"{b} board"
+
+        from_label: str = _board_label(from_board)
+        to_label: str = _board_label(to_board)
         LOGGER.info("Request completed tool=move_cards_in_deck moved=%s from=%s to=%s", len(names), from_board, to_board)
         return f"Moved {len(names)} card(s) from {from_label} to {to_label}: {', '.join(names)}."
 

@@ -1,10 +1,28 @@
 /** Card DOM elements, section headers, deck state, and server sync. */
 
 import { TYPE_KEYS, TYPE_LABELS, SIDE_LABELS } from './constants.js';
-import { scryfallImageUrl } from './utils.js';
+import {
+  splitCardFaces,
+  scryfallImageUrlForSide,
+} from './utils.js';
 import { getSettings } from './settings.js';
 
 let syncToServerTimer = null;
+const cardFaceIndexByName = new Map();
+
+export function resetCardFaceState() {
+  cardFaceIndexByName.clear();
+}
+
+export function getCardFaceIndex(name) {
+  if (!name) return 0;
+  if (!cardFaceIndexByName.has(name)) return 0;
+  return cardFaceIndexByName.get(name);
+}
+
+function setCardFaceIndex(name, faceIndex) {
+  cardFaceIndexByName.set(name, faceIndex);
+}
 
 export function updateSectionHeaderTotal(listEl) {
   if (!listEl) return;
@@ -39,17 +57,44 @@ export function makeCardStackEl(name, count) {
   wrap.dataset.count = String(count);
   wrap.setAttribute('data-name', name);
   wrap.setAttribute('data-count', String(count));
+  const faces = splitCardFaces(name);
+  const twoSided = faces.length > 1;
+  let currentFaceIndex = getCardFaceIndex(name);
+  if (currentFaceIndex >= faces.length) currentFaceIndex = 0;
+  if (currentFaceIndex < 0) currentFaceIndex = 0;
+  if (!twoSided) currentFaceIndex = 0;
+  setCardFaceIndex(name, currentFaceIndex);
+  wrap.dataset.isTwoSided = twoSided ? 'true' : 'false';
+  wrap.classList.toggle('is-two-sided', twoSided);
+  wrap.dataset.currentFaceIndex = String(currentFaceIndex);
+  wrap.dataset.currentFaceName = twoSided ? faces[currentFaceIndex] : name;
 
   const img = document.createElement('img');
   img.className = 'card-img';
-  img.src = scryfallImageUrl(name);
-  img.alt = name;
+  img.src = scryfallImageUrlForSide(name, currentFaceIndex);
+  img.alt = wrap.dataset.currentFaceName;
   img.loading = 'lazy';
+  if (twoSided) {
+    img.title = 'Click to flip card face';
+  }
   img.onerror = function () {
     this.style.background = '#333';
     this.style.minWidth = '150px';
     this.style.minHeight = '210px';
   };
+  if (twoSided) {
+    img.addEventListener('click', (e) => {
+      e.stopPropagation();
+      let faceIdx = getCardFaceIndex(name);
+      faceIdx = (faceIdx + 1) % faces.length;
+      setCardFaceIndex(name, faceIdx);
+      const currentFaceName = faces[faceIdx];
+      wrap.dataset.currentFaceIndex = String(faceIdx);
+      wrap.dataset.currentFaceName = currentFaceName;
+      img.src = scryfallImageUrlForSide(name, faceIdx);
+      img.alt = currentFaceName;
+    });
+  }
 
   const badge = document.createElement('span');
   badge.className = 'card-stack-badge';
@@ -122,6 +167,7 @@ export function makeMaybeBoardCardEl(name, count) {
   wrap.dataset.count = String(count);
   wrap.setAttribute('data-name', name);
   wrap.setAttribute('data-count', String(count));
+  wrap.dataset.currentFaceName = name;
 
   const nameSpan = document.createElement('span');
   nameSpan.className = 'maybe-board-name';

@@ -15,20 +15,21 @@ When the user asks to add, remove, or move cards in **"the deck"**, **"the open 
 ## Adding cards: `append_cards_to_deck`
 
 - **`card_names`** (required) — comma-separated card names (e.g. `"Sol Ring"` or `"Lightning Bolt, Counterspell"`).
-- **`board`** (optional, default `"main"`) — which board to add to: `"main"`, `"maybe"`, or `"sideboard"`.
+- **`board`** (optional, default `"main"`) — which board to add to: `"main"`, `"maybe"`, `"sideboard"`, or `"commander"` (exactly one card name).
 
 ### Examples
 
 - "Add Soul Warden to the deck" → `append_cards_to_deck(card_names="Soul Warden")`
 - "Add Sol Ring to the sideboard" → `append_cards_to_deck(card_names="Sol Ring", board="sideboard")`
 - "Put Lightning Bolt in the maybe board" → `append_cards_to_deck(card_names="Lightning Bolt", board="maybe")`
+- "Set Kenrith as commander" → `append_cards_to_deck(card_names="Kenrith, the Returned King", board="commander")`
 
 ---
 
 ## Removing cards: `remove_cards_from_deck`
 
 - **`card_names`** (required) — comma-separated card names to remove.
-- **`board`** (optional, default `"main"`) — which board to remove from: `"main"`, `"maybe"`, or `"sideboard"`.
+- **`board`** (optional, default `"main"`) — which board to remove from: `"main"`, `"maybe"`, `"sideboard"`, or `"commander"` (use `count=1` and the exact commander name).
 - **`count`** (optional, default `1`) — how many copies to remove per card name.
 
 ### Examples
@@ -36,17 +37,19 @@ When the user asks to add, remove, or move cards in **"the deck"**, **"the open 
 - "Remove Lightning Bolt from the deck" → `remove_cards_from_deck(card_names="Lightning Bolt")`
 - "Remove 2 copies of Sol Ring" → `remove_cards_from_deck(card_names="Sol Ring", count=2)`
 - "Remove Counterspell from the sideboard" → `remove_cards_from_deck(card_names="Counterspell", board="sideboard")`
+- "Clear the commander" → `remove_cards_from_deck(card_names="<exact commander name>", board="commander", count=1)`
 
 ---
 
 ## Moving cards: `move_cards_in_deck`
 
 - **`card_names`** (required) — comma-separated card names to move.
-- **`from_board`** (required) — source board: `"main"`, `"maybe"`, or `"sideboard"`.
-- **`to_board`** (required) — destination board: `"main"`, `"maybe"`, or `"sideboard"`.
+- **`from_board`** (required) — source board: `"main"`, `"maybe"`, `"sideboard"`, or `"commander"`.
+- **`to_board`** (required) — destination board: `"main"`, `"maybe"`, `"sideboard"`, or `"commander"`.
 - **`count`** (optional, default `1`) — how many copies to move per card name.
 
 ### Examples
 
 - "Move Sol Ring to the sideboard" → `move_cards_in_deck(card_names="Sol Ring", from_board="main", to_board="sideboard")`
 - "Move Lightning Bolt from the maybe board to the main deck" → `move_cards_in_deck(card_names="Lightning Bolt", from_board="maybe", to_board="main")`
+- "Move a card from main to commander" → `move_cards_in_deck(card_names="Exact Card Name", from_board="main", to_board="commander", count=1)`

@@ -708,6 +708,11 @@ body {
   margin: 0;
   padding: 0;
 }
+/* Empty commander slot must stay a valid Sortable drop target (card height). */
+#list-commander.card-list {
+  min-height: 210px;
+  min-width: 150px;
+}
 .card-img {
   width: 150px;
   height: 210px;
@@ -725,6 +730,7 @@ body {
   padding: 0;
 }
 .card-stack .card-img { margin: 0; border-radius: 8px 8px 0 0; }
+.card-stack.is-two-sided .card-img { cursor: pointer; }
 .card-stack-banner {
   display: flex;
   flex-wrap: wrap;
