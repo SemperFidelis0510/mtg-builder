@@ -1,11 +1,13 @@
 /** SortableJS drag-and-drop for deck lists. */
 
 import { TYPE_KEYS } from './constants.js';
+import { isMaybeFullCardView } from './maybe-board-prefs.js';
 import { makeMaybeBoardCardEl, makeCardStackEl, updateSectionHeaderTotal } from './deck.js';
 
 let sortables = [];
 
 function convertFullCardsInZone(zoneId) {
+  if (zoneId === 'list-maybe' && isMaybeFullCardView()) return;
   const zone = document.getElementById(zoneId);
   if (!zone) return;
   const toReplace = [];
@@ -20,7 +22,10 @@ function convertFullCardsInZone(zoneId) {
     }
   }
   toReplace.forEach((r) => {
-    const newLi = makeMaybeBoardCardEl(r.name, r.count);
+    const newLi =
+      zoneId === 'list-maybe'
+        ? makeMaybeBoardCardEl(r.name, r.count, { quantityControls: true })
+        : makeMaybeBoardCardEl(r.name, r.count);
     r.li.parentNode.replaceChild(newLi, r.li);
   });
 }
@@ -28,7 +33,15 @@ function convertFullCardsInZone(zoneId) {
 function appendCardToList(listEl, name, count) {
   if (!listEl || !name) return;
   const n = Math.max(1, parseInt(count, 10) || 1);
-  if (listEl.id === 'list-maybe' || listEl.id === 'list-sideboard') {
+  if (listEl.id === 'list-maybe') {
+    if (isMaybeFullCardView()) {
+      listEl.appendChild(makeCardStackEl(name, n));
+    } else {
+      listEl.appendChild(makeMaybeBoardCardEl(name, n, { quantityControls: true }));
+    }
+    return;
+  }
+  if (listEl.id === 'list-sideboard') {
     listEl.appendChild(makeMaybeBoardCardEl(name, n));
     return;
   }

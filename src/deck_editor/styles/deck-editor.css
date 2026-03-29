@@ -590,6 +590,18 @@ body {
 .deck-section-controls .clear-btn { background: #5a1a2a; color: #ff8a8a; border-color: #7a2a3a; }
 .deck-section-controls .clear-btn:hover { background: #7a1a2a; }
 .section-header-label { flex: 1; }
+.maybe-view-toggle-btn {
+  flex-shrink: 0;
+  padding: 0.2rem 0.55rem;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.maybe-view-toggle-btn:hover { background: #1a4a7a; }
 .maybe-board-price {
   margin-left: auto;
 }
@@ -801,6 +813,20 @@ body {
   margin-top: 0;
   margin-left: auto;
   font-size: 0.75rem;
+}
+.card-stack.maybe-board-item .maybe-board-qty-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+#list-maybe.maybe-full-card-view {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-content: flex-start;
+}
+#list-maybe.maybe-full-card-view .card-img {
+  display: block !important;
 }
 .sortable-drag { opacity: 0.8; }
 .card-preview {

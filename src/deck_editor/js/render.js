@@ -9,6 +9,8 @@ import {
   updateTotalsPanel,
 } from './deck.js';
 import { initSortable } from './sortable.js';
+import { isMaybeFullCardView } from './maybe-board-prefs.js';
+import { syncMaybeViewToggleButton } from './maybe-board-view.js';
 import { isCommanderEnabledFormat, populateSettings } from './settings.js';
 
 let statsPieChartInstance = null;
@@ -180,9 +182,23 @@ export function renderDeck(data) {
     const listEl = document.getElementById('list-' + key);
     if (listEl) {
       listEl.innerHTML = '';
-      collapseToStacks(names).forEach((s) => {
-        listEl.appendChild(makeMaybeBoardCardEl(s.name, s.count));
-      });
+      if (key === 'maybe' && isMaybeFullCardView()) {
+        listEl.classList.add('maybe-full-card-view');
+        collapseToStacks(names).forEach((s) => {
+          listEl.appendChild(makeCardStackEl(s.name, s.count));
+        });
+      } else {
+        if (key === 'maybe') {
+          listEl.classList.remove('maybe-full-card-view');
+        }
+        collapseToStacks(names).forEach((s) => {
+          if (key === 'maybe') {
+            listEl.appendChild(makeMaybeBoardCardEl(s.name, s.count, { quantityControls: true }));
+          } else {
+            listEl.appendChild(makeMaybeBoardCardEl(s.name, s.count));
+          }
+        });
+      }
       const sectionEl = document.getElementById('section-' + key);
       if (sectionEl) {
         const hdr = sectionEl.querySelector('.section-header');
@@ -199,4 +215,5 @@ export function renderDeck(data) {
   populateSettings(deck);
   updateTotalsPanel();
   initSortable();
+  syncMaybeViewToggleButton();
 }

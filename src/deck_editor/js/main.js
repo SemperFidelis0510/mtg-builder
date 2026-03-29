@@ -11,6 +11,7 @@ import { initAdvSearchModal, initSynergyCheckerModal, initExportModal, initImpor
 import { initSettings, populateSettings } from './settings.js';
 import { initAgentChat } from './agent-chat.js';
 import { initAgentRules } from './agent-rules.js';
+import { initMaybeBoardViewUi } from './maybe-board-view.js';
 
 initCardPreview();
 initContextMenu();
@@ -22,6 +23,7 @@ initExportModal();
 initImportModal();
 initAgentChat();
 initAgentRules();
+initMaybeBoardViewUi();
 
 document.getElementById('deckSectionsZone').addEventListener('click', (e) => {
   const header = e.target.closest('.section-header');

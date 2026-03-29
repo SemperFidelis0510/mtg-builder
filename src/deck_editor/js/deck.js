@@ -47,6 +47,55 @@ export function updateSectionHeaderTotal(listEl) {
   syncDeckToServer();
 }
 
+/**
+ * Wires -/+ to update data-count on wrap; at 0 removes li and syncs list header.
+ * @returns {HTMLDivElement} .card-stack-controls (append after badge)
+ */
+function attachStackQuantityControls(wrap, li, badge) {
+  function setCount(c) {
+    c = Math.max(0, c);
+    wrap.setAttribute('data-count', String(c));
+    badge.textContent = String(c);
+    if (c === 0) {
+      const list = li.parentNode;
+      li.remove();
+      if (list && list.id && list.id.indexOf('list-') === 0) updateSectionHeaderTotal(list);
+      return;
+    }
+    updateSectionHeaderTotal(li.parentNode);
+  }
+
+  const controls = document.createElement('div');
+  controls.className = 'card-stack-controls';
+  const btnPlus = document.createElement('button');
+  btnPlus.textContent = '+';
+  btnPlus.type = 'button';
+  const btnMinus = document.createElement('button');
+  btnMinus.textContent = '-';
+  btnMinus.type = 'button';
+
+  btnPlus.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  });
+  btnPlus.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setCount(parseInt(wrap.getAttribute('data-count'), 10) + 1);
+  });
+  btnMinus.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  });
+  btnMinus.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setCount(parseInt(wrap.getAttribute('data-count'), 10) - 1);
+  });
+
+  controls.appendChild(btnMinus);
+  controls.appendChild(btnPlus);
+  return controls;
+}
+
 export function makeCardStackEl(name, count) {
   count = Math.max(1, parseInt(count, 10) || 1);
   const li = document.createElement('li');
@@ -100,47 +149,7 @@ export function makeCardStackEl(name, count) {
   badge.className = 'card-stack-badge';
   badge.textContent = String(count);
 
-  const controls = document.createElement('div');
-  controls.className = 'card-stack-controls';
-  const btnPlus = document.createElement('button');
-  btnPlus.textContent = '+';
-  btnPlus.type = 'button';
-  const btnMinus = document.createElement('button');
-  btnMinus.textContent = '-';
-  btnMinus.type = 'button';
-
-  function setCount(c) {
-    c = Math.max(0, c);
-    wrap.setAttribute('data-count', String(c));
-    badge.textContent = String(c);
-    if (c === 0) {
-      const list = li.parentNode;
-      li.remove();
-      if (list && list.id && list.id.indexOf('list-') === 0) updateSectionHeaderTotal(list);
-      return;
-    }
-    updateSectionHeaderTotal(li.parentNode);
-  }
-
-  btnPlus.addEventListener('mousedown', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-  });
-  btnPlus.addEventListener('click', (e) => {
-    e.stopPropagation();
-    setCount(parseInt(wrap.getAttribute('data-count'), 10) + 1);
-  });
-  btnMinus.addEventListener('mousedown', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-  });
-  btnMinus.addEventListener('click', (e) => {
-    e.stopPropagation();
-    setCount(parseInt(wrap.getAttribute('data-count'), 10) - 1);
-  });
-
-  controls.appendChild(btnMinus);
-  controls.appendChild(btnPlus);
+  const controls = attachStackQuantityControls(wrap, li, badge);
   const banner = document.createElement('div');
   banner.className = 'card-stack-banner';
   banner.appendChild(badge);
@@ -157,7 +166,8 @@ export function makeCardStackEl(name, count) {
   return li;
 }
 
-export function makeMaybeBoardCardEl(name, count) {
+export function makeMaybeBoardCardEl(name, count, options) {
+  const quantityControls = options != null && options.quantityControls === true;
   count = Math.max(1, parseInt(count, 10) || 1);
   const li = document.createElement('li');
   li.style.listStyle = 'none';
@@ -183,7 +193,15 @@ export function makeMaybeBoardCardEl(name, count) {
   const priceVal = prices[name];
   priceSpan.textContent = (priceVal != null && Number(priceVal) >= 0) ? '$' + Number(priceVal).toFixed(2) : '—';
   wrap.appendChild(nameSpan);
-  wrap.appendChild(badge);
+  if (quantityControls) {
+    const qtyWrap = document.createElement('span');
+    qtyWrap.className = 'maybe-board-qty-wrap';
+    qtyWrap.appendChild(badge);
+    qtyWrap.appendChild(attachStackQuantityControls(wrap, li, badge));
+    wrap.appendChild(qtyWrap);
+  } else {
+    wrap.appendChild(badge);
+  }
   wrap.appendChild(priceSpan);
   li.appendChild(wrap);
   return li;
