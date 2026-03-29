@@ -1209,7 +1209,10 @@ body.agent-panel-open {
   background: none;
   padding: 0;
 }
-.agent-msg-assistant strong { color: var(--accent); }
+.agent-msg-assistant strong {
+  color: #e53935;
+  font-weight: 700;
+}
 
 /* Tool call blocks */
 .agent-tool-call {

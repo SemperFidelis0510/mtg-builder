@@ -61,6 +61,18 @@ _SIDEBOARD_LINE_LOWER: frozenset[str] = frozenset(
 )
 
 
+def _strip_trailing_set_and_collector_from_export_name(name: str) -> str:
+    """Remove MTG Arena / Moxfield-style `` (SET) collector_number`` suffix from an export line name.
+
+    Lines look like ``Forest (THB) 254`` or ``Lathril, Blade of the Elves (FDN) 242``. Uses a
+    single right split on `` (`` so the segment removed is the set code and number only.
+    """
+    s: str = name.strip()
+    if " (" in s:
+        s = s.rsplit(" (", 1)[0].strip()
+    return s
+
+
 def _type_line_to_key(type_line: str) -> str:
     """Map MTG type_line to one of: creature, instant, sorcery, artifact, enchantment, planeswalker, battle, land.
     For multi-type cards we use priority: land > creature > instant > sorcery > artifact > enchantment > planeswalker > battle.
@@ -456,7 +468,7 @@ class Deck:
                 except ValueError:
                     LOGGER.debug("from_export_text: arena line skipped (invalid count): %r", s_line)
                     continue
-                name_part: str = parts[1].strip()
+                name_part: str = _strip_trailing_set_and_collector_from_export_name(parts[1])
                 if count <= 0:
                     continue
                 canonical_name, type_key = _resolve_name_to_type_key(name_part)
@@ -559,10 +571,7 @@ class Deck:
                     continue
                 if count_m <= 0:
                     continue
-                name_rest: str = parts_m[1].strip()
-                # Strip optional " (SET) number" and foil markers
-                if " (" in name_rest:
-                    name_rest = name_rest.rsplit(" (", 1)[0].strip()
+                name_rest: str = _strip_trailing_set_and_collector_from_export_name(parts_m[1])
                 if name_rest.endswith(" *F*"):
                     name_rest = name_rest[:-4].strip()
                 if name_rest.endswith(" F"):

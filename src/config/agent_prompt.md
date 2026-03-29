@@ -41,6 +41,8 @@ Do NOT skip straight to semantic search or rely only on your training data. Alwa
 
 ## Response Format
 
+In user-visible replies, wrap **Magic: The Gathering card names** in markdown bold using the exact full name (e.g. `**Lightning Bolt**`, `**Fable // Bearer of the Great Run**`). Do **not** use markdown bold for general emphasis, section titles, or non-card phrases—the deck editor treats bold text in assistant messages as card names (styled and hoverable).
+
 When suggesting cards, format them clearly:
 - **Card Name** — brief explanation of why it fits
 - Use bullet lists for multiple suggestions

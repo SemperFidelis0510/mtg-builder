@@ -177,6 +177,14 @@ class CardDB:
             raise ValueError(f"Card not found: {name!r}")
         return name_map[key]
 
+    def try_resolve_primary_card(self, name: str) -> Card | None:
+        """Resolve name to primary face Card, or None if unknown. Does not log."""
+        if not name or not name.strip():
+            return None
+        key: str = name.strip().lower()
+        name_map: dict[str, Card] = self._get_name_to_card()
+        return name_map[key] if key in name_map else None
+
     def resolve_faces(self, name: str) -> list[Card]:
         """Resolve any alias (front/back/combined) to all faces of the card."""
         if not name or not name.strip():
@@ -562,6 +570,75 @@ class CardDB:
                 return out
             n_chroma = min(_CHROMA_SEMANTIC_FILTER_CAP, n_chroma * 2)
 
+    def _filter_cards_list_structural_scan_deduped(
+        self,
+        offset: int,
+        n_results: int,
+        *,
+        name_lower: str,
+        oracle_lower_list: list[str],
+        type_lower: str,
+        colors_filter: set[str],
+        color_identity_filter: set[str],
+        color_identity_colorless: bool,
+        colorless_only: bool,
+        mana_value: float,
+        mana_value_min: float,
+        mana_value_max: float,
+        price_usd_min: float,
+        price_usd_max: float,
+        power_val: str,
+        toughness_val: str,
+        keywords_lower: str,
+        subtype_lower: str,
+        supertype_lower: str,
+        format_lower: str,
+    ) -> list[Card]:
+        """Linear scan with structural filters, one primary row per canonical (like semantic path)."""
+        cards: list[Card] = self.get_card_data()
+        seen_canonical: set[str] = set()
+        skipped: int = 0
+        out: list[Card] = []
+        fkw = dict(
+            name_lower=name_lower,
+            oracle_lower_list=oracle_lower_list,
+            type_lower=type_lower,
+            colors_filter=colors_filter,
+            color_identity_filter=color_identity_filter,
+            color_identity_colorless=color_identity_colorless,
+            colorless_only=colorless_only,
+            mana_value=mana_value,
+            mana_value_min=mana_value_min,
+            mana_value_max=mana_value_max,
+            price_usd_min=price_usd_min,
+            price_usd_max=price_usd_max,
+            power_val=power_val,
+            toughness_val=toughness_val,
+            keywords_lower=keywords_lower,
+            subtype_lower=subtype_lower,
+            supertype_lower=supertype_lower,
+            format_lower=format_lower,
+        )
+        for card in cards:
+            if not self._face_matches_filters(card, **fkw):
+                continue
+            prim: Card | None = self.try_resolve_primary_card(card.name)
+            if prim is None and card.canonical_name:
+                prim = self.try_resolve_primary_card(card.canonical_name)
+            if prim is None:
+                prim = card
+            ckey: str = (prim.canonical_name or prim.name).strip().lower()
+            if ckey in seen_canonical:
+                continue
+            seen_canonical.add(ckey)
+            if skipped < offset:
+                skipped += 1
+                continue
+            out.append(prim)
+            if len(out) >= n_results:
+                break
+        return out
+
     def filter_cards_list(
         self,
         name: str = "",
@@ -638,7 +715,7 @@ class CardDB:
                 LOGGER.error("filter_cards_list: semantic_query set but RAG is not ready")
                 raise ValueError("Semantic search requires RAG; the embedding index is not ready yet.")
             coll: str = self._collection_name_for_search_type(search_type)
-            return self._filter_cards_list_semantic_ranked(
+            ranked: list[Card] = self._filter_cards_list_semantic_ranked(
                 sem,
                 coll,
                 name_lower=name_lower,
@@ -662,6 +739,39 @@ class CardDB:
                 n_results=n_results,
                 offset=offset,
             )
+            if len(ranked) == 0:
+                LOGGER.info(
+                    "filter_cards_list: semantic returned 0 matches; structural fallback "
+                    "semantic_query=%r search_type=%r type_line=%r format_legal=%r color_identity=%r",
+                    sem,
+                    search_type,
+                    type_line,
+                    format_legal,
+                    color_identity,
+                )
+                return self._filter_cards_list_structural_scan_deduped(
+                    offset=offset,
+                    n_results=n_results,
+                    name_lower=name_lower,
+                    oracle_lower_list=oracle_lower_list,
+                    type_lower=type_lower,
+                    colors_filter=colors_filter,
+                    color_identity_filter=color_identity_filter,
+                    color_identity_colorless=color_identity_colorless,
+                    colorless_only=colorless_only,
+                    mana_value=mana_value,
+                    mana_value_min=mana_value_min,
+                    mana_value_max=mana_value_max,
+                    price_usd_min=price_usd_min,
+                    price_usd_max=price_usd_max,
+                    power_val=power_val,
+                    toughness_val=toughness_val,
+                    keywords_lower=keywords_lower,
+                    subtype_lower=subtype_lower,
+                    supertype_lower=supertype_lower,
+                    format_lower=format_lower,
+                )
+            return ranked
 
         cards: list[Card] = self.get_card_data()
         results: list[Card] = []

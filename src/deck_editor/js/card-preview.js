@@ -27,8 +27,17 @@ export function initCardPreview() {
   document.addEventListener('mouseover', (e) => {
     const preview = document.getElementById('cardPreview');
     if (e.target === preview || (preview && preview.contains(e.target))) return;
+    const el = e.target instanceof Element ? e.target : e.target.parentElement;
+    if (el) {
+      const agentStrong = el.closest('.agent-msg-assistant strong');
+      if (agentStrong) {
+        const n = agentStrong.textContent.trim();
+        if (n) showCardPreview(n, e.clientX, e.clientY);
+        return;
+      }
+    }
     let name = null;
-    const img = e.target.closest('.card-img');
+    const img = el ? el.closest('.card-img') : null;
     if (img) {
       const stack = img.closest('.card-stack');
       if (stack) {
@@ -37,7 +46,7 @@ export function initCardPreview() {
       }
     }
     if (!name) {
-      const stack = e.target.closest('.card-stack[data-name]');
+      const stack = el ? el.closest('.card-stack[data-name]') : null;
       if (stack) {
         if (stack.dataset.currentFaceName) name = stack.dataset.currentFaceName;
         else name = stack.dataset.name;
@@ -48,7 +57,16 @@ export function initCardPreview() {
   document.addEventListener('mouseout', (e) => {
     const related = e.relatedTarget;
     const preview = document.getElementById('cardPreview');
-    const cardEl = e.target.closest('.card-stack[data-name]');
+    const outEl = e.target instanceof Element ? e.target : e.target.parentElement;
+    const agentStrong = outEl && outEl.closest('.agent-msg-assistant strong');
+    if (
+      agentStrong &&
+      (!related || !agentStrong.contains(related)) &&
+      (!preview || !preview.contains(related))
+    ) {
+      hideCardPreview();
+    }
+    const cardEl = outEl && outEl.closest('.card-stack[data-name]');
     if (cardEl && (!related || !cardEl.contains(related)) && (!preview || !preview.contains(related))) hideCardPreview();
     if (preview && (e.target === preview || preview.contains(e.target)) && (!related || !preview.contains(related))) hideCardPreview();
   });

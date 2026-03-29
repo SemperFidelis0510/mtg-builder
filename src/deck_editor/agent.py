@@ -354,241 +354,237 @@ GEMINI_TOOL: types.Tool = types.Tool(function_declarations=_TOOL_DECLARATIONS)
 _DEFAULT_CARD_FIELDS: str = "name,mana_cost,mana_value,type_line,text,colors,color_identity,power,toughness,keywords"
 
 
+def _execute_tool_call_body(name: str, args: dict[str, Any]) -> str:
+    if name == "plain_search_card":
+        return CardDB.inst().filter_cards(
+            name=args.get("name") or "",
+            oracle_text=args.get("oracle_text") or "",
+            type_line=args.get("type_line") or "",
+            colors=args.get("colors") or "",
+            color_identity=args.get("color_identity") or "",
+            mana_value=float(args["mana_value"]) if "mana_value" in args and args["mana_value"] is not None else -1.0,
+            mana_value_min=float(args["mana_value_min"]) if "mana_value_min" in args and args["mana_value_min"] is not None else -1.0,
+            mana_value_max=float(args["mana_value_max"]) if "mana_value_max" in args and args["mana_value_max"] is not None else -1.0,
+            price_usd_min=float(args["price_usd_min"]) if "price_usd_min" in args and args["price_usd_min"] is not None else -1.0,
+            price_usd_max=float(args["price_usd_max"]) if "price_usd_max" in args and args["price_usd_max"] is not None else -1.0,
+            power=args.get("power") or "",
+            toughness=args.get("toughness") or "",
+            keywords=args.get("keywords") or "",
+            subtype=args.get("subtype") or "",
+            supertype=args.get("supertype") or "",
+            format_legal=args.get("format_legal") or "",
+            n_results=int(args.get("n_results") or 20),
+            semantic_query=args.get("semantic_query") or "",
+            search_type=args.get("search_type") or "general",
+        )
+    if name == "get_card_info":
+        card_names: str = args["card_names"]
+        names: list[str] = parse_card_names_arg(card_names)
+        fields_str: str = args.get("fields") or _DEFAULT_CARD_FIELDS
+        card_fields: list[str] = [f.strip() for f in fields_str.split(",") if f.strip()]
+        return CardDB.inst().get_cards_info(names=names, card_fields=card_fields)
+    if name == "extract_card_mechanics":
+        return CardDB.inst().get_card_mechanics(
+            name=args["card_name"],
+            extract_type=args["extract_type"],
+        )
+    if name == "append_cards_to_deck":
+        card_names_str: str = args["card_names"]
+        names_list: list[str] = parse_card_names_arg(card_names_str)
+        if not names_list:
+            return "Error: card_names must contain at least one card name."
+        board: str = args["board"] if "board" in args and args["board"] else "main"
+        from src.deck_editor.app import (
+            _assign_commander_card,
+            _current_deck,
+            _get_board_list,
+            _notify_deck_updated,
+            _recompute_and_set_colors,
+            _VALID_BOARDS,
+        )
+        from src.obj.deck import _cards_from_names
+        if board not in _VALID_BOARDS:
+            return f"Error: invalid board {board!r}. Must be main, maybe, sideboard, or commander."
+        cards_to_append: list[Any] = []
+        not_found: list[str] = []
+        for card_name in names_list:
+            try:
+                cards_to_append.extend(_cards_from_names([card_name]))
+            except ValueError:
+                not_found.append(card_name)
+        if not cards_to_append:
+            return f"Error: card(s) not found: {', '.join(not_found)}"
+        if board == "commander":
+            if len(names_list) != 1 or len(cards_to_append) != 1:
+                return "Error: board 'commander' accepts exactly one card name per request."
+            _assign_commander_card(_current_deck, cards_to_append[0])
+        else:
+            target_list = _get_board_list(_current_deck, board)
+            for card in cards_to_append:
+                target_list.append(card)
+        _recompute_and_set_colors(_current_deck)
+        _notify_deck_updated()
+        if board == "main":
+            board_label = "main deck"
+        elif board == "commander":
+            board_label = "commander slot"
+        else:
+            board_label = f"{board} board"
+        if not_found:
+            added_names: list[str] = list(names_list)
+            for missing_name in not_found:
+                if missing_name in added_names:
+                    added_names.remove(missing_name)
+            return (
+                f"Added {len(added_names)} card(s) to the {board_label}: {', '.join(added_names)}. "
+                f"Could not find {len(not_found)} card(s): {', '.join(not_found)}."
+            )
+        return f"Added {len(names_list)} card(s) to the {board_label}: {', '.join(names_list)}."
+    if name == "remove_cards_from_deck":
+        card_names_str = args["card_names"]
+        names_list = parse_card_names_arg(card_names_str)
+        if not names_list:
+            return "Error: card_names must contain at least one card name."
+        board = args["board"] if "board" in args and args["board"] else "main"
+        count: int = int(args["count"]) if "count" in args and args["count"] is not None else 1
+        from src.lib.deck_board_ops import collect_matching_indices_asc, remove_cards_at_indices
+        from src.lib.deck_name_match import commander_string_matches_request
+        from src.deck_editor.app import (
+            _current_deck,
+            _get_board_list,
+            _notify_deck_updated,
+            _recompute_and_set_colors,
+            _VALID_BOARDS,
+        )
+        if board not in _VALID_BOARDS:
+            return f"Error: invalid board {board!r}. Must be main, maybe, sideboard, or commander."
+        if board == "commander":
+            if count != 1:
+                return "Error: board 'commander' only supports count=1."
+            if len(names_list) != 1:
+                return "Error: board 'commander' accepts exactly one card name per request."
+            cur_cmd: str = (_current_deck.commander or "").strip()
+            if not cur_cmd:
+                return "Error: no commander set."
+            if not commander_string_matches_request(cur_cmd, names_list[0]):
+                return f"Error: card not found in commander slot: {names_list[0]!r}"
+            _current_deck.commander = ""
+        else:
+            target_list = _get_board_list(_current_deck, board)
+            idx_asc, not_found = collect_matching_indices_asc(target_list, names_list, count)
+            if idx_asc is None:
+                assert not_found
+                return f"Error: card(s) not found in {board} board: {', '.join(not_found)}"
+            remove_cards_at_indices(target_list, idx_asc)
+        _recompute_and_set_colors(_current_deck)
+        _notify_deck_updated()
+        if board == "main":
+            board_label = "main deck"
+        elif board == "commander":
+            board_label = "commander slot"
+        else:
+            board_label = f"{board} board"
+        return f"Removed {len(names_list)} card(s) from the {board_label}: {', '.join(names_list)}."
+    if name == "move_cards_in_deck":
+        card_names_str = args["card_names"]
+        names_list = parse_card_names_arg(card_names_str)
+        if not names_list:
+            return "Error: card_names must contain at least one card name."
+        from_board: str = args["from_board"]
+        to_board: str = args["to_board"]
+        count = int(args["count"]) if "count" in args and args["count"] is not None else 1
+        if from_board == to_board:
+            return f"Error: from_board and to_board must differ (both are {from_board!r})"
+        from src.deck_editor.app import (
+            DeckEditorError,
+            _current_deck,
+            _move_cards_between_boards,
+            _notify_deck_updated,
+            _recompute_and_set_colors,
+        )
+        try:
+            _move_cards_between_boards(_current_deck, names_list, from_board, to_board, count)
+        except DeckEditorError as e:
+            return f"Error: {e.detail}"
+        _recompute_and_set_colors(_current_deck)
+        _notify_deck_updated()
+
+        def _board_label(b: str) -> str:
+            if b == "main":
+                return "main deck"
+            if b == "commander":
+                return "commander slot"
+            return f"{b} board"
+
+        from_label: str = _board_label(from_board)
+        to_label: str = _board_label(to_board)
+        return f"Moved {len(names_list)} card(s) from {from_label} to {to_label}: {', '.join(names_list)}."
+    if name == "search_triggers":
+        return CardDB.inst().search_triggers(
+            query=args["query"],
+            n_results=int(args.get("n_results") or 10),
+        )
+    if name == "search_effects":
+        return CardDB.inst().search_effects(
+            query=args["query"],
+            n_results=int(args.get("n_results") or 10),
+        )
+    if name == "search_online_decks":
+        from src.lib.deck_search import search_decks as _search_decks
+        return _search_decks(
+            query=args.get("query") or "",
+            format=args.get("format") or "",
+            colors=args.get("colors") or "",
+            commander=args.get("commander") or "",
+            source=args.get("source") or "",
+            n_results=int(args.get("n_results") or 10),
+        )
+    if name == "get_online_deck":
+        from src.lib.deck_search import get_deck as _get_deck
+        return _get_deck(url=args["url"])
+    if name == "import_online_deck":
+        from src.lib.deck_search import get_deck_as_card_list
+        from src.deck_editor.app import _current_deck, _notify_deck_updated, _compute_deck_card_colors
+        from src.obj.deck import Deck
+
+        mainboard_raw, sideboard_raw = get_deck_as_card_list(url=args["url"])
+        main_names: list[str] = []
+        for cname, qty in mainboard_raw.items():
+            for _ in range(qty):
+                main_names.append(cname)
+        sb_names: list[str] = []
+        for cname, qty in sideboard_raw.items():
+            for _ in range(qty):
+                sb_names.append(cname)
+
+        new_deck: Deck = Deck()
+        new_deck.add_cards(main_names)
+        if sb_names:
+            from src.obj.deck import _cards_from_names
+            new_deck.sideboard = _cards_from_names(sb_names)
+
+        _current_deck.cards = new_deck.cards
+        _current_deck.sideboard = new_deck.sideboard
+        card_colors = _compute_deck_card_colors(_current_deck)
+        _current_deck.colors = list(card_colors)
+        _notify_deck_updated()
+        return f"Imported deck with {len(main_names)} mainboard and {len(sb_names)} sideboard cards from {args['url']}."
+    LOGGER.error("Unknown agent tool: %s", name)
+    raise ValueError(f"Unknown tool: {name}")
+
+
 def execute_tool_call(name: str, args: dict[str, Any]) -> str:
     """Execute a tool call by name, return the result as a string."""
     LOGGER.info("Agent tool call: %s args=%s", name, args)
     try:
-        if name == "plain_search_card":
-            return CardDB.inst().filter_cards(
-                name=args.get("name") or "",
-                oracle_text=args.get("oracle_text") or "",
-                type_line=args.get("type_line") or "",
-                colors=args.get("colors") or "",
-                color_identity=args.get("color_identity") or "",
-                mana_value=float(args["mana_value"]) if "mana_value" in args and args["mana_value"] is not None else -1.0,
-                mana_value_min=float(args["mana_value_min"]) if "mana_value_min" in args and args["mana_value_min"] is not None else -1.0,
-                mana_value_max=float(args["mana_value_max"]) if "mana_value_max" in args and args["mana_value_max"] is not None else -1.0,
-                price_usd_min=float(args["price_usd_min"]) if "price_usd_min" in args and args["price_usd_min"] is not None else -1.0,
-                price_usd_max=float(args["price_usd_max"]) if "price_usd_max" in args and args["price_usd_max"] is not None else -1.0,
-                power=args.get("power") or "",
-                toughness=args.get("toughness") or "",
-                keywords=args.get("keywords") or "",
-                subtype=args.get("subtype") or "",
-                supertype=args.get("supertype") or "",
-                format_legal=args.get("format_legal") or "",
-                n_results=int(args.get("n_results") or 20),
-                semantic_query=args.get("semantic_query") or "",
-                search_type=args.get("search_type") or "general",
-            )
-        if name == "get_card_info":
-            card_names: str = args["card_names"]
-            names: list[str] = parse_card_names_arg(card_names)
-            fields_str: str = args.get("fields") or _DEFAULT_CARD_FIELDS
-            card_fields: list[str] = [f.strip() for f in fields_str.split(",") if f.strip()]
-            return CardDB.inst().get_cards_info(names=names, card_fields=card_fields)
-        if name == "extract_card_mechanics":
-            return CardDB.inst().get_card_mechanics(
-                name=args["card_name"],
-                extract_type=args["extract_type"],
-            )
-        if name == "append_cards_to_deck":
-            card_names_str: str = args["card_names"]
-            names_list: list[str] = parse_card_names_arg(card_names_str)
-            if not names_list:
-                return "Error: card_names must contain at least one card name."
-            board: str = args["board"] if "board" in args and args["board"] else "main"
-            from src.deck_editor.app import (
-                _assign_commander_card,
-                _current_deck,
-                _get_board_list,
-                _notify_deck_updated,
-                _recompute_and_set_colors,
-                _VALID_BOARDS,
-            )
-            from src.obj.deck import _cards_from_names
-            if board not in _VALID_BOARDS:
-                return f"Error: invalid board {board!r}. Must be main, maybe, sideboard, or commander."
-            cards_to_append: list[Any] = []
-            not_found: list[str] = []
-            for card_name in names_list:
-                try:
-                    cards_to_append.extend(_cards_from_names([card_name]))
-                except ValueError:
-                    not_found.append(card_name)
-            if not cards_to_append:
-                return f"Error: card(s) not found: {', '.join(not_found)}"
-            if board == "commander":
-                if len(names_list) != 1 or len(cards_to_append) != 1:
-                    return "Error: board 'commander' accepts exactly one card name per request."
-                _assign_commander_card(_current_deck, cards_to_append[0])
-            else:
-                target_list = _get_board_list(_current_deck, board)
-                for card in cards_to_append:
-                    target_list.append(card)
-            _recompute_and_set_colors(_current_deck)
-            _notify_deck_updated()
-            if board == "main":
-                board_label = "main deck"
-            elif board == "commander":
-                board_label = "commander slot"
-            else:
-                board_label = f"{board} board"
-            if not_found:
-                added_names: list[str] = list(names_list)
-                for missing_name in not_found:
-                    if missing_name in added_names:
-                        added_names.remove(missing_name)
-                return (
-                    f"Added {len(added_names)} card(s) to the {board_label}: {', '.join(added_names)}. "
-                    f"Could not find {len(not_found)} card(s): {', '.join(not_found)}."
-                )
-            return f"Added {len(names_list)} card(s) to the {board_label}: {', '.join(names_list)}."
-        if name == "remove_cards_from_deck":
-            card_names_str = args["card_names"]
-            names_list = parse_card_names_arg(card_names_str)
-            if not names_list:
-                return "Error: card_names must contain at least one card name."
-            board = args["board"] if "board" in args and args["board"] else "main"
-            count: int = int(args["count"]) if "count" in args and args["count"] is not None else 1
-            from src.deck_editor.app import (
-                _commander_name_lower,
-                _current_deck,
-                _get_board_list,
-                _notify_deck_updated,
-                _recompute_and_set_colors,
-                _VALID_BOARDS,
-            )
-            if board not in _VALID_BOARDS:
-                return f"Error: invalid board {board!r}. Must be main, maybe, sideboard, or commander."
-            if board == "commander":
-                if count != 1:
-                    return "Error: board 'commander' only supports count=1."
-                cur_lower: str | None = _commander_name_lower(_current_deck)
-                if not cur_lower:
-                    return "Error: no commander set."
-                if len(names_list) != 1:
-                    return "Error: board 'commander' accepts exactly one card name per request."
-                if names_list[0].strip().lower() != cur_lower:
-                    return f"Error: card not found in commander slot: {names_list[0]!r}"
-                _current_deck.commander = ""
-            else:
-                target_list = _get_board_list(_current_deck, board)
-                not_found: list[str] = []
-                for card_name in names_list:
-                    name_lower: str = card_name.strip().lower()
-                    removed: int = 0
-                    for _ in range(count):
-                        idx: int | None = None
-                        for i, c in enumerate(target_list):
-                            if c.name.lower() == name_lower:
-                                idx = i
-                                break
-                        if idx is None:
-                            break
-                        target_list.pop(idx)
-                        removed += 1
-                    if removed == 0:
-                        not_found.append(card_name)
-                if not_found:
-                    return f"Error: card(s) not found in {board} board: {', '.join(not_found)}"
-            _recompute_and_set_colors(_current_deck)
-            _notify_deck_updated()
-            if board == "main":
-                board_label = "main deck"
-            elif board == "commander":
-                board_label = "commander slot"
-            else:
-                board_label = f"{board} board"
-            return f"Removed {len(names_list)} card(s) from the {board_label}: {', '.join(names_list)}."
-        if name == "move_cards_in_deck":
-            card_names_str = args["card_names"]
-            names_list = parse_card_names_arg(card_names_str)
-            if not names_list:
-                return "Error: card_names must contain at least one card name."
-            from_board: str = args["from_board"]
-            to_board: str = args["to_board"]
-            count = int(args["count"]) if "count" in args and args["count"] is not None else 1
-            if from_board == to_board:
-                return f"Error: from_board and to_board must differ (both are {from_board!r})"
-            from src.deck_editor.app import (
-                DeckEditorError,
-                _current_deck,
-                _move_cards_between_boards,
-                _notify_deck_updated,
-                _recompute_and_set_colors,
-            )
-            try:
-                _move_cards_between_boards(_current_deck, names_list, from_board, to_board, count)
-            except DeckEditorError as e:
-                return f"Error: {e.detail}"
-            _recompute_and_set_colors(_current_deck)
-            _notify_deck_updated()
-
-            def _board_label(b: str) -> str:
-                if b == "main":
-                    return "main deck"
-                if b == "commander":
-                    return "commander slot"
-                return f"{b} board"
-
-            from_label: str = _board_label(from_board)
-            to_label: str = _board_label(to_board)
-            return f"Moved {len(names_list)} card(s) from {from_label} to {to_label}: {', '.join(names_list)}."
-        if name == "search_triggers":
-            return CardDB.inst().search_triggers(
-                query=args["query"],
-                n_results=int(args.get("n_results") or 10),
-            )
-        if name == "search_effects":
-            return CardDB.inst().search_effects(
-                query=args["query"],
-                n_results=int(args.get("n_results") or 10),
-            )
-        if name == "search_online_decks":
-            from src.lib.deck_search import search_decks as _search_decks
-            return _search_decks(
-                query=args.get("query") or "",
-                format=args.get("format") or "",
-                colors=args.get("colors") or "",
-                commander=args.get("commander") or "",
-                source=args.get("source") or "",
-                n_results=int(args.get("n_results") or 10),
-            )
-        if name == "get_online_deck":
-            from src.lib.deck_search import get_deck as _get_deck
-            return _get_deck(url=args["url"])
-        if name == "import_online_deck":
-            from src.lib.deck_search import get_deck_as_card_list
-            from src.deck_editor.app import _current_deck, _notify_deck_updated, _compute_deck_card_colors
-            from src.obj.deck import Deck
-
-            mainboard_raw, sideboard_raw = get_deck_as_card_list(url=args["url"])
-            main_names: list[str] = []
-            for cname, qty in mainboard_raw.items():
-                for _ in range(qty):
-                    main_names.append(cname)
-            sb_names: list[str] = []
-            for cname, qty in sideboard_raw.items():
-                for _ in range(qty):
-                    sb_names.append(cname)
-
-            new_deck: Deck = Deck()
-            new_deck.add_cards(main_names)
-            if sb_names:
-                from src.obj.deck import _cards_from_names
-                new_deck.sideboard = _cards_from_names(sb_names)
-
-            _current_deck.cards = new_deck.cards
-            _current_deck.sideboard = new_deck.sideboard
-            card_colors = _compute_deck_card_colors(_current_deck)
-            _current_deck.colors = list(card_colors)
-            _notify_deck_updated()
-            return f"Imported deck with {len(main_names)} mainboard and {len(sb_names)} sideboard cards from {args['url']}."
-        LOGGER.error("Unknown agent tool: %s", name)
-        raise ValueError(f"Unknown tool: {name}")
+        result_str: str = _execute_tool_call_body(name, args)
     except Exception as e:
         LOGGER.error("Agent tool execution error for %s: %s", name, e)
-        return f"Error executing {name}: {e}"
+        result_str = f"Error executing {name}: {e}"
+    if result_str.startswith("Error"):
+        log_snip: str = result_str if len(result_str) <= 500 else result_str[:500] + "..."
+        LOGGER.warning("Agent tool result: %s result=%s", name, log_snip)
+    return result_str
 
 
 # ---------------------------------------------------------------------------

@@ -14,6 +14,8 @@ from fastapi.staticfiles import StaticFiles
 
 from src.lib.cardDB import CardDB
 from src.lib.config import DECK_EDITOR_SAVE_DIR
+from src.lib.deck_board_ops import collect_matching_indices_asc, move_cards_at_indices, remove_cards_at_indices
+from src.lib.deck_name_match import commander_string_matches_request, requested_name_matches_deck_card
 from src.lib.prices import prices_age_hours, update_all_prices
 from src.obj.card import Card
 from src.obj.deck import Deck, _cards_from_names, _normalize_cards_arg, _resolve_name_to_type_key
@@ -197,11 +199,10 @@ def _move_cards_between_boards(
         if len(names_to_move) != 1 or count != 1:
             raise DeckEditorError(400, "Moving to commander requires exactly one card name and count=1")
         card_name: str = names_to_move[0]
-        name_lower: str = card_name.strip().lower()
         source_list: list[Card] = _get_board_list(deck, from_board)
         idx_move: int | None = None
         for i, c in enumerate(source_list):
-            if c.name.lower() == name_lower:
+            if requested_name_matches_deck_card(c, card_name):
                 idx_move = i
                 break
         if idx_move is None:
@@ -211,14 +212,13 @@ def _move_cards_between_boards(
     elif from_board == "commander":
         if len(names_to_move) != 1 or count != 1:
             raise DeckEditorError(400, "Moving from commander requires exactly one card name and count=1")
-        cur_lower: str | None = _commander_name_lower(deck)
-        if not cur_lower:
+        cur: str = (deck.commander or "").strip()
+        if not cur:
             raise DeckEditorError(404, "No commander set")
-        req_lower: str = names_to_move[0].strip().lower()
-        if req_lower != cur_lower:
+        if not commander_string_matches_request(cur, names_to_move[0]):
             raise DeckEditorError(404, f"Card(s) not found in commander slot: {names_to_move[0]!r}")
         try:
-            cmd_cards: list[Card] = _cards_from_names([(deck.commander or "").strip()])
+            cmd_cards: list[Card] = _cards_from_names([cur])
         except ValueError:
             raise DeckEditorError(404, f"Commander not found in card DB: {deck.commander!r}") from None
         cmd_card: Card = cmd_cards[0]
@@ -228,24 +228,11 @@ def _move_cards_between_boards(
     else:
         source_list = _get_board_list(deck, from_board)
         dest_list = _get_board_list(deck, to_board)
-        not_found: list[str] = []
-        for name in names_to_move:
-            n_lower: str = name.strip().lower()
-            moved: int = 0
-            for _ in range(count):
-                idx: int | None = None
-                for i, card in enumerate(source_list):
-                    if card.name.lower() == n_lower:
-                        idx = i
-                        break
-                if idx is None:
-                    break
-                dest_list.append(source_list.pop(idx))
-                moved += 1
-            if moved == 0:
-                not_found.append(name)
-        if not_found:
+        idx_asc, not_found = collect_matching_indices_asc(source_list, names_to_move, count)
+        if idx_asc is None:
+            assert not_found
             raise DeckEditorError(404, f"Card(s) not found in {from_board} board: {', '.join(not_found)}")
+        move_cards_at_indices(source_list, dest_list, idx_asc)
 
 
 def _recompute_and_set_colors(deck: Deck) -> None:
@@ -784,12 +771,12 @@ async def remove_card(body: dict) -> dict:
     if board == "commander":
         if count != 1:
             raise HTTPException(status_code=400, detail="board 'commander' only supports count=1")
-        cur_lower: str | None = _commander_name_lower(_current_deck)
-        if not cur_lower:
-            raise HTTPException(status_code=404, detail="No commander set")
         if len(names_to_remove) != 1:
             raise HTTPException(status_code=400, detail="board 'commander' accepts exactly one card name per request")
-        if names_to_remove[0].strip().lower() != cur_lower:
+        cur_cmd: str = (_current_deck.commander or "").strip()
+        if not cur_cmd:
+            raise HTTPException(status_code=404, detail="No commander set")
+        if not commander_string_matches_request(cur_cmd, names_to_remove[0]):
             raise HTTPException(
                 status_code=404,
                 detail=f"Card not found in commander slot: {names_to_remove[0]!r}",
@@ -797,24 +784,11 @@ async def remove_card(body: dict) -> dict:
         _current_deck.commander = ""
     else:
         target_list: list[Card] = _get_board_list(_current_deck, board)
-        not_found: list[str] = []
-        for name in names_to_remove:
-            name_lower: str = name.strip().lower()
-            removed: int = 0
-            for _ in range(count):
-                idx: int | None = None
-                for i, card in enumerate(target_list):
-                    if card.name.lower() == name_lower:
-                        idx = i
-                        break
-                if idx is None:
-                    break
-                target_list.pop(idx)
-                removed += 1
-            if removed == 0:
-                not_found.append(name)
-        if not_found:
+        idx_asc, not_found = collect_matching_indices_asc(target_list, names_to_remove, count)
+        if idx_asc is None:
+            assert not_found
             raise HTTPException(status_code=404, detail=f"Card(s) not found in {board} board: {', '.join(not_found)}")
+        remove_cards_at_indices(target_list, idx_asc)
     _recompute_and_set_colors(_current_deck)
     _notify_deck_updated()
     return _deck_to_response(_current_deck)
