@@ -8,7 +8,7 @@ import {
   updateTotalsPanel,
 } from './deck.js';
 import { initSortable } from './sortable.js';
-import { populateSettings } from './settings.js';
+import { isCommanderEnabledFormat, populateSettings } from './settings.js';
 
 let statsPieChartInstance = null;
 let statsMvChartInstance = null;
@@ -78,6 +78,7 @@ function renderStatsCharts(stats) {
 
 export function renderDeck(data) {
   const container = document.getElementById('deckSections');
+  const commanderHost = document.getElementById('commanderSectionHost');
   const statsContainer = document.getElementById('statisticsContainer');
   if (statsPieChartInstance) {
     statsPieChartInstance.destroy();
@@ -87,11 +88,12 @@ export function renderDeck(data) {
     statsMvChartInstance.destroy();
     statsMvChartInstance = null;
   }
-  const existingSections = container.querySelectorAll('.section[data-type]');
+  const existingSections = document.querySelectorAll('#deckSections .section[data-type], #commanderSectionHost .section[data-type]');
   const expandedTypes = new Set(
     [...existingSections].filter((s) => !s.classList.contains('collapsed')).map((s) => s.dataset.type)
   );
   container.innerHTML = '';
+  if (commanderHost) commanderHost.innerHTML = '';
   if (statsContainer) statsContainer.innerHTML = '';
   const deck = data.deck || data;
   const stats = data.stats || {};
@@ -99,6 +101,26 @@ export function renderDeck(data) {
   const sideboardByType = deck.sideboard_by_type || {};
   window._deckPrices = deck.prices != null && typeof deck.prices === 'object' ? deck.prices : {};
   window._lastStats = stats;
+
+  const formatValue = deck.format != null ? String(deck.format) : '';
+  const commanderEnabled = isCommanderEnabledFormat(formatValue);
+  if (commanderEnabled) {
+    const commanderName = deck.commander != null ? String(deck.commander).trim() : '';
+    const commanderCount = commanderName ? 1 : 0;
+    const section = document.createElement('div');
+    section.className = 'section section-commander';
+    section.dataset.type = 'commander';
+    section.id = 'section-commander';
+    section.innerHTML =
+      '<div class="section-header"><span class="section-header-label">Commander (' + commanderCount + ')</span></div>' +
+      '<div class="section-body"><ul class="card-list" id="list-commander"></ul></div>';
+    const commanderList = section.querySelector('#list-commander');
+    if (commanderName) {
+      commanderList.appendChild(makeCardStackEl(commanderName, 1));
+    }
+    if (commanderHost) commanderHost.appendChild(section);
+    else container.appendChild(section);
+  }
 
   TYPE_KEYS.forEach((key) => {
     const cards = Array.isArray(deck[key]) ? deck[key] : [];

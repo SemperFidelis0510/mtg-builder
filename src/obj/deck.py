@@ -146,6 +146,7 @@ class Deck:
         colors: Deck colors (e.g. list of "W", "U", "B", "R", "G").
         description: Optional deck description.
         format: Deck format (e.g. "commander", "standard", "modern").
+        commander: Commander card name (single card name string, empty when not set).
         colorless_only: If True, deck is colorless-only (search filters for colorless cards).
         cards: Full list of Card objects in the main deck (duplicates for multiple copies).
         maybe: Maybe board: list of Card (same form as cards); not counted in type buckets.
@@ -174,6 +175,7 @@ class Deck:
         colors: list[str] | None = None,
         description: str = "",
         format: str = "",
+        commander: str = "",
         colorless_only: bool = False,
         cards: list["Card"] | list[dict] | None = None,
         maybe: list["Card"] | list[dict] | None = None,
@@ -185,6 +187,9 @@ class Deck:
         self.colors: list[str] = list(colors) if colors is not None else []
         self.description: str = description
         self.format: str = format
+        if not isinstance(commander, str):
+            raise TypeError(f"deck commander must be str, got {type(commander).__name__}")
+        self.commander: str = commander
         self.colorless_only: bool = colorless_only
         self.cards: list["Card"] = _normalize_cards_arg(cards, CardCls)
         self.maybe: list["Card"] = _normalize_cards_arg(maybe, CardCls)
@@ -348,6 +353,7 @@ class Deck:
             "colors": list(self.colors),
             "description": self.description,
             "format": self.format,
+            "commander": self.commander,
             "colorless_only": self.colorless_only,
             "cards": [c.name for c in self.cards],
             "maybe": [c.name for c in self.maybe],
@@ -368,6 +374,12 @@ class Deck:
     @classmethod
     def from_dict(cls, data: dict) -> "Deck":
         """Construct a Deck from a dict (inverse of to_dict). Accepts name lists, full card dicts, or legacy type-list keys."""
+        commander_name: str = ""
+        if "commander" in data:
+            if not isinstance(data["commander"], str):
+                raise TypeError(f"deck commander must be str, got {type(data['commander']).__name__}")
+            commander_name = data["commander"]
+
         cards_arg: list["Card"] = []
         if "cards" in data and isinstance(data["cards"], list):
             cards_arg = cls._cards_list_from_data(data["cards"])
@@ -402,6 +414,7 @@ class Deck:
             colors=data["colors"] if "colors" in data else None,
             description=data["description"] if "description" in data else "",
             format=data["format"] if "format" in data else "",
+            commander=commander_name,
             colorless_only=data["colorless_only"] if "colorless_only" in data else False,
             cards=cards_arg,
             maybe=maybe_arg,

@@ -15,7 +15,9 @@ export function updateSectionHeaderTotal(listEl) {
     total += parseInt(el.getAttribute('data-count') || '1', 10);
   });
   if (section && typeKey) {
-    const label = TYPE_LABELS[typeKey] || SIDE_LABELS[typeKey] || typeKey;
+    const label = typeKey === 'commander'
+      ? 'Commander'
+      : (TYPE_LABELS[typeKey] || SIDE_LABELS[typeKey] || typeKey);
     const header = section.querySelector('.section-header');
     if (header) {
       const labelSpan = header.querySelector('.section-header-label');
@@ -229,6 +231,7 @@ export function syncDeckToServer() {
       colors: state.colors,
       description: state.description,
       format: state.format,
+      commander: state.commander,
       colorless_only: state.colorless_only,
       maybe: state.maybe,
       sideboard: state.sideboard,
@@ -260,11 +263,21 @@ export function collectState() {
     return arr;
   }
   const meta = getSettings();
+  const commanderList = document.getElementById('list-commander');
+  let commanderName = '';
+  if (commanderList) {
+    const commanderEl = commanderList.querySelector('.card-stack[data-name]');
+    if (commanderEl) {
+      const raw = commanderEl.getAttribute('data-name');
+      commanderName = raw != null ? String(raw).trim() : '';
+    }
+  }
   const deck = {
     name: meta.name,
     colors: meta.colors,
     description: meta.description,
     format: meta.format,
+    commander: commanderName,
     colorless_only: meta.colorlessOnly,
   };
   TYPE_KEYS.forEach((key) => {
@@ -278,7 +291,7 @@ export function collectState() {
 export function getDeckMeta() {
   return fetch('/api/deck/meta')
     .then((r) => {
-      if (!r.ok) return { name: '', colors: [], description: '', format: '', colorless_only: false };
+      if (!r.ok) return { name: '', colors: [], description: '', format: '', commander: '', colorless_only: false };
       return r.json();
     })
     .then((data) => ({
@@ -286,7 +299,8 @@ export function getDeckMeta() {
       colors: Array.isArray(data.colors) ? data.colors : [],
       description: data.description != null ? data.description : '',
       format: data.format != null ? data.format : '',
+      commander: data.commander != null ? data.commander : '',
       colorless_only: data.colorless_only === true,
     }))
-    .catch(() => ({ name: '', colors: [], description: '', format: '', colorless_only: false }));
+    .catch(() => ({ name: '', colors: [], description: '', format: '', commander: '', colorless_only: false }));
 }

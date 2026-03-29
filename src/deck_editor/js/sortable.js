@@ -29,7 +29,17 @@ function allowPutOnlyFromSideZones(to, from) {
   if (!from) return false;
   const fromEl = from.el || from;
   const fromId = (fromEl && fromEl.id) || '';
-  return fromId === 'list-maybe' || fromId === 'list-sideboard';
+  return fromId === 'list-maybe' || fromId === 'list-sideboard' || fromId === 'list-commander';
+}
+
+function appendCardToList(listEl, name, count) {
+  if (!listEl || !name) return;
+  const n = Math.max(1, parseInt(count, 10) || 1);
+  if (listEl.id === 'list-maybe' || listEl.id === 'list-sideboard') {
+    listEl.appendChild(makeMaybeBoardCardEl(name, n));
+    return;
+  }
+  listEl.appendChild(makeCardStackEl(name, n));
 }
 
 function handleDeckDropTargetAdd(evt) {
@@ -127,6 +137,40 @@ export function initSortable() {
       );
     }
   });
+
+  const commanderListEl = document.getElementById('list-commander');
+  if (commanderListEl) {
+    sortables.push(
+      Sortable.create(commanderListEl, {
+        group: { name: 'cards', pull: true, put: true },
+        handle: '.card-img, .maybe-board-item',
+        animation: 150,
+        ghostClass: 'sortable-ghost',
+        dragClass: 'sortable-drag',
+        onAdd(evt) {
+          const list = evt.to;
+          const sourceList = evt.from;
+          const item = evt.item;
+          const stack = item.querySelector('.card-stack');
+          if (!list || !stack) return;
+          const name = stack.getAttribute('data-name');
+          const count = parseInt(stack.getAttribute('data-count') || '1', 10);
+          if (count > 1 && sourceList) {
+            appendCardToList(sourceList, name, count - 1);
+            updateSectionHeaderTotal(sourceList);
+          }
+          list.innerHTML = '';
+          list.appendChild(makeCardStackEl(name, 1));
+          updateSectionHeaderTotal(list);
+          const section = list.closest('.section');
+          if (section) section.classList.remove('collapsed');
+        },
+        onEnd() {
+          removeDeckSectionsZoneHighlight();
+        },
+      })
+    );
+  }
 
   const sideZoneIds = ['list-maybe', 'list-sideboard'];
   sideZoneIds.forEach((zoneId) => {

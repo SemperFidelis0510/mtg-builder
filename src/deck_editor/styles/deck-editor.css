@@ -532,6 +532,10 @@ body {
   margin-top: 0.75rem;
   padding: 0 0.75rem;
 }
+.deck-sections-zone #commanderSectionHost {
+  margin-top: 0.75rem;
+  padding: 0 0.75rem;
+}
 .deck-sections-zone > .section {
   margin-top: 1rem;
   margin-left: 0.75rem;

@@ -24,7 +24,7 @@ initImportModal();
 initAgentChat();
 initAgentRules();
 
-document.getElementById('deckSections').addEventListener('click', (e) => {
+document.getElementById('deckSectionsZone').addEventListener('click', (e) => {
   const header = e.target.closest('.section-header');
   if (header) {
     const section = header.closest('.section');
@@ -50,15 +50,15 @@ document.addEventListener('click', (e) => {
   }
 });
 document.getElementById('collapseAllBtn').addEventListener('click', () => {
-  document.querySelectorAll('#deckSections .section, #section-maybe, #section-sideboard').forEach((s) => s.classList.add('collapsed'));
+  document.querySelectorAll('#commanderSectionHost .section, #deckSections .section, #section-maybe, #section-sideboard').forEach((s) => s.classList.add('collapsed'));
 });
 document.getElementById('expandAllBtn').addEventListener('click', () => {
-  document.querySelectorAll('#deckSections .section, #section-maybe, #section-sideboard').forEach((s) => s.classList.remove('collapsed'));
+  document.querySelectorAll('#commanderSectionHost .section, #deckSections .section, #section-maybe, #section-sideboard').forEach((s) => s.classList.remove('collapsed'));
 });
 
 document.getElementById('clearAllBtn').addEventListener('click', () => {
   if (!confirm('Clear all cards from the deck (including sideboard and maybe board)?')) return;
-  populateSettings({ name: '', description: '', colors: [], format: '', colorless_only: false });
+  populateSettings({ name: '', description: '', colors: [], format: '', commander: '', colorless_only: false });
   TYPE_KEYS.forEach((key) => {
     const listEl = document.getElementById('list-' + key);
     if (listEl) {
@@ -73,12 +73,18 @@ document.getElementById('clearAllBtn').addEventListener('click', () => {
       updateSectionHeaderTotal(listEl);
     }
   });
+  const commanderListEl = document.getElementById('list-commander');
+  if (commanderListEl) {
+    commanderListEl.innerHTML = '';
+    updateSectionHeaderTotal(commanderListEl);
+  }
   const state = collectState();
   const body = {
     name: state.name,
     colors: state.colors,
     description: state.description,
     format: state.format,
+    commander: state.commander,
     colorless_only: state.colorless_only,
     maybe: state.maybe,
     sideboard: state.sideboard,
@@ -101,6 +107,7 @@ document.getElementById('saveBtn').addEventListener('click', () => {
     colors: state.colors,
     description: state.description,
     format: state.format,
+    commander: state.commander,
     colorless_only: state.colorless_only,
     maybe: state.maybe,
     sideboard: state.sideboard,

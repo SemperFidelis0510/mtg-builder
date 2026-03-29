@@ -25,6 +25,16 @@ from src.deck_editor.agent_routes import agent_router  # noqa: E402  (after app 
 
 app.include_router(agent_router)
 
+
+@app.middleware("http")
+async def add_no_cache_for_static_assets(request: Request, call_next):
+    """Disable browser caching for editor JS/CSS so frontend changes are always picked up."""
+    response = await call_next(request)
+    if request.url.path.startswith("/js/") or request.url.path.startswith("/styles/"):
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+    return response
+
 # ---------------------------------------------------------------------------
 # In-memory state (always a deck; starts empty; POST replaces it)
 # ---------------------------------------------------------------------------
@@ -338,12 +348,16 @@ def _resolve_type_key(card_name: str) -> tuple[str, str]:
 @app.get("/")
 async def serve_editor() -> FileResponse:
     """Serve the deck editor HTML page."""
+    LOGGER.info("serve_editor: GET /")
     static_dir: Path = Path(__file__).resolve().parent / "static"
     main_path: Path = static_dir / "main.html"
     if not main_path.is_file():
         LOGGER.error( "Deck editor static file not found: %s", main_path)
         raise FileNotFoundError(f"Static file not found: {main_path}")
-    return FileResponse(main_path)
+    return FileResponse(
+        main_path,
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"},
+    )
 
 
 @app.get("/search")
@@ -560,6 +574,7 @@ def _names_from_cards_array(cards: list) -> list[str]:
 async def load_deck(body: dict) -> dict:
     """Load a deck from JSON. Replaces current deck."""
     global _current_deck
+    LOGGER.info("load_deck: POST /api/deck")
     if "deck" in body:
         body = body["deck"]
     try:
@@ -567,6 +582,13 @@ async def load_deck(body: dict) -> dict:
     except (KeyError, TypeError) as e:
         LOGGER.error( "load_deck: invalid deck payload: %s", e)
         raise HTTPException(status_code=400, detail=f"Invalid deck payload: {e}") from e
+    LOGGER.info(
+        "load_deck: deck loaded name=%r format=%r commander=%r cards=%d",
+        _current_deck.name,
+        _current_deck.format,
+        _current_deck.commander,
+        len(_current_deck.cards),
+    )
     _notify_deck_updated()
     return _deck_to_response(_current_deck)
 
@@ -743,12 +765,13 @@ async def get_deck() -> dict:
 
 @app.get("/api/deck/meta")
 async def get_deck_meta() -> dict:
-    """Return only deck metadata (name, colors, description, format, colorless_only) without card lists."""
+    """Return only deck metadata (name, colors, description, format, commander, colorless_only) without card lists."""
     return {
         "name": _current_deck.name,
         "colors": list(_current_deck.colors),
         "description": _current_deck.description,
         "format": _current_deck.format,
+        "commander": _current_deck.commander,
         "colorless_only": _current_deck.colorless_only,
     }
 
@@ -885,6 +908,7 @@ async def import_deck(request: Request) -> dict:
 async def update_deck(body: dict) -> dict:
     """Update deck from client state."""
     global _current_deck
+    LOGGER.info("update_deck: PUT /api/deck")
 
     name: str = _current_deck.name
     if "name" in body and isinstance(body["name"], str):
@@ -898,6 +922,11 @@ async def update_deck(body: dict) -> dict:
     deck_format: str = _current_deck.format
     if "format" in body and isinstance(body["format"], str):
         deck_format = body["format"]
+    commander_name: str = _current_deck.commander
+    if "commander" in body:
+        if not isinstance(body["commander"], str):
+            raise HTTPException(status_code=400, detail="'commander' must be a string")
+        commander_name = body["commander"]
     colorless_only: bool = _current_deck.colorless_only
     if "colorless_only" in body and isinstance(body["colorless_only"], bool):
         colorless_only = body["colorless_only"]
@@ -929,10 +958,20 @@ async def update_deck(body: dict) -> dict:
         colors=colors,
         description=description,
         format=deck_format,
+        commander=commander_name,
         colorless_only=colorless_only,
         cards=cards_list,
         maybe=maybe_cards,
         sideboard=sideboard_cards,
+    )
+    LOGGER.info(
+        "update_deck: applied name=%r format=%r commander=%r main=%d maybe=%d sideboard=%d",
+        _current_deck.name,
+        _current_deck.format,
+        _current_deck.commander,
+        len(_current_deck.cards),
+        len(_current_deck.maybe),
+        len(_current_deck.sideboard),
     )
     _notify_deck_updated()
     return _deck_to_response(_current_deck)
