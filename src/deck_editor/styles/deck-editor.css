@@ -1304,21 +1304,90 @@ body.agent-panel-open {
 }
 .agent-tool-call-label {
   flex: 1;
-  color: #a0a0a0;
+  color: #c8c8c8;
+  font-family: inherit;
+  font-size: 0.8rem;
+  line-height: 1.35;
 }
-.agent-tool-call-body {
-  display: none;
-  padding: 0.4rem 0.6rem;
+.agent-tool-call-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.5rem;
+  padding: 0.35rem 0.6rem 0.25rem;
   background: var(--panel);
-  color: #a0a0a0;
-  white-space: pre-wrap;
-  max-height: 200px;
-  overflow-y: auto;
-  font-family: monospace;
-  font-size: 0.78rem;
+  border-top: 1px solid var(--border);
 }
-.agent-tool-call.expanded .agent-tool-call-body {
+.agent-tool-call-wait {
+  font-size: 0.75rem;
+  color: #888;
+}
+.agent-tool-call-approval-error {
+  flex: 1 1 100%;
+  font-size: 0.75rem;
+  color: #e53935;
+}
+.agent-tool-call-btn {
+  padding: 0.25rem 0.65rem;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.06);
+  color: #e0e0e0;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+.agent-tool-call-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+}
+.agent-tool-call-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.agent-tool-call-btn-approve {
+  border-color: #2e7d32;
+  color: #a5d6a7;
+}
+.agent-tool-call-btn-cancel {
+  border-color: #c62828;
+  color: #ef9a9a;
+}
+.agent-tool-call-outcome {
+  padding: 0.35rem 0.6rem 0.5rem;
+  background: var(--panel);
+  color: #a8a8a8;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  font-family: inherit;
+}
+.agent-tool-call-details-wrap {
+  display: none;
+  padding: 0.35rem 0.6rem 0.55rem;
+  background: rgba(0, 0, 0, 0.2);
+  border-top: 1px solid var(--border);
+  max-height: 180px;
+  overflow-y: auto;
+  font-size: 0.75rem;
+}
+.agent-tool-call.expanded .agent-tool-call-details-wrap {
   display: block;
+}
+.agent-tool-call-dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.2rem 0.75rem;
+  font-family: ui-monospace, monospace;
+  color: #9a9a9a;
+}
+.agent-tool-call-dl dt {
+  margin: 0;
+  font-weight: 600;
+  color: #888;
+}
+.agent-tool-call-dl dd {
+  margin: 0;
+  word-break: break-word;
 }
 
 /* Typing indicator */

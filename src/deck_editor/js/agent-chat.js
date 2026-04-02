@@ -126,7 +126,7 @@ async function loadConversation(convId) {
       } else if (msg.role === 'assistant') {
         if (msg.tool_calls) {
           for (const tc of msg.tool_calls) {
-            _appendToolCall(tc.name, tc.args, tc.result);
+            _appendToolCall(tc.name, tc.args, tc.result, { summary: tc.summary });
           }
         }
         if (msg.content) _appendAssistantMessage(msg.content);
@@ -250,7 +250,28 @@ function _createStreamingAssistantMessage() {
   return el;
 }
 
-function _appendToolCall(name, args, result) {
+function _escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function _formatToolArgsDetails(args) {
+  if (!args || typeof args !== 'object') return '';
+  const keys = Object.keys(args);
+  if (keys.length === 0) return '';
+  const rows = keys.map(
+    (k) => `<dt>${_escapeHtml(k)}</dt><dd>${_escapeHtml(String(args[k]))}</dd>`,
+  );
+  return `<dl class="agent-tool-call-dl">${rows.join('')}</dl>`;
+}
+
+/** @param {string} name @param {object} args @param {string|undefined} result @param {{ summary?: string, requiresApproval?: boolean, approvalId?: string }} [options] */
+function _appendToolCall(name, args, result, options) {
+  const opt = options || {};
+  const summaryLine = opt.summary || _toolCallLabel(name, args);
+
   welcomeMsg.style.display = 'none';
   const wrap = document.createElement('div');
   wrap.className = 'agent-tool-call';
@@ -259,18 +280,87 @@ function _appendToolCall(name, args, result) {
   header.className = 'agent-tool-call-header';
   const label = document.createElement('span');
   label.className = 'agent-tool-call-label';
-  label.textContent = _toolCallLabel(name, args);
+  label.textContent = summaryLine;
   header.appendChild(label);
   wrap.appendChild(header);
 
-  const body = document.createElement('div');
-  body.className = 'agent-tool-call-body';
-  let bodyText = `Tool: ${name}\nArgs: ${JSON.stringify(args, null, 2)}`;
-  if (result !== undefined) bodyText += `\n\nResult:\n${result}`;
-  body.textContent = bodyText;
-  wrap.appendChild(body);
+  if (opt.requiresApproval && opt.approvalId && result === undefined) {
+    const toolbar = document.createElement('div');
+    toolbar.className = 'agent-tool-call-toolbar';
+
+    const approveBtn = document.createElement('button');
+    approveBtn.type = 'button';
+    approveBtn.className = 'agent-tool-call-btn agent-tool-call-btn-approve';
+    approveBtn.textContent = 'Approve';
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'agent-tool-call-btn agent-tool-call-btn-cancel';
+    cancelBtn.textContent = 'Cancel';
+
+    const waitEl = document.createElement('span');
+    waitEl.className = 'agent-tool-call-wait';
+    const errEl = document.createElement('div');
+    errEl.className = 'agent-tool-call-approval-error';
+
+    const submit = async (approved) => {
+      errEl.textContent = '';
+      approveBtn.disabled = true;
+      cancelBtn.disabled = true;
+      waitEl.textContent = 'Submitting…';
+      try {
+        const r = await fetch('/api/agent/tool-approval', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ approval_id: opt.approvalId, approved }),
+        });
+        if (!r.ok) {
+          const bodyJson = await r.json().catch(() => ({}));
+          const detail = bodyJson.detail;
+          const msg =
+            typeof detail === 'string'
+              ? detail
+              : Array.isArray(detail)
+                ? detail.map((x) => x.msg || x).join('; ')
+                : r.statusText;
+          errEl.textContent = msg || `Request failed (${r.status})`;
+          approveBtn.disabled = false;
+          cancelBtn.disabled = false;
+          waitEl.textContent = '';
+          return;
+        }
+        waitEl.textContent = 'Waiting for result…';
+        approveBtn.remove();
+        cancelBtn.remove();
+      } catch (e) {
+        errEl.textContent = e.message || 'Network error';
+        approveBtn.disabled = false;
+        cancelBtn.disabled = false;
+        waitEl.textContent = '';
+      }
+    };
+    approveBtn.addEventListener('click', () => submit(true));
+    cancelBtn.addEventListener('click', () => submit(false));
+    toolbar.appendChild(approveBtn);
+    toolbar.appendChild(cancelBtn);
+    toolbar.appendChild(waitEl);
+    toolbar.appendChild(errEl);
+    wrap.appendChild(toolbar);
+  }
+
+  const outcome = document.createElement('div');
+  outcome.className = 'agent-tool-call-outcome';
+  if (result !== undefined && result !== null) {
+    outcome.textContent = `Result: ${result}`;
+  }
+  wrap.appendChild(outcome);
+
+  const detailsWrap = document.createElement('div');
+  detailsWrap.className = 'agent-tool-call-details-wrap';
+  detailsWrap.innerHTML = _formatToolArgsDetails(args);
+  wrap.appendChild(detailsWrap);
 
   header.addEventListener('click', () => wrap.classList.toggle('expanded'));
+
   messagesEl.appendChild(wrap);
   return wrap;
 }
@@ -309,6 +399,9 @@ function _toolCallLabel(name, args) {
     get_card_info: (a) => `Looked up: ${a.card_names || ''}`,
     extract_card_mechanics: (a) => `Extracted ${a.extract_type || 'mechanics'} for ${a.card_name || ''}`,
     append_cards_to_deck: (a) => `Added to deck: ${a.card_names || ''}`,
+    remove_cards_from_deck: (a) => `Remove from deck: ${a.card_names || ''}`,
+    move_cards_in_deck: (a) =>
+      `Move cards: ${a.card_names || ''} (${a.from_board || ''} → ${a.to_board || ''})`,
     search_triggers: (a) => `Searched triggers: "${a.query || ''}"`,
     search_effects: (a) => `Searched effects: "${a.query || ''}"`,
     search_online_decks: (a) => `Searched online decks: "${a.query || a.format || ''}"`,
@@ -447,14 +540,20 @@ async function sendMessage() {
           } else if (eventType === 'tool_call') {
             if (!data.name) { eventType = null; continue; }
             streamingEl = null;
-            _appendToolCall(data.name, data.args || {});
+            _appendToolCall(data.name, data.args || {}, undefined, {
+              summary: data.summary,
+              requiresApproval: data.requires_approval,
+              approvalId: data.approval_id,
+            });
             _scrollToBottom();
           } else if (eventType === 'tool_result') {
             const toolEls = messagesEl.querySelectorAll('.agent-tool-call');
             const lastTool = toolEls[toolEls.length - 1];
             if (lastTool) {
-              const bodyEl = lastTool.querySelector('.agent-tool-call-body');
-              if (bodyEl) bodyEl.textContent += `\n\nResult:\n${data.result}`;
+              const outcome = lastTool.querySelector('.agent-tool-call-outcome');
+              if (outcome) outcome.textContent = `Result: ${data.result}`;
+              const waitEl = lastTool.querySelector('.agent-tool-call-wait');
+              if (waitEl) waitEl.textContent = '';
             }
           } else if (eventType === 'done') {
             if (savedTruncate !== null) {

@@ -8,6 +8,8 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from src.deck_editor.agent import (
+    ToolApprovalAlreadyResolvedError,
+    ToolApprovalNotFoundError,
     add_user_rule,
     chat_stream,
     create_conversation,
@@ -18,6 +20,7 @@ from src.deck_editor.agent import (
     load_api_key,
     load_conversation,
     load_user_rules,
+    resolve_tool_approval,
     save_api_key,
     save_conversation,
 )
@@ -123,6 +126,32 @@ async def remove_conversation(conv_id: str) -> dict:
 # ---------------------------------------------------------------------------
 # Streaming chat
 # ---------------------------------------------------------------------------
+
+
+@agent_router.post("/tool-approval")
+async def tool_approval(body: dict) -> dict:
+    """Resolve a pending deck-mutation tool approval from the agent chat SSE stream."""
+    if "approval_id" not in body:
+        LOGGER.error("tool_approval: missing approval_id")
+        raise HTTPException(status_code=400, detail="Missing 'approval_id'") from None
+    if "approved" not in body:
+        LOGGER.error("tool_approval: missing approved")
+        raise HTTPException(status_code=400, detail="Missing 'approved'") from None
+    approval_id = body["approval_id"]
+    if not isinstance(approval_id, str) or not approval_id.strip():
+        LOGGER.error("tool_approval: approval_id must be a non-empty string")
+        raise HTTPException(status_code=400, detail="'approval_id' must be a non-empty string") from None
+    approved = body["approved"]
+    if not isinstance(approved, bool):
+        LOGGER.error("tool_approval: approved must be a boolean")
+        raise HTTPException(status_code=400, detail="'approved' must be a boolean") from None
+    try:
+        await resolve_tool_approval(approval_id.strip(), approved)
+    except ToolApprovalNotFoundError as e:
+        raise HTTPException(status_code=404, detail="Unknown or expired approval_id") from e
+    except ToolApprovalAlreadyResolvedError as e:
+        raise HTTPException(status_code=409, detail="This approval was already submitted") from e
+    return {"ok": True}
 
 
 @agent_router.post("/chat")

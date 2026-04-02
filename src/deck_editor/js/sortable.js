@@ -30,7 +30,7 @@ function convertFullCardsInZone(zoneId) {
   });
 }
 
-function appendCardToList(listEl, name, count) {
+export function appendCardToList(listEl, name, count) {
   if (!listEl || !name) return;
   const n = Math.max(1, parseInt(count, 10) || 1);
   if (listEl.id === 'list-maybe') {

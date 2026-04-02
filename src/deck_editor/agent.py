@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
 from datetime import datetime, timezone
@@ -345,6 +346,144 @@ _TOOL_DECLARATIONS: list[types.FunctionDeclaration] = [
 ]
 
 GEMINI_TOOL: types.Tool = types.Tool(function_declarations=_TOOL_DECLARATIONS)
+
+DECK_MUTATION_TOOLS: frozenset[str] = frozenset({
+    "append_cards_to_deck",
+    "remove_cards_from_deck",
+    "move_cards_in_deck",
+    "import_online_deck",
+})
+
+USER_DECLINED_DECK_CHANGE: str = (
+    "User declined this deck change; the deck was not modified."
+)
+
+
+def _board_phrase(board: str) -> str:
+    if board == "main":
+        return "main deck"
+    if board == "commander":
+        return "commander slot"
+    return f"{board} board"
+
+
+def format_tool_call_summary(name: str, args: dict[str, Any]) -> str:
+    """Single-line human summary for UI and persisted tool_calls."""
+    if name == "plain_search_card":
+        parts: list[str] = []
+        if (args.get("name") or "").strip():
+            parts.append(f"name contains “{(args['name'] or '').strip()}”")
+        if (args.get("oracle_text") or "").strip():
+            parts.append("oracle text filter")
+        if (args.get("type_line") or "").strip():
+            parts.append("type line filter")
+        if (args.get("colors") or "").strip():
+            parts.append(f"colors {args['colors']}")
+        if (args.get("color_identity") or "").strip():
+            parts.append(f"identity {args['color_identity']}")
+        for label, key in (
+            ("mana value", "mana_value"),
+            ("MV min", "mana_value_min"),
+            ("MV max", "mana_value_max"),
+        ):
+            if key in args and args[key] is not None:
+                parts.append(f"{label} {args[key]}")
+        if (args.get("semantic_query") or "").strip():
+            parts.append(f"semantic: “{(args['semantic_query'] or '').strip()}” ({args.get('search_type') or 'general'})")
+        if (args.get("format_legal") or "").strip():
+            parts.append(f"legal in {args['format_legal']}")
+        if (args.get("keywords") or "").strip():
+            parts.append(f"keywords {args['keywords']}")
+        if (args.get("subtype") or "").strip():
+            parts.append(f"subtype {args['subtype']}")
+        n: int = int(args["n_results"]) if "n_results" in args and args["n_results"] is not None else 20
+        base = "Search cards" + (f" ({', '.join(parts)})" if parts else " (broad)")
+        return f"{base}, up to {n} results."
+    if name == "get_card_info":
+        cn = (args.get("card_names") or "").strip() or "(names)"
+        return f"Card info: {cn}"
+    if name == "extract_card_mechanics":
+        return f"Extract {args.get('extract_type') or 'mechanics'} for “{args.get('card_name') or ''}”"
+    if name == "append_cards_to_deck":
+        names_raw = args.get("card_names") or ""
+        board = args["board"] if "board" in args and args["board"] else "main"
+        names = parse_card_names_arg(names_raw) if names_raw.strip() else []
+        listed = ", ".join(names) if names else names_raw.strip() or "(cards)"
+        return f"Add to {_board_phrase(board)}: {listed}"
+    if name == "remove_cards_from_deck":
+        names_raw = args.get("card_names") or ""
+        board = args["board"] if "board" in args and args["board"] else "main"
+        count = int(args["count"]) if "count" in args and args["count"] is not None else 1
+        names = parse_card_names_arg(names_raw) if names_raw.strip() else []
+        listed = ", ".join(names) if names else names_raw.strip() or "(cards)"
+        suffix = f" (×{count} each)" if count != 1 else ""
+        return f"Remove from {_board_phrase(board)}: {listed}{suffix}"
+    if name == "move_cards_in_deck":
+        names_raw = args.get("card_names") or ""
+        fb = args.get("from_board") or "?"
+        tb = args.get("to_board") or "?"
+        count = int(args["count"]) if "count" in args and args["count"] is not None else 1
+        names = parse_card_names_arg(names_raw) if names_raw.strip() else []
+        listed = ", ".join(names) if names else names_raw.strip() or "(cards)"
+        suffix = f" (×{count} each)" if count != 1 else ""
+        return f"Move from {_board_phrase(fb)} → {_board_phrase(tb)}: {listed}{suffix}"
+    if name == "search_triggers":
+        return f"Search triggers: “{args.get('query') or ''}”"
+    if name == "search_effects":
+        return f"Search effects: “{args.get('query') or ''}”"
+    if name == "search_online_decks":
+        q = (args.get("query") or args.get("format") or "").strip() or "online decks"
+        return f"Search online decks: {q}"
+    if name == "get_online_deck":
+        return f"Fetch deck list: {args.get('url') or ''}"
+    if name == "import_online_deck":
+        return f"Import deck (replaces current deck): {args.get('url') or ''}"
+    return f"Tool: {name}"
+
+
+# ---------------------------------------------------------------------------
+# Pending tool approval (deck mutations)
+# ---------------------------------------------------------------------------
+
+_approval_lock: asyncio.Lock = asyncio.Lock()
+_approval_futures: dict[str, asyncio.Future[bool]] = {}
+
+
+class ToolApprovalNotFoundError(Exception):
+    """No pending approval registered for this id."""
+
+
+class ToolApprovalAlreadyResolvedError(Exception):
+    """This approval was already accepted or declined."""
+
+
+async def register_tool_approval() -> tuple[str, asyncio.Future[bool]]:
+    loop = asyncio.get_running_loop()
+    fut: asyncio.Future[bool] = loop.create_future()
+    approval_id: str = str(uuid.uuid4())
+    async with _approval_lock:
+        _approval_futures[approval_id] = fut
+    return approval_id, fut
+
+
+async def resolve_tool_approval(approval_id: str, approved: bool) -> None:
+    async with _approval_lock:
+        fut = _approval_futures.get(approval_id)
+        if fut is None:
+            LOGGER.error("tool approval: unknown approval_id %s", approval_id)
+            raise ToolApprovalNotFoundError(approval_id)
+        if fut.done():
+            LOGGER.error("tool approval: already resolved approval_id %s", approval_id)
+            raise ToolApprovalAlreadyResolvedError(approval_id)
+        fut.set_result(approved)
+
+
+async def cancel_pending_tool_approvals(approval_ids: list[str]) -> None:
+    async with _approval_lock:
+        for aid in approval_ids:
+            fut = _approval_futures.pop(aid, None)
+            if fut is not None and not fut.done():
+                fut.set_result(False)
 
 
 # ---------------------------------------------------------------------------
@@ -743,7 +882,8 @@ async def chat_stream(
 
     Event types:
       text_delta  -> {"type": "text_delta", "content": "..."}
-      tool_call   -> {"type": "tool_call", "name": "...", "args": {...}}
+      tool_call   -> {"type": "tool_call", "name", "args", "summary"; optional "requires_approval",
+                       "approval_id" for deck mutations}
       tool_result -> {"type": "tool_result", "name": "...", "result": "..."}
       done        -> {"type": "done", "conversation_id": "...", "model": "..."}
       error       -> {"type": "error", "message": "..."}
@@ -776,77 +916,105 @@ async def chat_stream(
 
     accumulated_text: str = ""
     all_tool_calls: list[dict] = []
+    approval_ids_this_stream: list[str] = []
 
-    for _round in range(MAX_TOOL_ROUNDS):
-        function_calls_this_round: list[types.FunctionCall] = []
-        model_content_parts: list[types.Part] = []
-        last_candidate_content: types.Content | None = None
+    try:
+        for _round in range(MAX_TOOL_ROUNDS):
+            function_calls_this_round: list[types.FunctionCall] = []
+            model_content_parts: list[types.Part] = []
+            last_candidate_content: types.Content | None = None
 
-        try:
-            async for chunk in await client.aio.models.generate_content_stream(
-                model=model_name,
-                contents=contents,
-                config=config,
-            ):
-                if chunk.text:
-                    accumulated_text += chunk.text
-                    yield {"type": "text_delta", "content": chunk.text}
+            try:
+                async for chunk in await client.aio.models.generate_content_stream(
+                    model=model_name,
+                    contents=contents,
+                    config=config,
+                ):
+                    if chunk.text:
+                        accumulated_text += chunk.text
+                        yield {"type": "text_delta", "content": chunk.text}
 
-                if chunk.candidates:
-                    for candidate in chunk.candidates:
-                        if candidate.content:
-                            last_candidate_content = candidate.content
+                    if chunk.candidates:
+                        for candidate in chunk.candidates:
+                            if candidate.content:
+                                last_candidate_content = candidate.content
 
-            if last_candidate_content and last_candidate_content.parts:
-                for part in last_candidate_content.parts:
-                    if part.function_call:
-                        function_calls_this_round.append(part.function_call)
-                        model_content_parts.append(part)
+                if last_candidate_content and last_candidate_content.parts:
+                    for part in last_candidate_content.parts:
+                        if part.function_call:
+                            function_calls_this_round.append(part.function_call)
+                            model_content_parts.append(part)
 
-            set_resolved_model(model_name)
-        except Exception as e:
-            if _round == 0 and model_name == PRIMARY_MODEL and _is_model_not_found(e):
-                LOGGER.warning("Model %s not found, falling back to %s", model_name, FALLBACK_MODEL)
-                model_name = FALLBACK_MODEL
-                continue
-            LOGGER.error("Gemini streaming error: %s", e)
-            err_str: str = str(e)
-            if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
-                yield {"type": "error", "message": "Gemini API rate limit exceeded. Please wait a minute and try again, or check your API key quota at https://ai.dev/rate-limit"}
-            else:
-                yield {"type": "error", "message": f"Gemini API error: {err_str}"}
-            conv["messages"].pop()
-            return
+                set_resolved_model(model_name)
+            except Exception as e:
+                if _round == 0 and model_name == PRIMARY_MODEL and _is_model_not_found(e):
+                    LOGGER.warning("Model %s not found, falling back to %s", model_name, FALLBACK_MODEL)
+                    model_name = FALLBACK_MODEL
+                    continue
+                LOGGER.error("Gemini streaming error: %s", e)
+                err_str: str = str(e)
+                if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
+                    yield {"type": "error", "message": "Gemini API rate limit exceeded. Please wait a minute and try again, or check your API key quota at https://ai.dev/rate-limit"}
+                else:
+                    yield {"type": "error", "message": f"Gemini API error: {err_str}"}
+                conv["messages"].pop()
+                return
 
-        if not function_calls_this_round:
-            break
+            if not function_calls_this_round:
+                break
 
-        contents.append(types.Content(role="model", parts=model_content_parts))
+            contents.append(types.Content(role="model", parts=model_content_parts))
 
-        fr_parts: list[types.Part] = []
-        for fc in function_calls_this_round:
-            fc_name: str = fc.name
-            fc_args: dict = dict(fc.args) if fc.args else {}
-            yield {"type": "tool_call", "name": fc_name, "args": fc_args}
+            fr_parts: list[types.Part] = []
+            for fc in function_calls_this_round:
+                fc_name: str = fc.name
+                fc_args: dict = dict(fc.args) if fc.args else {}
+                summary: str = format_tool_call_summary(fc_name, fc_args)
+                tool_event: dict[str, Any] = {
+                    "type": "tool_call",
+                    "name": fc_name,
+                    "args": fc_args,
+                    "summary": summary,
+                }
+                if fc_name in DECK_MUTATION_TOOLS:
+                    approval_id, approval_future = await register_tool_approval()
+                    approval_ids_this_stream.append(approval_id)
+                    tool_event["requires_approval"] = True
+                    tool_event["approval_id"] = approval_id
+                    yield tool_event
+                    user_ok: bool = await approval_future
+                    if user_ok:
+                        result_str = execute_tool_call(fc_name, fc_args)
+                    else:
+                        result_str = USER_DECLINED_DECK_CHANGE
+                else:
+                    yield tool_event
+                    result_str = execute_tool_call(fc_name, fc_args)
+                yield {"type": "tool_result", "name": fc_name, "result": result_str}
 
-            result_str: str = execute_tool_call(fc_name, fc_args)
-            yield {"type": "tool_result", "name": fc_name, "result": result_str}
+                all_tool_calls.append({
+                    "name": fc_name,
+                    "args": fc_args,
+                    "result": result_str,
+                    "summary": summary,
+                })
+                fr_parts.append(types.Part.from_function_response(
+                    name=fc_name,
+                    response={"result": result_str},
+                ))
 
-            all_tool_calls.append({"name": fc_name, "args": fc_args, "result": result_str})
-            fr_parts.append(types.Part.from_function_response(
-                name=fc_name,
-                response={"result": result_str},
-            ))
+            contents.append(types.Content(role="tool", parts=fr_parts))
 
-        contents.append(types.Content(role="tool", parts=fr_parts))
+        conv["messages"].append({
+            "role": "assistant",
+            "content": accumulated_text,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "tool_calls": all_tool_calls if all_tool_calls else None,
+        })
+        conv["model"] = model_name
+        save_conversation(conv)
 
-    conv["messages"].append({
-        "role": "assistant",
-        "content": accumulated_text,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "tool_calls": all_tool_calls if all_tool_calls else None,
-    })
-    conv["model"] = model_name
-    save_conversation(conv)
-
-    yield {"type": "done", "conversation_id": conv["id"], "model": model_name}
+        yield {"type": "done", "conversation_id": conv["id"], "model": model_name}
+    finally:
+        if approval_ids_this_stream:
+            await cancel_pending_tool_approvals(approval_ids_this_stream)

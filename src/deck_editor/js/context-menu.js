@@ -1,9 +1,16 @@
-/** Right-click context menu on card elements: copy name, open in MTGMintCard. */
+/** Right-click context menu on card elements: copy name, open in MTGMintCard, board moves. */
+
+import {
+  getStackBoardContext,
+  moveStackFromMainToMaybe,
+  moveStackFromMaybeToMain,
+} from './board-move.js';
 
 const MTGMINTCARD_SEARCH_BASE = 'https://www.mtgmintcard.com/mtg/singles/search?action=normal_search&ed=0&keywords=';
 
 let menuEl = null;
 let currentCardName = null;
+let currentContextStack = null;
 
 function createMenuElement() {
   const div = document.createElement('div');
@@ -14,14 +21,22 @@ function createMenuElement() {
     '<button type="button" class="context-menu-item" data-action="triggers">Extract triggers</button>',
     '<button type="button" class="context-menu-item" data-action="effects">Extract effects</button>',
     '<button type="button" class="context-menu-item" data-action="mtgmintcard">Open in MTGMintCard</button>',
+    '<button type="button" class="context-menu-item context-menu-board-move" data-action="move-to-maybe" hidden>Move to maybe board</button>',
+    '<button type="button" class="context-menu-item context-menu-board-move" data-action="move-to-main" hidden>Move to main deck</button>',
   ].join('');
   document.body.appendChild(div);
   return div;
 }
 
-function showMenu(x, y, cardName) {
+function showMenu(x, y, cardName, stack) {
   if (!menuEl) menuEl = createMenuElement();
   currentCardName = cardName;
+  currentContextStack = stack;
+  const ctx = stack ? getStackBoardContext(stack) : null;
+  const moveMaybeBtn = menuEl.querySelector('[data-action="move-to-maybe"]');
+  const moveMainBtn = menuEl.querySelector('[data-action="move-to-main"]');
+  if (moveMaybeBtn) moveMaybeBtn.hidden = ctx !== 'main';
+  if (moveMainBtn) moveMainBtn.hidden = ctx !== 'maybe';
   menuEl.style.left = x + 'px';
   menuEl.style.top = y + 'px';
   menuEl.classList.add('visible');
@@ -33,6 +48,7 @@ function hideMenu() {
     menuEl.classList.remove('visible');
     menuEl.setAttribute('aria-hidden', 'true');
     currentCardName = null;
+    currentContextStack = null;
   }
 }
 
@@ -78,6 +94,23 @@ function handleMenuAction(e) {
   e.preventDefault();
   e.stopPropagation();
   const action = btn.getAttribute('data-action');
+  if (action === 'move-to-maybe') {
+    const stack = currentContextStack;
+    hideMenu();
+    if (stack) moveStackFromMainToMaybe(stack);
+    return;
+  }
+  if (action === 'move-to-main') {
+    const stack = currentContextStack;
+    hideMenu();
+    if (stack) {
+      moveStackFromMaybeToMain(stack).catch((err) => {
+        console.error(err);
+        window.alert(err.message != null ? String(err.message) : String(err));
+      });
+    }
+    return;
+  }
   if (action === 'copy') copyCardName(currentCardName);
   if (action === 'mtgmintcard') openInMTGMintCard(currentCardName);
   if (action === 'triggers') extractAndCopy(currentCardName, 'triggers');
@@ -95,7 +128,7 @@ export function initContextMenu() {
     const name = stack.getAttribute('data-name');
     if (!name) return;
     e.preventDefault();
-    showMenu(e.clientX, e.clientY, name);
+    showMenu(e.clientX, e.clientY, name, stack);
   });
 
   document.addEventListener('click', (e) => {
