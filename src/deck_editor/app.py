@@ -3,6 +3,7 @@
 import asyncio
 import json
 import re
+import shutil
 import threading
 from datetime import datetime
 from pathlib import Path
@@ -13,7 +14,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from src.lib.cardDB import CardDB
-from src.lib.config import DECK_EDITOR_SAVE_DIR
+from src.lib.config import DECK_EDITOR_SAVE_DIR, REPO_ROOT
 from src.lib.deck_board_ops import collect_matching_indices_asc, move_cards_at_indices, remove_cards_at_indices
 from src.lib.deck_name_match import commander_string_matches_request, requested_name_matches_deck_card
 from src.lib.prices import prices_age_hours, update_all_prices
@@ -1058,6 +1059,57 @@ async def save_deck() -> dict:
     _current_deck.save("json", out_path)
     LOGGER.info("Deck saved to %s", out_path)
     return {"saved_to": str(out_path)}
+
+
+_BUG_REPORT_DIR: Path = REPO_ROOT / ".ai" / "BR"
+
+
+@app.post("/api/bug_report")
+async def file_bug_report(body: dict) -> dict:
+    """File a bug report: save user description and a snapshot of the latest logs to .ai/BR/."""
+    if "description" not in body or not isinstance(body["description"], str):
+        LOGGER.error("file_bug_report: missing or invalid 'description' in body")
+        raise HTTPException(status_code=400, detail="'description' (string) is required")
+    description: str = body["description"].strip()
+    if not description:
+        LOGGER.error("file_bug_report: empty description")
+        raise HTTPException(status_code=400, detail="'description' must not be empty")
+
+    now: datetime = datetime.now()
+    ts: str = now.strftime("%Y-%m-%d_%H-%M-%S")
+    br_dir: Path = _BUG_REPORT_DIR / f"BR_{ts}"
+    br_dir.mkdir(parents=True, exist_ok=True)
+
+    deck_editor_logs: Path = REPO_ROOT / "logs" / "deck_editor"
+    attached: list[str] = []
+    if deck_editor_logs.is_dir():
+        log_files: list[Path] = sorted(deck_editor_logs.glob("*.log"), key=lambda p: p.stat().st_mtime)
+        if log_files:
+            latest: Path = log_files[-1]
+            shutil.copy2(latest, br_dir / latest.name)
+            attached.append(latest.name)
+
+    report_lines: list[str] = [
+        "# Bug Report",
+        "",
+        f"**Date:** {now.strftime('%Y-%m-%d %H:%M:%S')}",
+        "",
+        "## Description",
+        "",
+        description,
+        "",
+    ]
+    if attached:
+        report_lines.extend(["## Attached Logs", ""])
+        for name in attached:
+            report_lines.append(f"- `{name}`")
+        report_lines.append("")
+
+    (br_dir / "bug_report.md").write_text("\n".join(report_lines), encoding="utf-8")
+
+    relative: str = str(br_dir.relative_to(REPO_ROOT))
+    LOGGER.info("Bug report filed: %s (logs: %s)", relative, attached)
+    return {"path": relative, "logs_attached": attached}
 
 
 # Static file mounts for JS and CSS (must be after specific routes)

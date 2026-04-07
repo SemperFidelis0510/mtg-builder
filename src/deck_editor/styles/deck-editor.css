@@ -238,6 +238,101 @@ body {
   cursor: pointer;
 }
 .rag-loading-popup-dismiss:hover { opacity: 0.9; }
+
+/* Bug report modal */
+.bug-report-modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  box-sizing: border-box;
+}
+.bug-report-modal.visible { display: flex; }
+.bug-report-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+}
+.bug-report-modal-content {
+  position: relative;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1.5rem 2rem;
+  width: 100%;
+  max-width: 460px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+.bug-report-modal-title {
+  margin: 0 0 0.25rem 0;
+  font-size: 1.15rem;
+  color: var(--text);
+}
+.bug-report-modal-hint {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.85rem;
+  color: #a0a0a0;
+}
+.bug-report-modal-textarea {
+  display: block;
+  width: 100%;
+  min-height: 100px;
+  padding: 0.6rem 0.75rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.9rem;
+  resize: vertical;
+  box-sizing: border-box;
+}
+.bug-report-modal-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.bug-report-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+.bug-report-modal-cancel,
+.bug-report-modal-submit {
+  padding: 0.45rem 1.1rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.bug-report-modal-cancel {
+  background: var(--border);
+  color: var(--text);
+}
+.bug-report-modal-cancel:hover { opacity: 0.85; }
+.bug-report-modal-submit {
+  background: var(--accent);
+  color: #fff;
+}
+.bug-report-modal-submit:hover { opacity: 0.9; }
+.bug-report-modal-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.bug-report-modal-status {
+  margin: 0.5rem 0 0 0;
+  font-size: 0.85rem;
+  color: #a0a0a0;
+  min-height: 1.2em;
+}
+.bug-report-modal-status.error { color: #f88; }
+.bug-report-modal-status.success { color: #6f6; }
+.bug-report-btn { color: #f0c040 !important; }
+
 .export-format-modal {
   display: none;
   position: fixed;

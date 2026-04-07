@@ -84,6 +84,7 @@
       </div>
       <div class="tools-row">
         <button type="button" class="save-btn" id="synergyCheckerBtn" title="Check synergy between two cards">Synergy Checker</button>
+        <button type="button" class="save-btn bug-report-btn" id="bugReportBtn" title="Report a bug with the deck editor">Report Bug</button>
       </div>
     </div>
   </div>
@@ -246,6 +247,20 @@
         <button type="button" class="agent-send-btn" id="agentSendBtn" title="Send message">&#9654;</button>
         <button type="button" class="agent-stop-btn" id="agentStopBtn" title="Stop" style="display:none" aria-label="Stop generating">&#9632;</button>
       </div>
+    </div>
+  </div>
+
+  <div class="bug-report-modal" id="bugReportModal" aria-hidden="true" role="dialog" aria-labelledby="bugReportTitle">
+    <div class="bug-report-modal-backdrop"></div>
+    <div class="bug-report-modal-content">
+      <h2 class="bug-report-modal-title" id="bugReportTitle">Report a Bug</h2>
+      <p class="bug-report-modal-hint">Describe what went wrong. The latest server logs will be attached automatically.</p>
+      <textarea class="bug-report-modal-textarea" id="bugReportTextarea" rows="6" placeholder="Describe the bug..."></textarea>
+      <div class="bug-report-modal-actions">
+        <button type="button" class="bug-report-modal-cancel" id="bugReportCancel">Cancel</button>
+        <button type="button" class="bug-report-modal-submit" id="bugReportSubmit">Submit</button>
+      </div>
+      <p class="bug-report-modal-status" id="bugReportStatus"></p>
     </div>
   </div>
 

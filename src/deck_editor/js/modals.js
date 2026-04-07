@@ -169,3 +169,63 @@ export function initImportModal() {
     if (e.target === modal) closeImportModal();
   });
 }
+
+export function initBugReportModal() {
+  const modal = document.getElementById('bugReportModal');
+  const backdrop = modal.querySelector('.bug-report-modal-backdrop');
+  const textarea = document.getElementById('bugReportTextarea');
+  const submitBtn = document.getElementById('bugReportSubmit');
+  const cancelBtn = document.getElementById('bugReportCancel');
+  const statusEl = document.getElementById('bugReportStatus');
+
+  function openModal() {
+    textarea.value = '';
+    statusEl.textContent = '';
+    statusEl.className = 'bug-report-modal-status';
+    submitBtn.disabled = false;
+    modal.classList.add('visible');
+    modal.setAttribute('aria-hidden', 'false');
+    textarea.focus();
+  }
+
+  function closeModal() {
+    modal.classList.remove('visible');
+    modal.setAttribute('aria-hidden', 'true');
+  }
+
+  document.getElementById('bugReportBtn').addEventListener('click', openModal);
+  cancelBtn.addEventListener('click', closeModal);
+  backdrop.addEventListener('click', closeModal);
+
+  submitBtn.addEventListener('click', () => {
+    const description = textarea.value.trim();
+    if (!description) {
+      statusEl.textContent = 'Please enter a description.';
+      statusEl.className = 'bug-report-modal-status error';
+      return;
+    }
+    submitBtn.disabled = true;
+    statusEl.textContent = 'Submitting...';
+    statusEl.className = 'bug-report-modal-status';
+
+    fetch('/api/bug_report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ description }),
+    })
+      .then((r) => {
+        if (!r.ok) return r.json().then((err) => { throw new Error(err.detail || 'Failed'); });
+        return r.json();
+      })
+      .then((data) => {
+        statusEl.textContent = 'Bug report filed: ' + data.path;
+        statusEl.className = 'bug-report-modal-status success';
+        setTimeout(closeModal, 2000);
+      })
+      .catch((err) => {
+        statusEl.textContent = 'Error: ' + (err.message || 'submission failed');
+        statusEl.className = 'bug-report-modal-status error';
+        submitBtn.disabled = false;
+      });
+  });
+}

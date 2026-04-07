@@ -25,7 +25,8 @@ RULES_FILE: Path = AGENT_DIR / "rules.json"
 KEY_FILE: Path = AGENT_DIR / ".key"
 AGENT_PROMPT_PATH: Path = Path(__file__).resolve().parent.parent / "config" / "agent_prompt.md"
 
-PRIMARY_MODEL: str = "gemini-2.5-pro"
+PRIMARY_MODEL: str = "gemini-3.1-pro-preview"
+# PRIMARY_MODEL: str = "gemini-2.5-pro"
 FALLBACK_MODEL: str = "gemini-2.0-flash"
 
 _resolved_model: str | None = None
@@ -922,7 +923,9 @@ async def chat_stream(
         for _round in range(MAX_TOOL_ROUNDS):
             function_calls_this_round: list[types.FunctionCall] = []
             model_content_parts: list[types.Part] = []
-            last_candidate_content: types.Content | None = None
+            # Gemini may emit function_call parts in early stream chunks and later chunks may
+            # replace candidate.content without those parts; collect from every chunk (dedupe).
+            seen_function_call_keys: set[tuple[str, str]] = set()
 
             try:
                 async for chunk in await client.aio.models.generate_content_stream(
@@ -936,14 +939,23 @@ async def chat_stream(
 
                     if chunk.candidates:
                         for candidate in chunk.candidates:
-                            if candidate.content:
-                                last_candidate_content = candidate.content
-
-                if last_candidate_content and last_candidate_content.parts:
-                    for part in last_candidate_content.parts:
-                        if part.function_call:
-                            function_calls_this_round.append(part.function_call)
-                            model_content_parts.append(part)
+                            content = candidate.content
+                            if not content or not content.parts:
+                                continue
+                            for part in content.parts:
+                                if not part.function_call:
+                                    continue
+                                fc = part.function_call
+                                fc_args: dict = dict(fc.args) if fc.args else {}
+                                fc_key: tuple[str, str] = (
+                                    fc.name,
+                                    json.dumps(fc_args, sort_keys=True, default=str),
+                                )
+                                if fc_key in seen_function_call_keys:
+                                    continue
+                                seen_function_call_keys.add(fc_key)
+                                function_calls_this_round.append(fc)
+                                model_content_parts.append(part)
 
                 set_resolved_model(model_name)
             except Exception as e:
