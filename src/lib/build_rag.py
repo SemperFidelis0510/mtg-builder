@@ -17,6 +17,7 @@ from src.lib.config import (
     TRIGGERS_COLLECTION_NAME,
 )
 from src.lib.cardDB import CardDB
+from src.lib.rag_device import embedding_torch_device
 from src.lib.prices import load_prices
 from src.obj.card import Card
 from src.utils.logger import LOGGER, init_logger
@@ -90,12 +91,11 @@ def _build_collection(
     Heavy imports (torch, sentence_transformers, chromadb, tqdm) happen here
     so they are only loaded when building.
     """
-    import torch
     from sentence_transformers import SentenceTransformer
     import chromadb
     from tqdm import tqdm
 
-    device: str = "cuda" if torch.cuda.is_available() else "cpu"
+    device: str = embedding_torch_device()
     LOGGER.info("%s: using device: %s model=%s", label, device, MODEL_NAME)
     model = SentenceTransformer(MODEL_NAME, device=device)
 

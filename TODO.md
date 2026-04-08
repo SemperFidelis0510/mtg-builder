@@ -15,3 +15,4 @@
 - add button to move all cards in main deck to maybe board
 - make sure agent can read current deck state
 - save button should save to already existing file if there is such. add 'save as' button
+- add common magic terminology to agent and to RAG context

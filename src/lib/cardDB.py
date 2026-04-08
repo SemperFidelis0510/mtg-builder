@@ -16,6 +16,7 @@ from src.lib.config import (
     MODEL_NAME,
     TRIGGERS_COLLECTION_NAME,
 )
+from src.lib.rag_device import embedding_torch_device
 from src.lib.prices import load_prices
 from src.obj.card import Card
 from src.utils.logger import LOGGER
@@ -664,7 +665,9 @@ class CardDB:
         semantic_query: str = "",
         search_type: str = "general",
     ) -> list[Card]:
-        """Filter MTG cards by exact/filter properties. All filters are AND-combined. Returns list of Card. At least one filter must be set. offset/n_results support pagination.
+        """Filter MTG cards by exact/filter properties. All filters are AND-combined. Returns list of Card.
+
+        At least one structural filter or a non-empty *semantic_query* must be set. offset/n_results support pagination.
 
         If semantic_query is non-empty, results are Chroma-ranked by similarity within the given search_type
         collection, intersected with the same structural filters (deduped by canonical card).
@@ -673,6 +676,7 @@ class CardDB:
             [s.strip() for s in oracle_text] if isinstance(oracle_text, list) else [oracle_text.strip()] if oracle_text else []
         )
         _oracle_list = [s for s in _oracle_list if s]
+        semantic_stripped: str = (semantic_query or "").strip()
         has_filter: bool = (
             bool(name.strip())
             or bool(_oracle_list)
@@ -692,10 +696,15 @@ class CardDB:
             or bool(subtype.strip())
             or bool(supertype.strip())
             or bool(format_legal.strip())
+            or bool(semantic_stripped)
         )
         if not has_filter:
-            LOGGER.error( "filter_cards_list: at least one filter parameter must be set")
-            raise ValueError("filter_cards_list: at least one filter parameter must be set")
+            LOGGER.error(
+                "filter_cards_list: at least one structural filter or semantic_query must be set",
+            )
+            raise ValueError(
+                "filter_cards_list: at least one structural filter or semantic_query must be set",
+            )
 
         name_lower: str = name.strip().lower() if name else ""
         oracle_lower_list: list[str] = [s.lower() for s in _oracle_list]
@@ -709,7 +718,7 @@ class CardDB:
         supertype_lower: str = supertype.strip().lower() if supertype else ""
         format_lower: str = format_legal.strip().lower() if format_legal else ""
 
-        sem: str = (semantic_query or "").strip()
+        sem: str = semantic_stripped
         if sem:
             if not self.is_rag_ready():
                 LOGGER.error("filter_cards_list: semantic_query set but RAG is not ready")
@@ -884,7 +893,7 @@ class CardDB:
 
         if self._embedding_model is None:
             t3: float = time.perf_counter()
-            device: str = "cuda" if torch.cuda.is_available() else "cpu"
+            device: str = embedding_torch_device()
             LOGGER.info("Loading embedding model name=%s device=%s", MODEL_NAME, device)
             self._embedding_model = SentenceTransformer(MODEL_NAME, device=device)
             LOGGER.info("Embedding model loaded name=%s device=%s elapsed=%.3fs", MODEL_NAME, device, time.perf_counter() - t3)
