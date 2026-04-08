@@ -278,6 +278,38 @@ def _valid_boards_detail() -> str:
     return "'main', 'maybe', 'sideboard', or 'commander'"
 
 
+def _is_commander_enabled_format(format_value: str) -> bool:
+    """Return True when format uses commander color-identity deckbuilding rules."""
+    fmt: str = (format_value or "").strip().lower()
+    return fmt == "duel" or "commander" in fmt or "brawl" in fmt
+
+
+def _effective_identity_filters(
+    *,
+    format_legal: str,
+    colors: str,
+    colorless_only: bool,
+    requested_color_identity: str,
+    requested_color_identity_colorless: bool,
+) -> tuple[str, bool]:
+    """Resolve effective color-identity filters for search calls.
+
+    In commander-family formats, regular color criterion is mirrored onto color identity:
+    - selected colors => color_identity=colors
+    - colorless-only => color_identity_colorless=True
+    """
+    color_identity: str = (requested_color_identity or "").strip()
+    color_identity_colorless: bool = requested_color_identity_colorless
+    if not _is_commander_enabled_format(format_legal):
+        return color_identity, color_identity_colorless
+    colors_clean: str = (colors or "").strip()
+    if colors_clean:
+        return colors_clean, False
+    if colorless_only:
+        return "", True
+    return color_identity, color_identity_colorless
+
+
 def _get_board_list(deck: Deck, board: str) -> list[Card]:
     """Return the card list for the given board name. Raises ValueError for unknown boards."""
     if board == "main":
@@ -679,6 +711,13 @@ async def search_cards_api(body: dict) -> dict:
     format_legal: str = (
         body["format_legal"] if "format_legal" in body and isinstance(body["format_legal"], str) else ""
     )
+    effective_color_identity, effective_color_identity_colorless = _effective_identity_filters(
+        format_legal=format_legal,
+        colors=colors,
+        colorless_only=colorless_only,
+        requested_color_identity=color_identity,
+        requested_color_identity_colorless=color_identity_colorless,
+    )
     n_results: int = int(body["n_results"]) if "n_results" in body and body["n_results"] is not None else 20
     n_results = max(1, min(100, n_results))
     offset: int = int(body["offset"]) if "offset" in body and body["offset"] is not None else 0
@@ -706,8 +745,8 @@ async def search_cards_api(body: dict) -> dict:
             oracle_text=oracle_text,
             type_line=type_line,
             colors=colors,
-            color_identity=color_identity,
-            color_identity_colorless=color_identity_colorless,
+            color_identity=effective_color_identity,
+            color_identity_colorless=effective_color_identity_colorless,
             colorless_only=colorless_only,
             mana_value=mana_value,
             mana_value_min=mana_value_min,
@@ -754,17 +793,21 @@ async def autocomplete(
     q_clean: str = (q or "").strip()
     if len(q_clean) < 2:
         return {"data": []}
-    color_identity_arg: str = ""
-    color_identity_colorless_arg: bool = False
-    if colorless_only:
-        color_identity_colorless_arg = True
-    elif colors.strip():
-        color_identity_arg = colors.strip()
+    colors_clean: str = colors.strip()
+    color_identity_arg, color_identity_colorless_arg = _effective_identity_filters(
+        format_legal=deck_format,
+        colors=colors_clean,
+        colorless_only=colorless_only,
+        requested_color_identity="",
+        requested_color_identity_colorless=False,
+    )
     try:
         results = CardDB.inst().filter_cards_list(
             name=q_clean,
+            colors=colors_clean,
             color_identity=color_identity_arg,
             color_identity_colorless=color_identity_colorless_arg,
+            colorless_only=colorless_only,
             format_legal=deck_format.strip() if deck_format else "",
             n_results=15,
             offset=0,

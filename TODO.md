@@ -10,8 +10,8 @@
 - allow to reorder cards in deck
 - allow to sort them automatically by criteria
 - remove color identity from search. just apply if commander is set
-- fix color search to use 'include only'
+- fix color search to use 'include only'. i.e if no colors are marked, show all colors, if some colors are marked, show cards that include only those colors.
 - organize context menue with sub-menu 'open in' and move mtgmintcard there.
-- add button to move all to maybe
+- add button to move all cards in main deck to maybe board
 - make sure agent can read current deck state
 - save button should save to already existing file if there is such. add 'save as' button

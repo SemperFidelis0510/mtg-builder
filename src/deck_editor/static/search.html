@@ -83,7 +83,13 @@
       color: var(--text);
       font-size: 0.9rem;
     }
-    .colors-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+    .colors-row {
+      display: flex;
+      flex-wrap: nowrap;
+      align-items: center;
+      gap: 0.5rem;
+      overflow-x: auto;
+    }
     .colors-row .color-chip {
       width: 28px;
       height: 28px;
@@ -253,10 +259,6 @@
       <div>
         <label>Colors</label>
         <div id="colorsContainer"></div>
-      </div>
-      <div>
-        <label>Color identity</label>
-        <div id="colorIdentityContainer"></div>
       </div>
       <div>
         <label for="mana_value_min">Mana cost min</label>
@@ -572,12 +574,6 @@
       } else if (colorChecks.length > 0) {
         body.colors = Array.from(colorChecks).map(function (c) { return c.value; }).join(',');
       }
-      var identityChecks = document.querySelectorAll('input[name="color_identity"]:checked');
-      if (identityChecks.length > 0) {
-        body.color_identity = Array.from(identityChecks).map(function (c) { return c.value; }).join(',');
-      }
-      var ciColorlessEl = document.getElementById('ciC');
-      if (ciColorlessEl && ciColorlessEl.checked) body.color_identity_colorless = true;
       var mana_value_min = parseInt(document.getElementById('mana_value_min').value, 10);
       if (!isNaN(mana_value_min) && mana_value_min >= 0) body.mana_value_min = mana_value_min;
       var mana_value_max = parseInt(document.getElementById('mana_value_max').value, 10);
@@ -765,9 +761,6 @@
     document.getElementById('colorsContainer').appendChild(
       createColorPalette({ name: 'color', colorlessName: 'colorless', idPrefix: 'c' })
     );
-    document.getElementById('colorIdentityContainer').appendChild(
-      createColorPalette({ name: 'color_identity', colorlessName: 'color_identity_colorless', idPrefix: 'ci' })
-    );
 
     var params = new URLSearchParams(window.location.search);
     var deckColors = params.get('deck_colors');
@@ -776,11 +769,9 @@
 
     if (deckColorless) {
       setColorPaletteValues(document.getElementById('colorsContainer'), [], true);
-      setColorPaletteValues(document.getElementById('colorIdentityContainer'), [], true);
     } else if (deckColors) {
       var colors = deckColors.split(',').map(function (c) { return c.trim().toUpperCase(); }).filter(Boolean);
       setColorPaletteValues(document.getElementById('colorsContainer'), colors, false);
-      setColorPaletteValues(document.getElementById('colorIdentityContainer'), colors, false);
     }
     if (deckFormat) {
       var formatEl = document.getElementById('format_legal');

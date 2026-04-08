@@ -361,7 +361,7 @@ class CardDB:
             return False
         if colors_filter:
             card_colors: set[str] = {c.upper() for c in card.colors}
-            if card_colors != colors_filter:
+            if not card_colors.issubset(colors_filter):
                 return False
         if color_identity_filter or color_identity_colorless:
             card_identity: set[str] = {c.upper() for c in card.color_identity}

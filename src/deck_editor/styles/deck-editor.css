@@ -129,7 +129,7 @@ body {
   border: 1px solid var(--border);
   border-radius: 8px;
   width: 100%;
-  max-width: 920px;
+  max-width: 1040px;
   max-height: 90vh;
   overflow: hidden;
   position: relative;
