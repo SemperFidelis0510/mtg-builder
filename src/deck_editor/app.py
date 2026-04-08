@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import os
 import re
 import shutil
 import threading
@@ -221,6 +222,10 @@ def _startup_load_rag() -> None:
 @app.on_event("startup")
 def _startup_rag_async() -> None:
     """Start RAG loading in a background thread at server init; heavy deps are not imported in the main process until then."""
+    disable: str = (os.environ.get("MTG_DISABLE_RAG_STARTUP") or "").strip().lower()
+    if disable in ("1", "true", "yes", "on"):
+        LOGGER.info("_startup_rag_async: MTG_DISABLE_RAG_STARTUP set; skipping RAG background load")
+        return
     LOGGER.info("_startup_rag_async: launching RAG background thread")
     thread: threading.Thread = threading.Thread(target=_startup_load_rag, daemon=True)
     thread.start()

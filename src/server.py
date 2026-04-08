@@ -40,9 +40,13 @@ def run_server() -> None:
     def _load_rag() -> None:
         CardDB.inst().load_rag_sync()
 
-    rag_thread: threading.Thread = threading.Thread(target=_load_rag, daemon=True)
-    rag_thread.start()
-    LOGGER.debug("RAG load started in background thread")
+    disable: str = (os.environ.get("MTG_DISABLE_RAG_STARTUP") or "").strip().lower()
+    if disable not in ("1", "true", "yes", "on"):
+        rag_thread: threading.Thread = threading.Thread(target=_load_rag, daemon=True)
+        rag_thread.start()
+        LOGGER.debug("RAG load started in background thread")
+    else:
+        LOGGER.info("MTG_DISABLE_RAG_STARTUP set; skipping RAG background load")
 
     mcp = FastMCP("MTG Card Search")
 

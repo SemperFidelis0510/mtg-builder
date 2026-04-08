@@ -7,3 +7,5 @@ fastapi
 uvicorn
 google-genai
 beautifulsoup4
+pytest
+pytest-asyncio
