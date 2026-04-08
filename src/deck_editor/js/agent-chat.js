@@ -1,5 +1,9 @@
 /** Agent chat panel: toggle, streaming SSE, markdown, tool calls, conversations. */
 
+import { createLogger } from './logger.js';
+
+const log = createLogger('agent-chat');
+
 let _currentConvId = null;
 let _sending = false;
 let _abortController = null;
@@ -52,13 +56,16 @@ closeBtn.addEventListener('click', closePanel);
 let _hasKey = false;
 
 async function checkApiKey() {
+  log.debug('checkApiKey: checking /api/agent/key/status');
   try {
     const r = await fetch('/api/agent/key/status');
     const data = await r.json();
     _hasKey = data.has_key;
+    log.info('checkApiKey: has_key=%s model=%s', _hasKey, data.model);
     if (data.model) modelBadge.textContent = data.model;
     _showKeySetup(!_hasKey);
-  } catch {
+  } catch (err) {
+    log.error('checkApiKey: failed', err);
     _showKeySetup(true);
   }
 }
@@ -94,6 +101,7 @@ keySaveBtn.addEventListener('click', async () => {
 // -----------------------------------------------------------------------
 
 async function loadConversationList() {
+  log.debug('loadConversationList');
   try {
     const r = await fetch('/api/agent/conversations');
     const data = await r.json();
@@ -110,6 +118,7 @@ async function loadConversationList() {
 
 async function loadConversation(convId) {
   if (!convId) { _startNewConversation(); return; }
+  log.info('loadConversation: id=%s', convId);
   try {
     const r = await fetch(`/api/agent/conversation/${convId}`);
     if (!r.ok) { _startNewConversation(); return; }
@@ -158,9 +167,10 @@ newConvBtn.addEventListener('click', () => {
 deleteConvBtn.addEventListener('click', async () => {
   if (!_currentConvId) return;
   if (!confirm('Delete this conversation? This cannot be undone.')) return;
+  log.info('Deleting conversation', _currentConvId);
   try {
     await fetch(`/api/agent/conversation/${_currentConvId}`, { method: 'DELETE' });
-  } catch { /* silent */ }
+  } catch (err) { log.error('Delete conversation failed', err); }
   _startNewConversation();
   await loadConversationList();
 });
@@ -455,6 +465,7 @@ async function sendMessage() {
   const rawMessage = chatInput.value;
   const text = rawMessage.trim();
   if (!text || _sending) return;
+  log.info('sendMessage: conv=%s len=%d', _currentConvId, text.length);
 
   const savedTruncate = _truncateFromIndex;
   _truncateFromIndex = null;
@@ -486,6 +497,7 @@ async function sendMessage() {
     });
 
     if (!resp.ok) {
+      log.error('sendMessage: server returned', resp.status);
       _removeTypingIndicator();
       const err = await resp.json().catch(() => ({ detail: 'Request failed' }));
       userRow.remove();
@@ -539,6 +551,7 @@ async function sendMessage() {
             }
           } else if (eventType === 'tool_call') {
             if (!data.name) { eventType = null; continue; }
+            log.debug('SSE tool_call: %s', data.name);
             streamingEl = null;
             _appendToolCall(data.name, data.args || {}, undefined, {
               summary: data.summary,
@@ -556,6 +569,7 @@ async function sendMessage() {
               if (waitEl) waitEl.textContent = '';
             }
           } else if (eventType === 'done') {
+            log.info('sendMessage: stream done, conv=%s', data.conversation_id);
             if (savedTruncate !== null) {
               _convMessageCount = savedTruncate + 2;
             } else {
@@ -568,6 +582,7 @@ async function sendMessage() {
             if (data.model) modelBadge.textContent = data.model;
             await loadConversationList();
           } else if (eventType === 'error') {
+            log.error('SSE stream error event', data.message);
             if (!streamingEl) {
               _appendAssistantMessage(`Error: ${data.message}`);
             } else {
@@ -582,6 +597,7 @@ async function sendMessage() {
   } catch (e) {
     _removeTypingIndicator();
     if (e.name === 'AbortError') {
+      log.info('sendMessage: aborted by user');
       _cleanupPartialReplyAfterUserRow(userRow);
       userRow.remove();
       if (_currentConvId) {
@@ -592,6 +608,7 @@ async function sendMessage() {
       }
       _restorePromptToInput(rawMessage);
     } else {
+      log.error('sendMessage: network error', e.message);
       userRow.remove();
       if (savedTruncate !== null && _currentConvId) {
         await loadConversation(_currentConvId);

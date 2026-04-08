@@ -1,12 +1,16 @@
 /** Modal open/close and postMessage handling for iframe modals. */
 
+import { createLogger } from './logger.js';
 import { getSettings } from './settings.js';
+
+const log = createLogger('modals');
 
 export function initAdvSearchModal() {
   const modal = document.getElementById('advSearchModal');
   const iframe = document.getElementById('advSearchIframe');
   const closeBtn = document.getElementById('advSearchModalClose');
   document.getElementById('advancedSearchBtn').addEventListener('click', () => {
+    log.info('Opening advanced search modal');
     const params = new URLSearchParams({ t: String(Date.now()) });
     const { colors, format, colorlessOnly } = getSettings();
     if (colors && colors.length) params.set('deck_colors', colors.join(','));
@@ -77,18 +81,22 @@ export function initSynergyCheckerModal() {
   }
 
   document.getElementById('synergyCheckerBtn').addEventListener('click', () => {
+    log.info('Synergy checker requested, checking RAG readiness');
     fetch('/api/rag_ready')
       .then((r) => r.json())
       .then((data) => {
         if (data.ready) {
+          log.info('RAG ready, opening synergy checker');
           iframe.src = '/synergy-checker?t=' + String(Date.now());
           modal.classList.add('open');
           modal.setAttribute('aria-hidden', 'false');
         } else {
+          log.warn('RAG not ready for synergy checker');
           showRagLoadingPopup();
         }
       })
-      .catch(() => {
+      .catch((err) => {
+        log.error('RAG readiness check failed', err);
         showRagLoadingPopup();
       });
   });
@@ -111,6 +119,7 @@ export function initExportModal() {
   const resultEl = document.getElementById('saveResult');
 
   document.getElementById('exportDecklistBtn').addEventListener('click', () => {
+    log.info('Opening export modal');
     resultEl.textContent = '';
     iframe.src = '/export-modal?t=' + Date.now();
     modal.classList.add('open');
@@ -144,6 +153,7 @@ export function initImportModal() {
   const resultEl = document.getElementById('saveResult');
 
   document.getElementById('importDeckBtn').addEventListener('click', () => {
+    log.info('Opening import modal');
     resultEl.textContent = '';
     iframe.src = '/import-modal?t=' + Date.now();
     modal.classList.add('open');
@@ -193,7 +203,7 @@ export function initBugReportModal() {
     modal.setAttribute('aria-hidden', 'true');
   }
 
-  document.getElementById('bugReportBtn').addEventListener('click', openModal);
+  document.getElementById('bugReportBtn').addEventListener('click', () => { log.info('Opening bug report modal'); openModal(); });
   cancelBtn.addEventListener('click', closeModal);
   backdrop.addEventListener('click', closeModal);
 
@@ -218,11 +228,13 @@ export function initBugReportModal() {
         return r.json();
       })
       .then((data) => {
+        log.info('Bug report filed at', data.path);
         statusEl.textContent = 'Bug report filed: ' + data.path;
         statusEl.className = 'bug-report-modal-status success';
         setTimeout(closeModal, 2000);
       })
       .catch((err) => {
+        log.error('Bug report submission failed', err.message);
         statusEl.textContent = 'Error: ' + (err.message || 'submission failed');
         statusEl.className = 'bug-report-modal-status error';
         submitBtn.disabled = false;

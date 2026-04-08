@@ -45,6 +45,7 @@ def _get_deck_state() -> dict:
 async def key_status() -> dict:
     """Return whether an API key is configured and the resolved model name."""
     has_key: bool = load_api_key() is not None
+    LOGGER.debug("key_status: has_key=%s", has_key)
     return {"has_key": has_key, "model": get_resolved_model()}
 
 
@@ -54,6 +55,7 @@ async def save_key(body: dict) -> dict:
     if "key" not in body or not isinstance(body["key"], str) or not body["key"].strip():
         raise HTTPException(status_code=400, detail="'key' must be a non-empty string")
     save_api_key(body["key"])
+    LOGGER.info("save_key: API key saved")
     return {"ok": True}
 
 
@@ -65,7 +67,9 @@ async def save_key(body: dict) -> dict:
 @agent_router.get("/rules")
 async def get_rules() -> dict:
     """Return the user-configured agent rules."""
-    return {"rules": load_user_rules()}
+    rules = load_user_rules()
+    LOGGER.debug("get_rules: returning %d rules", len(rules))
+    return {"rules": rules}
 
 
 @agent_router.post("/rules")
@@ -73,6 +77,7 @@ async def add_rule(body: dict) -> dict:
     """Add a new user rule."""
     if "rule" not in body or not isinstance(body["rule"], str) or not body["rule"].strip():
         raise HTTPException(status_code=400, detail="'rule' must be a non-empty string")
+    LOGGER.info("add_rule: adding rule (len=%d)", len(body["rule"]))
     rules: list[str] = add_user_rule(body["rule"])
     return {"rules": rules}
 
@@ -80,6 +85,7 @@ async def add_rule(body: dict) -> dict:
 @agent_router.delete("/rules/{index}")
 async def remove_rule(index: int) -> dict:
     """Delete a user rule by index."""
+    LOGGER.info("remove_rule: deleting rule at index=%d", index)
     try:
         rules: list[str] = delete_user_rule(index)
     except IndexError as e:
@@ -95,18 +101,23 @@ async def remove_rule(index: int) -> dict:
 @agent_router.get("/conversations")
 async def get_conversations() -> dict:
     """List all saved conversations (metadata only)."""
-    return {"conversations": list_conversations()}
+    convs = list_conversations()
+    LOGGER.debug("get_conversations: %d conversations", len(convs))
+    return {"conversations": convs}
 
 
 @agent_router.post("/conversation")
 async def new_conversation() -> dict:
     """Create and return a new empty conversation."""
-    return create_conversation()
+    conv = create_conversation()
+    LOGGER.info("new_conversation: created id=%s", conv.get("id"))
+    return conv
 
 
 @agent_router.get("/conversation/{conv_id}")
 async def get_conversation(conv_id: str) -> dict:
     """Load a full conversation by ID."""
+    LOGGER.debug("get_conversation: id=%s", conv_id)
     try:
         return load_conversation(conv_id)
     except FileNotFoundError as e:
@@ -116,6 +127,7 @@ async def get_conversation(conv_id: str) -> dict:
 @agent_router.delete("/conversation/{conv_id}")
 async def remove_conversation(conv_id: str) -> dict:
     """Delete a conversation by ID."""
+    LOGGER.info("remove_conversation: id=%s", conv_id)
     try:
         delete_conversation(conv_id)
     except FileNotFoundError as e:
@@ -145,6 +157,7 @@ async def tool_approval(body: dict) -> dict:
     if not isinstance(approved, bool):
         LOGGER.error("tool_approval: approved must be a boolean")
         raise HTTPException(status_code=400, detail="'approved' must be a boolean") from None
+    LOGGER.info("tool_approval: id=%s approved=%s", approval_id, approved)
     try:
         await resolve_tool_approval(approval_id.strip(), approved)
     except ToolApprovalNotFoundError as e:
@@ -169,6 +182,7 @@ async def agent_chat(request: Request) -> StreamingResponse:
 
     if not message or not isinstance(message, str) or not message.strip():
         raise HTTPException(status_code=400, detail="'message' must be a non-empty string")
+    LOGGER.info("agent_chat: conv=%s msg_len=%d truncate=%s", conversation_id, len(message), truncate_from_index)
 
     if truncate_from_index is not None:
         if not isinstance(truncate_from_index, int) or truncate_from_index < 0:

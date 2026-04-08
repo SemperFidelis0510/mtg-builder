@@ -1,5 +1,6 @@
 /** Maybe board: full card view toggle and list rebuild. */
 
+import { createLogger } from './logger.js';
 import { isMaybeFullCardView, setMaybeFullCardView } from './maybe-board-prefs.js';
 import {
   makeCardStackEl,
@@ -9,6 +10,8 @@ import {
 import { initSortable } from './sortable.js';
 
 export { isMaybeFullCardView, setMaybeFullCardView } from './maybe-board-prefs.js';
+
+const log = createLogger('maybe-board-view');
 
 export function syncMaybeViewToggleButton() {
   const btn = document.getElementById('maybeViewToggleBtn');
@@ -45,7 +48,9 @@ export function rebuildMaybeList() {
 }
 
 export function toggleMaybeBoardView() {
-  setMaybeFullCardView(!isMaybeFullCardView());
+  const newMode = !isMaybeFullCardView();
+  log.info('toggleMaybeBoardView: fullCard=%s', newMode);
+  setMaybeFullCardView(newMode);
   rebuildMaybeList();
   syncMaybeViewToggleButton();
 }

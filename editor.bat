@@ -31,6 +31,7 @@ exit /b 1
 :found_conda
 
 call "%_ACTIVATE%" %CONDA_ENV%
+if not defined MTG_LOG_LEVEL set "MTG_LOG_LEVEL=DEBUG"
 python -m src.deck_editor
 if errorlevel 1 (
     echo Deck editor exited with error.

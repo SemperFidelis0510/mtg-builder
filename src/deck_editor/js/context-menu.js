@@ -1,10 +1,13 @@
 /** Right-click context menu on card elements: copy name, open in MTGMintCard, board moves. */
 
+import { createLogger } from './logger.js';
 import {
   getStackBoardContext,
   moveStackFromMainToMaybe,
   moveStackFromMaybeToMain,
 } from './board-move.js';
+
+const log = createLogger('context-menu');
 
 const MTGMINTCARD_SEARCH_BASE = 'https://www.mtgmintcard.com/mtg/singles/search?action=normal_search&ed=0&keywords=';
 
@@ -94,6 +97,7 @@ function handleMenuAction(e) {
   e.preventDefault();
   e.stopPropagation();
   const action = btn.getAttribute('data-action');
+  log.debug('Menu action: %s on %s', action, currentCardName);
   if (action === 'move-to-maybe') {
     const stack = currentContextStack;
     hideMenu();
@@ -105,7 +109,7 @@ function handleMenuAction(e) {
     hideMenu();
     if (stack) {
       moveStackFromMaybeToMain(stack).catch((err) => {
-        console.error(err);
+        log.error('Move to main failed', err);
         window.alert(err.message != null ? String(err.message) : String(err));
       });
     }

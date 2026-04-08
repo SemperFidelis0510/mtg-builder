@@ -1,10 +1,17 @@
-- add embedded agent to edit decks
 - add mixed basic and semantic search
 - add proper rules for deck building
 - integregrate logger properly
 - add auto land
 - implement dynamic RAG search
-- remove 'refresh price' button
-- add 'tools' box in editor (move export/import etc. there)
 - increase deck description box
-- decksections should expand on any event adding a card there
+- deck sections should expand on any event adding a card there
+- commander decks should have at most 1 card
+- importing cards into existing deck should just top up the cards number if already appear
+- allow to reorder cards in deck
+- allow to sort them automatically by criteria
+- remove color identity from search. just apply if commander is set
+- fix color search to use 'include only'
+- organize context menue with sub-menu 'open in' and move mtgmintcard there.
+- add button to move all to maybe
+- make sure agent can read current deck state
+- save button should save to already existing file if there is such. add 'save as' button

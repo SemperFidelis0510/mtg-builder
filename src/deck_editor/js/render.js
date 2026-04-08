@@ -1,5 +1,6 @@
 /** Deck rendering and Chart.js statistics. */
 
+import { createLogger } from './logger.js';
 import { TYPE_KEYS, TYPE_LABELS, SIDE_LABELS } from './constants.js';
 import { collapseToStacks } from './utils.js';
 import {
@@ -12,6 +13,8 @@ import { initSortable } from './sortable.js';
 import { isMaybeFullCardView } from './maybe-board-prefs.js';
 import { syncMaybeViewToggleButton } from './maybe-board-view.js';
 import { isCommanderEnabledFormat, populateSettings } from './settings.js';
+
+const log = createLogger('render');
 
 let statsPieChartInstance = null;
 let statsMvChartInstance = null;
@@ -80,6 +83,9 @@ function renderStatsCharts(stats) {
 }
 
 export function renderDeck(data) {
+  const deck = data.deck || data;
+  const totalCards = TYPE_KEYS.reduce((n, k) => n + (Array.isArray(deck[k]) ? deck[k].length : 0), 0);
+  log.info('renderDeck: total main-board cards', totalCards);
   resetCardFaceState();
   const container = document.getElementById('deckSections');
   const commanderHost = document.getElementById('commanderSectionHost');

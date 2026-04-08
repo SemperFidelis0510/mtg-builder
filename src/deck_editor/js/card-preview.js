@@ -1,10 +1,14 @@
 /** Card hover preview tooltip. */
 
+import { createLogger } from './logger.js';
 import { scryfallImageUrlLarge } from './utils.js';
+
+const log = createLogger('card-preview');
 
 export function showCardPreview(name, x, y, imageName = '') {
   const el = document.getElementById('cardPreview');
   if (!el || !name) return;
+  log.debug('showCardPreview', name);
   const imageNameResolved = imageName || name;
   const img = el.querySelector('img');
   img.src = scryfallImageUrlLarge(imageNameResolved);

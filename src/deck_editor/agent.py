@@ -39,8 +39,10 @@ _resolved_model: str | None = None
 def load_api_key() -> str | None:
     """Read the Gemini API key from ~/.mtgbuilder/agent/.key.  Returns None if absent."""
     if not KEY_FILE.is_file():
+        LOGGER.debug("load_api_key: key file not found")
         return None
     text: str = KEY_FILE.read_text(encoding="utf-8").strip()
+    LOGGER.debug("load_api_key: key present=%s", bool(text))
     return text if text else None
 
 
@@ -67,6 +69,7 @@ def load_user_rules() -> list[str]:
     """Return the list of user-configured agent rules."""
     _ensure_rules_file()
     data: dict = json.loads(RULES_FILE.read_text(encoding="utf-8"))
+    LOGGER.debug("load_user_rules: %d rules loaded", len(data["rules"]))
     return list(data["rules"])
 
 
@@ -76,6 +79,7 @@ def add_user_rule(rule: str) -> list[str]:
     rules: list[str] = load_user_rules()
     rules.append(rule.strip())
     RULES_FILE.write_text(json.dumps({"rules": rules}, indent=2), encoding="utf-8")
+    LOGGER.info("add_user_rule: now %d rules", len(rules))
     return rules
 
 
@@ -148,6 +152,7 @@ def _format_deck_summary(deck_state: dict) -> str:
 
 def build_system_prompt(deck_state: dict) -> str:
     """Combine predefined prompt + user rules + deck state into one system instruction."""
+    LOGGER.debug("build_system_prompt: assembling prompt")
     parts: list[str] = [_load_predefined_prompt()]
 
     rules: list[str] = load_user_rules()
@@ -464,10 +469,12 @@ async def register_tool_approval() -> tuple[str, asyncio.Future[bool]]:
     approval_id: str = str(uuid.uuid4())
     async with _approval_lock:
         _approval_futures[approval_id] = fut
+    LOGGER.debug("register_tool_approval: id=%s", approval_id)
     return approval_id, fut
 
 
 async def resolve_tool_approval(approval_id: str, approved: bool) -> None:
+    LOGGER.debug("resolve_tool_approval: id=%s approved=%s", approval_id, approved)
     async with _approval_lock:
         fut = _approval_futures.get(approval_id)
         if fut is None:
@@ -480,6 +487,7 @@ async def resolve_tool_approval(approval_id: str, approved: bool) -> None:
 
 
 async def cancel_pending_tool_approvals(approval_ids: list[str]) -> None:
+    LOGGER.debug("cancel_pending_tool_approvals: %d ids", len(approval_ids))
     async with _approval_lock:
         for aid in approval_ids:
             fut = _approval_futures.pop(aid, None)
@@ -495,6 +503,7 @@ _DEFAULT_CARD_FIELDS: str = "name,mana_cost,mana_value,type_line,text,colors,col
 
 
 def _execute_tool_call_body(name: str, args: dict[str, Any]) -> str:
+    LOGGER.debug("_execute_tool_call_body: tool=%s", name)
     if name == "plain_search_card":
         return CardDB.inst().filter_cards(
             name=args.get("name") or "",
@@ -724,6 +733,8 @@ def execute_tool_call(name: str, args: dict[str, Any]) -> str:
     if result_str.startswith("Error"):
         log_snip: str = result_str if len(result_str) <= 500 else result_str[:500] + "..."
         LOGGER.warning("Agent tool result: %s result=%s", name, log_snip)
+    else:
+        LOGGER.info("execute_tool_call: %s completed (result_len=%d)", name, len(result_str))
     return result_str
 
 
@@ -740,6 +751,7 @@ def create_conversation() -> dict:
     """Create and persist a new empty conversation. Returns the conversation dict."""
     _ensure_conversations_dir()
     conv_id: str = str(uuid.uuid4())
+    LOGGER.info("create_conversation: id=%s", conv_id)
     now: str = datetime.now(timezone.utc).isoformat()
     conv: dict = {
         "id": conv_id,
@@ -775,6 +787,7 @@ def list_conversations() -> list[dict]:
 
 def load_conversation(conv_id: str) -> dict:
     """Load a conversation by ID. Raises FileNotFoundError if not found."""
+    LOGGER.debug("load_conversation: id=%s", conv_id)
     path: Path = CONVERSATIONS_DIR / f"{conv_id}.json"
     if not path.is_file():
         LOGGER.error("Conversation not found: %s", conv_id)
@@ -786,6 +799,7 @@ def save_conversation(conv: dict) -> None:
     """Persist a conversation dict to disk."""
     _ensure_conversations_dir()
     conv_id: str = conv["id"]
+    LOGGER.debug("save_conversation: id=%s messages=%d", conv_id, len(conv["messages"]))
     conv["updated_at"] = datetime.now(timezone.utc).isoformat()
     (CONVERSATIONS_DIR / f"{conv_id}.json").write_text(json.dumps(conv, indent=2), encoding="utf-8")
 
@@ -889,12 +903,15 @@ async def chat_stream(
       done        -> {"type": "done", "conversation_id": "...", "model": "..."}
       error       -> {"type": "error", "message": "..."}
     """
+    LOGGER.info("chat_stream: starting (conv=%s msg_len=%d)", conv["id"], len(user_message))
     api_key: str | None = load_api_key()
     if not api_key:
+        LOGGER.error("chat_stream: no API key configured")
         yield {"type": "error", "message": "No API key configured."}
         return
 
     model_name: str = resolve_model()
+    LOGGER.debug("chat_stream: model=%s", model_name)
     client: genai.Client = _get_client(api_key)
 
     conv["messages"].append({
@@ -1025,6 +1042,7 @@ async def chat_stream(
         })
         conv["model"] = model_name
         save_conversation(conv)
+        LOGGER.info("chat_stream: done conv=%s text_len=%d tool_calls=%d model=%s", conv["id"], len(accumulated_text), len(all_tool_calls), model_name)
 
         yield {"type": "done", "conversation_id": conv["id"], "model": model_name}
     finally:

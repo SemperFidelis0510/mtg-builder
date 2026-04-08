@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import logging
 import re
 import shutil
 import threading
@@ -61,6 +62,7 @@ _sse_clients: set[asyncio.Queue[str]] = set()
 
 def _broadcast(event_type: str, data_dict: dict) -> None:
     """Push an SSE-formatted message to all connected clients."""
+    LOGGER.debug("_broadcast: event=%s clients=%d", event_type, len(_sse_clients))
     payload: str = json.dumps(data_dict)
     lines: str = f"event: {event_type}\ndata: {payload}\n\n"
     for q in _sse_clients:
@@ -79,19 +81,24 @@ def _notify_deck_updated() -> None:
 def _startup_refresh_prices() -> None:
     """If prices are missing or older than 24h, start a background price update."""
     age: float | None = prices_age_hours()
+    LOGGER.info("_startup_refresh_prices: price age=%s hours", age)
     if age is None or age > 24:
+        LOGGER.info("_startup_refresh_prices: starting background price update")
         thread: threading.Thread = threading.Thread(target=_run_price_update_then_notify, daemon=True)
         thread.start()
 
 
 def _startup_load_rag() -> None:
     """Load RAG (embedding model + ChromaDB) in background so semantic search is ready without blocking startup."""
+    LOGGER.info("_startup_load_rag: starting RAG load")
     CardDB.inst().load_rag_sync()
+    LOGGER.info("_startup_load_rag: RAG loaded successfully")
 
 
 @app.on_event("startup")
 def _startup_rag_async() -> None:
     """Start RAG loading in a background thread at server init; heavy deps are not imported in the main process until then."""
+    LOGGER.info("_startup_rag_async: launching RAG background thread")
     thread: threading.Thread = threading.Thread(target=_startup_load_rag, daemon=True)
     thread.start()
 
@@ -170,6 +177,7 @@ def _push_previous_commander_to_main(deck: Deck) -> None:
 
 def _assign_commander_card(deck: Deck, card: Card) -> None:
     """Set commander to *card*'s canonical name; previous commander (if any) is appended to main as one copy."""
+    LOGGER.debug("_assign_commander_card: new=%r prev=%r", card.name, deck.commander)
     _push_previous_commander_to_main(deck)
     deck.commander = card.name
 
@@ -187,6 +195,7 @@ def _move_cards_between_boards(
     count: int,
 ) -> None:
     """Move cards between boards including commander slot. Raises DeckEditorError on failure."""
+    LOGGER.debug("_move_cards_between_boards: names=%s from=%s to=%s count=%d", names_to_move, from_board, to_board, count)
     if from_board not in _VALID_BOARDS:
         raise DeckEditorError(400, f"Invalid from_board: {from_board!r}. Must be {_valid_boards_detail()}.")
     if to_board not in _VALID_BOARDS:
@@ -502,6 +511,7 @@ async def serve_import_modal() -> FileResponse:
 @app.post("/api/search")
 async def search_cards_api(body: dict) -> dict:
     """Advanced search: structural filters plus optional semantic_query / search_type (RAG-ranked within filters). Returns JSON list of card dicts."""
+    LOGGER.debug("search_cards_api: POST /api/search keys=%s", list(body.keys()))
     name: str = body["name"] if "name" in body and isinstance(body["name"], str) else ""
     oracle_text: str | list[str] = ""
     if "oracle_text" in body:
@@ -592,13 +602,16 @@ async def search_cards_api(body: dict) -> dict:
         if "not ready" in msg.lower() and "rag" in msg.lower():
             raise HTTPException(status_code=503, detail=msg) from e
         raise HTTPException(status_code=400, detail=msg) from e
+    LOGGER.info("search_cards_api: returning %d results (name=%r semantic=%r)", len(results), name, semantic_query[:40] if semantic_query else "")
     return {"results": [c.to_dict() for c in results]}
 
 
 @app.get("/api/rag_ready")
 async def rag_ready() -> dict:
     """Return whether RAG (embedding model + ChromaDB) is loaded and semantic search is available."""
-    return {"ready": CardDB.inst().is_rag_ready()}
+    ready: bool = CardDB.inst().is_rag_ready()
+    LOGGER.debug("rag_ready: %s", ready)
+    return {"ready": ready}
 
 
 @app.get("/api/autocomplete")
@@ -609,6 +622,7 @@ async def autocomplete(
     colorless_only: bool = Query(False),
 ) -> dict:
     """Autocomplete card names by substring; optionally filter by color identity and format legality. Returns { data: [names] }."""
+    LOGGER.debug("autocomplete: q=%r colors=%r format=%r", q, colors, deck_format)
     q_clean: str = (q or "").strip()
     if len(q_clean) < 2:
         return {"data": []}
@@ -672,6 +686,7 @@ async def load_deck(body: dict) -> dict:
 @app.get("/api/events")
 async def sse_events() -> StreamingResponse:
     """SSE stream: sends deck_updated when the deck changes. Sends current state on connect."""
+    LOGGER.debug("sse_events: new SSE client connecting (total=%d)", len(_sse_clients) + 1)
     queue: asyncio.Queue[str] = asyncio.Queue()
     _sse_clients.add(queue)
 
@@ -716,6 +731,7 @@ async def add_card(body: dict) -> dict:
     """Add one or more cards by name to a board (default: main deck). Broadcasts deck_updated via SSE."""
     global _current_deck
     names_to_add: list[str] = _parse_add_card_names(body)
+    LOGGER.debug("add_card: names=%s board=%s", names_to_add, body.get("board", "main") if isinstance(body, dict) else "?")
     board: str = body["board"] if "board" in body and isinstance(body["board"], str) else "main"
     if board not in _VALID_BOARDS:
         raise HTTPException(status_code=400, detail=f"Invalid board: {board!r}. Must be {_valid_boards_detail()}.")
@@ -749,6 +765,7 @@ async def add_card(body: dict) -> dict:
         )
     _recompute_and_set_colors(_current_deck)
     _notify_deck_updated()
+    LOGGER.info("add_card: added %d cards to %s", len(cards_to_append), board)
     response: dict = _deck_to_response(_current_deck)
     if not_found:
         response["not_found"] = not_found
@@ -763,6 +780,7 @@ async def remove_card(body: dict) -> dict:
     """
     global _current_deck
     names_to_remove: list[str] = _parse_add_card_names(body)
+    LOGGER.debug("remove_card: names=%s board=%s", names_to_remove, body.get("board", "main") if isinstance(body, dict) else "?")
     board: str = body["board"] if "board" in body and isinstance(body["board"], str) else "main"
     if board not in _VALID_BOARDS:
         raise HTTPException(status_code=400, detail=f"Invalid board: {board!r}. Must be {_valid_boards_detail()}.")
@@ -792,6 +810,7 @@ async def remove_card(body: dict) -> dict:
         remove_cards_at_indices(target_list, idx_asc)
     _recompute_and_set_colors(_current_deck)
     _notify_deck_updated()
+    LOGGER.info("remove_card: removed %s from %s", names_to_remove, board)
     return _deck_to_response(_current_deck)
 
 
@@ -803,6 +822,7 @@ async def move_card(body: dict) -> dict:
     """
     global _current_deck
     names_to_move: list[str] = _parse_add_card_names(body)
+    LOGGER.debug("move_card: names=%s from=%s to=%s", names_to_move, body.get("from_board"), body.get("to_board"))
     if "from_board" not in body or not isinstance(body["from_board"], str):
         raise HTTPException(status_code=400, detail=f"'from_board' is required (string: {_valid_boards_detail()})")
     if "to_board" not in body or not isinstance(body["to_board"], str):
@@ -825,12 +845,14 @@ async def move_card(body: dict) -> dict:
         raise HTTPException(status_code=e.status_code, detail=e.detail) from None
     _recompute_and_set_colors(_current_deck)
     _notify_deck_updated()
+    LOGGER.info("move_card: moved %s from %s to %s", names_to_move, from_board, to_board)
     return _deck_to_response(_current_deck)
 
 
 @app.get("/api/deck")
 async def get_deck() -> dict:
     """Return current deck and removed list (empty deck if none loaded yet)."""
+    LOGGER.debug("get_deck: GET /api/deck cards=%d", len(_current_deck.cards))
     return _deck_to_response(_current_deck)
 
 
@@ -850,6 +872,7 @@ async def get_deck_meta() -> dict:
 @app.get("/api/card_type")
 async def get_card_type(name: str = Query(..., min_length=1)) -> dict:
     """Return the type key for a card name (e.g. creature, instant, land)."""
+    LOGGER.debug("get_card_type: name=%r", name)
     try:
         _, type_key = _resolve_type_key(name)
         return {"type_key": type_key}
@@ -863,6 +886,7 @@ async def get_card_mechanics(
     type: str = Query(..., pattern="^(triggers|effects)$"),
 ) -> dict:
     """Return extracted triggers or effects for a card by name. type must be 'triggers' or 'effects'."""
+    LOGGER.debug("get_card_mechanics: name=%r type=%s", name, type)
     try:
         result: str = CardDB.inst().get_card_mechanics(name=name, extract_type=type)
     except ValueError as e:
@@ -878,6 +902,7 @@ async def get_synergy(
     name2: str = Query(..., min_length=1),
 ) -> dict:
     """Return synergy score between two cards by name. Higher score = better synergy. Requires RAG to be loaded."""
+    LOGGER.debug("get_synergy: name1=%r name2=%r", name1, name2)
     if not CardDB.inst().is_rag_ready():
         raise HTTPException(
             status_code=503,
@@ -894,17 +919,20 @@ async def get_synergy(
 
 def _run_price_update_then_notify() -> None:
     """Background: run full price update, reload CardDB prices, broadcast deck_updated."""
+    LOGGER.info("_run_price_update_then_notify: starting price update")
     try:
         update_all_prices()
         CardDB.inst().reload_prices()
         _notify_deck_updated()
+        LOGGER.info("_run_price_update_then_notify: price update completed")
     except Exception as e:
-        LOGGER.error( "Price update failed: %s", e)
+        LOGGER.error("Price update failed: %s", e)
 
 
 @app.post("/api/refresh_prices")
 async def refresh_prices() -> dict:
     """Start a background update of all card prices from Scryfall. Returns immediately. When done, deck_updated is broadcast via SSE."""
+    LOGGER.info("refresh_prices: starting background price refresh")
     thread: threading.Thread = threading.Thread(target=_run_price_update_then_notify, daemon=True)
     thread.start()
     return {"status": "started"}
@@ -919,6 +947,7 @@ async def get_export_formats() -> dict:
 @app.get("/api/export")
 async def export_deck(format: str) -> dict:
     """Export current deck in the given format. Returns {"text": "..."}. Use format from /api/export/formats."""
+    LOGGER.debug("export_deck: format=%r", format)
     fmt: str = (format or "").strip().lower()
     if fmt not in Deck.EXPORT_FORMATS:
         raise HTTPException(
@@ -1059,6 +1088,20 @@ async def save_deck() -> dict:
     _current_deck.save("json", out_path)
     LOGGER.info("Deck saved to %s", out_path)
     return {"saved_to": str(out_path)}
+
+
+_FRONTEND_LOG_LEVELS: dict[str, int] = {"WARN": logging.WARNING, "ERROR": logging.ERROR}
+
+
+@app.post("/api/frontend_log")
+async def frontend_log(body: dict) -> dict:
+    """Receive a frontend log entry and write it to the server log file."""
+    level: str = body["level"] if "level" in body and isinstance(body["level"], str) else "ERROR"
+    module: str = body["module"] if "module" in body and isinstance(body["module"], str) else "unknown"
+    message: str = body["message"] if "message" in body and isinstance(body["message"], str) else ""
+    py_level: int = _FRONTEND_LOG_LEVELS.get(level, logging.ERROR)
+    LOGGER.log(py_level, "[frontend:%s] %s", module, message)
+    return {"ok": True}
 
 
 _BUG_REPORT_DIR: Path = REPO_ROOT / ".ai" / "BR"

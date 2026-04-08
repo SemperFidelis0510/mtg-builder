@@ -1,6 +1,9 @@
 /** Deck settings panel: name, description, colors, format, colorless, sideboard toggle. Syncs to server on change. */
 
+import { createLogger } from './logger.js';
 import { createColorPalette, getColorPaletteValues, setColorPaletteValues } from './color-palette.js';
+
+const log = createLogger('settings');
 
 let settingsDebounceTimer = null;
 let _prevSideboardHasCards = null;
@@ -51,6 +54,7 @@ export function getSettings() {
 }
 
 export function populateSettings(deck) {
+  log.debug('populateSettings: name=%s format=%s colors=%s', deck.name, deck.format, deck.colors);
   const nameEl = document.getElementById('deckName');
   const descEl = document.getElementById('deckDescription');
   const formatEl = document.getElementById('deckFormat');
@@ -83,6 +87,7 @@ function fireChange(callback) {
 }
 
 export function initSettings(onChangeCallback) {
+  log.info('initSettings');
   const section = document.getElementById('deckSettingsSection');
   const header = document.getElementById('deckSettingsHeader');
   if (header && section) {

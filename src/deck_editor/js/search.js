@@ -1,9 +1,12 @@
 /** Card search and autocomplete. */
 
+import { createLogger } from './logger.js';
 import { typeLineToSectionKey } from './utils.js';
 import { addCardToDeck } from './deck.js';
 import { renderDeck } from './render.js';
 import { getSettings } from './settings.js';
+
+const log = createLogger('search');
 
 let autocompleteDebounceTimer = null;
 let autocompleteAbort = null;
@@ -31,6 +34,7 @@ function hideAutocomplete() {
 }
 
 function selectAutocomplete(name) {
+  log.info('selectAutocomplete: selected', name);
   hideAutocomplete();
   document.getElementById('cardSearch').value = '';
   const msgEl = document.getElementById('searchMsg');
@@ -58,7 +62,8 @@ function selectAutocomplete(name) {
         });
       });
     })
-    .catch(() => {
+    .catch((err) => {
+      log.error('selectAutocomplete: failed to add card', name, err);
       msgEl.textContent = 'Failed to add card.';
       msgEl.className = 'search-msg error';
     });
@@ -79,14 +84,16 @@ function runAutocomplete(query) {
   }
   if (format) params.set('format', format);
   autocompleteAbort = new AbortController();
+  log.debug('runAutocomplete: query', query);
   fetch('/api/autocomplete?' + params.toString(), { signal: autocompleteAbort.signal })
     .then((r) => r.json())
     .then((data) => {
+      log.debug('runAutocomplete: got', (data.data || []).length, 'results');
       if (data.data && data.data.length) showAutocomplete(data.data);
       else hideAutocomplete();
     })
     .catch((err) => {
-      if (err.name !== 'AbortError') hideAutocomplete();
+      if (err.name !== 'AbortError') { log.warn('runAutocomplete: fetch error', err); hideAutocomplete(); }
     });
 }
 
@@ -94,6 +101,7 @@ function doSearch() {
   const input = document.getElementById('cardSearch');
   const msgEl = document.getElementById('searchMsg');
   const query = (input.value || '').trim();
+  log.info('doSearch: query', query);
   if (!query) {
     msgEl.textContent = 'Enter a card name.';
     msgEl.className = 'search-msg';
@@ -125,11 +133,13 @@ function doSearch() {
           input.focus();
         });
       }).catch((err) => {
+        log.error('doSearch: add_card failed', err.message);
         msgEl.textContent = err.message || 'Add failed';
         msgEl.className = 'search-msg error';
       });
     })
-    .catch(() => {
+    .catch((err) => {
+      log.error('doSearch: scryfall fetch failed', err);
       msgEl.textContent = 'Search failed.';
       msgEl.className = 'search-msg error';
     });

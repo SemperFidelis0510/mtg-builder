@@ -1,11 +1,14 @@
 /** Card DOM elements, section headers, deck state, and server sync. */
 
+import { createLogger } from './logger.js';
 import { TYPE_KEYS, TYPE_LABELS, SIDE_LABELS } from './constants.js';
 import {
   splitCardFaces,
   scryfallImageUrlForSide,
 } from './utils.js';
 import { getSettings } from './settings.js';
+
+const log = createLogger('deck');
 
 let syncToServerTimer = null;
 const cardFaceIndexByName = new Map();
@@ -265,9 +268,10 @@ export function updateTotalsPanel() {
 }
 
 export function addCardToDeck(cardName, typeKey) {
+  log.debug('addCardToDeck', cardName, typeKey);
   const listId = 'list-' + typeKey;
   const list = document.getElementById(listId);
-  if (!list) return;
+  if (!list) { log.warn('addCardToDeck: list not found', listId); return; }
   let existing = null;
   list.querySelectorAll('.card-stack[data-name]').forEach((el) => {
     if (el.getAttribute('data-name') === cardName) existing = el;
@@ -289,6 +293,7 @@ export function syncDeckToServer() {
   if (syncToServerTimer) clearTimeout(syncToServerTimer);
   syncToServerTimer = setTimeout(() => {
     syncToServerTimer = null;
+    log.debug('syncDeckToServer: syncing state to PUT /api/deck');
     const state = collectState();
     const body = {
       name: state.name,
@@ -309,9 +314,10 @@ export function syncDeckToServer() {
       body: JSON.stringify(body),
     })
       .then((r) => {
-        if (r.ok) return r.json();
+        if (r.ok) { log.debug('syncDeckToServer: synced OK'); return r.json(); }
+        log.warn('syncDeckToServer: server returned', r.status);
       })
-      .catch(() => {});
+      .catch((err) => { log.error('syncDeckToServer: failed', err); });
   }, 400);
 }
 
@@ -353,6 +359,7 @@ export function collectState() {
 }
 
 export function getDeckMeta() {
+  log.debug('getDeckMeta: fetching /api/deck/meta');
   return fetch('/api/deck/meta')
     .then((r) => {
       if (!r.ok) return { name: '', colors: [], description: '', format: '', commander: '', colorless_only: false };

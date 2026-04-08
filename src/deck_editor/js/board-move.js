@@ -1,8 +1,11 @@
 /** Move stacks between main typed lists and maybe board (context menu). */
 
+import { createLogger } from './logger.js';
 import { TYPE_KEYS } from './constants.js';
 import { makeCardStackEl, updateSectionHeaderTotal } from './deck.js';
 import { appendCardToList, initSortable } from './sortable.js';
+
+const log = createLogger('board-move');
 
 /**
  * @param {Element} stack .card-stack[data-name]
@@ -46,6 +49,7 @@ export function moveStackFromMainToMaybe(stack) {
   const name = stack.getAttribute('data-name');
   const count = parseInt(stack.getAttribute('data-count'), 10) || 1;
   if (!name) return;
+  log.info('moveStackFromMainToMaybe', name, 'x' + count);
   if (getStackBoardContext(stack) !== 'main') return;
   li.remove();
   updateSectionHeaderTotal(list);
@@ -64,12 +68,13 @@ export async function moveStackFromMaybeToMain(stack) {
   const count = parseInt(stack.getAttribute('data-count'), 10) || 1;
   if (!name) return;
   if (getStackBoardContext(stack) !== 'maybe') return;
+  log.info('moveStackFromMaybeToMain', name, 'x' + count);
 
   const res = await fetch('/api/card_type?name=' + encodeURIComponent(name));
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     const msg = err.detail || res.statusText || String(res.status);
-    console.error('moveStackFromMaybeToMain: card_type failed:', msg);
+    log.error('moveStackFromMaybeToMain: card_type failed', msg);
     throw new Error('Could not resolve card type for main deck: ' + msg);
   }
   const data = await res.json();
@@ -79,7 +84,7 @@ export async function moveStackFromMaybeToMain(stack) {
     targetList = document.getElementById('list-sorcery');
   }
   if (!targetList) {
-    console.error('moveStackFromMaybeToMain: no target list for type', typeKey);
+    log.error('moveStackFromMaybeToMain: no target list for type', typeKey);
     throw new Error('No main deck section for card type');
   }
 

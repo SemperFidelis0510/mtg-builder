@@ -1,5 +1,9 @@
 /** Agent rules tab: CRUD for user-configured agent rules + API key management. */
 
+import { createLogger } from './logger.js';
+
+const log = createLogger('agent-rules');
+
 const rulesList = document.getElementById('agentRulesList');
 const ruleInput = document.getElementById('agentRuleInput');
 const ruleAddBtn = document.getElementById('agentRuleAddBtn');
@@ -48,6 +52,7 @@ function _renderRules(rules) {
 async function _addRule() {
   const text = ruleInput.value.trim();
   if (!text) return;
+  log.info('Adding rule', text.slice(0, 60));
   ruleInput.value = '';
   try {
     const r = await fetch('/api/agent/rules', {
@@ -57,17 +62,18 @@ async function _addRule() {
     });
     const data = await r.json();
     _renderRules(data.rules);
-  } catch { /* silent */ }
+  } catch (err) { log.error('_addRule failed', err); }
 }
 
 async function _confirmDeleteRule(index, text) {
   const preview = text.length > 60 ? text.slice(0, 60) + '...' : text;
   if (!confirm(`Delete this rule?\n\n"${preview}"`)) return;
+  log.info('Deleting rule', index);
   try {
     const r = await fetch(`/api/agent/rules/${index}`, { method: 'DELETE' });
     const data = await r.json();
     _renderRules(data.rules);
-  } catch { /* silent */ }
+  } catch (err) { log.error('_confirmDeleteRule failed', err); }
 }
 
 ruleAddBtn.addEventListener('click', _addRule);
@@ -112,9 +118,11 @@ tabKeySaveBtn.addEventListener('click', async () => {
 });
 
 export async function initAgentRules() {
+  log.info('initAgentRules');
   try {
     const rules = await _fetchRules();
+    log.debug('Loaded %d rules', rules.length);
     _renderRules(rules);
-  } catch { /* silent on startup */ }
+  } catch (err) { log.error('initAgentRules: failed to load rules', err); }
   await _refreshKeyStatus();
 }

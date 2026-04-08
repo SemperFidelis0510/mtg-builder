@@ -1,8 +1,11 @@
 /** SortableJS drag-and-drop for deck lists. */
 
+import { createLogger } from './logger.js';
 import { TYPE_KEYS } from './constants.js';
 import { isMaybeFullCardView } from './maybe-board-prefs.js';
 import { makeMaybeBoardCardEl, makeCardStackEl, updateSectionHeaderTotal } from './deck.js';
+
+const log = createLogger('sortable');
 
 let sortables = [];
 
@@ -89,6 +92,7 @@ function handleDeckDropTargetAdd(evt) {
   if (!stack) return;
   const name = stack.getAttribute('data-name');
   if (!name) return;
+  log.info('Dropped card onto main deck drop target', name);
   const count = parseInt(stack.getAttribute('data-count'), 10) || 1;
   dropTarget.removeChild(item);
   fetch('/api/card_type?name=' + encodeURIComponent(name))
@@ -128,6 +132,7 @@ function handleDeckDropTargetAdd(evt) {
 }
 
 export function initSortable() {
+  log.debug('initSortable: reinitializing %d sortable zones', sortables.length);
   sortables.forEach((s) => {
     if (s.destroy) s.destroy();
   });

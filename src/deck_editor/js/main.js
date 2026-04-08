@@ -1,5 +1,6 @@
 /** Deck editor main entry: inits and event listeners. */
 
+import { createLogger } from './logger.js';
 import { TYPE_KEYS } from './constants.js';
 import { suggestedSaveName } from './utils.js';
 import { initCardPreview } from './card-preview.js';
@@ -13,6 +14,9 @@ import { initAgentChat } from './agent-chat.js';
 import { initAgentRules } from './agent-rules.js';
 import { initMaybeBoardViewUi } from './maybe-board-view.js';
 
+const log = createLogger('main');
+
+log.info('Deck editor initializing');
 initCardPreview();
 initContextMenu();
 initSettings(syncDeckToServer);
@@ -25,6 +29,7 @@ initBugReportModal();
 initAgentChat();
 initAgentRules();
 initMaybeBoardViewUi();
+log.info('All modules initialized');
 
 document.getElementById('deckSectionsZone').addEventListener('click', (e) => {
   const header = e.target.closest('.section-header');
@@ -60,6 +65,7 @@ document.getElementById('expandAllBtn').addEventListener('click', () => {
 
 document.getElementById('clearAllBtn').addEventListener('click', () => {
   if (!confirm('Clear all cards from the deck (including sideboard and maybe board)?')) return;
+  log.info('Clearing all cards from deck');
   populateSettings({ name: '', description: '', colors: [], format: '', commander: '', colorless_only: false });
   TYPE_KEYS.forEach((key) => {
     const listEl = document.getElementById('list-' + key);
@@ -96,11 +102,12 @@ document.getElementById('clearAllBtn').addEventListener('click', () => {
   });
   fetch('/api/deck', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
     .then((r) => r.ok ? r.json() : Promise.reject(new Error('Clear sync failed')))
-    .then(renderDeck)
-    .catch(() => {});
+    .then((data) => { log.info('Deck cleared and synced'); return renderDeck(data); })
+    .catch((err) => { log.error('Clear deck sync failed', err); });
 });
 
 document.getElementById('saveBtn').addEventListener('click', () => {
+  log.info('Save button clicked');
   const resultEl = document.getElementById('saveResult');
   resultEl.textContent = '';
   const state = collectState();
@@ -141,12 +148,15 @@ document.getElementById('saveBtn').addEventListener('click', () => {
           .then((handle) => handle.createWritable())
           .then((writable) => writable.write(blob).then(() => writable.close()))
           .then(() => {
+            log.info('Deck saved via file picker');
             resultEl.textContent = 'Saved.';
           })
           .catch((err) => {
             if (err.name === 'AbortError') {
+              log.debug('Save cancelled by user');
               resultEl.textContent = 'Cancelled.';
             } else {
+              log.error('Save failed', err.message);
               resultEl.textContent = 'Error: ' + (err.message || 'save failed');
               resultEl.style.color = '#f88';
             }
@@ -162,6 +172,7 @@ document.getElementById('saveBtn').addEventListener('click', () => {
       }
     })
     .catch((err) => {
+      log.error('Save flow failed', err.message);
       resultEl.textContent = 'Error: ' + (err.message || 'save failed');
       resultEl.style.color = '#f88';
     });
@@ -173,12 +184,14 @@ document.getElementById('loadBtn').addEventListener('click', () => {
 document.getElementById('loadFileInput').addEventListener('change', function () {
   const file = this.files && this.files[0];
   if (!file) return;
+  log.info('Loading deck from file', file.name);
   const fr = new FileReader();
   fr.onload = () => {
     let json;
     try {
       json = JSON.parse(fr.result);
     } catch (e) {
+      log.error('Invalid JSON in loaded file', e.message);
       document.getElementById('searchMsg').textContent = 'Invalid JSON file.';
       document.getElementById('searchMsg').className = 'search-msg error';
       return;
@@ -195,10 +208,12 @@ document.getElementById('loadFileInput').addEventListener('change', function () 
       .then((r) => r.json())
       .then(renderDeck)
       .then(() => {
+        log.info('Deck loaded from file');
         document.getElementById('searchMsg').textContent = 'Deck loaded.';
         document.getElementById('searchMsg').className = 'search-msg';
       })
-      .catch(() => {
+      .catch((err) => {
+        log.error('Load deck from file failed', err);
         document.getElementById('searchMsg').textContent = 'Load failed.';
         document.getElementById('searchMsg').className = 'search-msg error';
       });
@@ -218,8 +233,11 @@ tabButtons.forEach((btn) => {
   });
 });
 
+log.info('Connecting to SSE /api/events');
 const evtSource = new EventSource('/api/events');
 evtSource.addEventListener('deck_updated', (e) => {
+  log.debug('SSE deck_updated received');
   const data = JSON.parse(e.data);
   renderDeck(data);
 });
+evtSource.onerror = () => { log.warn('SSE connection error, will reconnect'); };
