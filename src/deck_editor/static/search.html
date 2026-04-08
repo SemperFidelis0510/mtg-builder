@@ -239,7 +239,7 @@
 </head>
 <body>
   <h1>Advanced Card Search</h1>
-  <p class="search-msg" id="searchMsg">Set at least one structural filter, then click Search. Optional semantic text ranks matches by meaning within those filters. Double-click a card to add it to the deck.</p>
+  <p class="search-msg" id="searchMsg">Use at least one structural filter or semantic text, then click Search. Semantic-only search is supported. Double-click a card to add it to the deck.</p>
 
   <form id="searchForm" class="form-grid">
     <div class="field-name">
@@ -668,8 +668,8 @@
       var structuralKeys = Object.keys(body).filter(function (k) {
         return k !== 'n_results' && k !== 'offset' && k !== 'semantic_query' && k !== 'search_type';
       });
-      if (structuralKeys.length === 0) {
-        setMsg('Set at least one structural filter (name, type, colors, etc.). Semantic text ranks within those filters only.', true);
+      if (structuralKeys.length === 0 && !body.semantic_query) {
+        setMsg('Set at least one structural filter (name, type, colors, etc.) or enter semantic text.', true);
         return;
       }
       body.offset = offset || 0;
