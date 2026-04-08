@@ -105,7 +105,6 @@ export function renderDeck(data) {
   container.innerHTML = '';
   if (commanderHost) commanderHost.innerHTML = '';
   if (statsContainer) statsContainer.innerHTML = '';
-  const deck = data.deck || data;
   const stats = data.stats || {};
   const maybeByType = deck.maybe_by_type || {};
   const sideboardByType = deck.sideboard_by_type || {};

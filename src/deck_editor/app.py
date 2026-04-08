@@ -6,19 +6,21 @@ import logging
 import re
 import shutil
 import threading
+import time
+import urllib.parse
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from src.lib.cardDB import CardDB
 from src.lib.config import DECK_EDITOR_SAVE_DIR, REPO_ROOT
 from src.lib.deck_board_ops import collect_matching_indices_asc, move_cards_at_indices, remove_cards_at_indices
 from src.lib.deck_name_match import commander_string_matches_request, requested_name_matches_deck_card
-from src.lib.prices import prices_age_hours, update_all_prices
+from src.lib.prices import BATCH_SIZE, DELAY_BETWEEN_BATCHES_S, SCRYFALL_COLLECTION_URL, prices_age_hours, update_all_prices
 from src.obj.card import Card
 from src.obj.deck import Deck, _cards_from_names, _normalize_cards_arg, _resolve_name_to_type_key
 from src.utils.logger import LOGGER
@@ -58,6 +60,127 @@ _current_deck: Deck = Deck()
 # SSE event bus
 # ---------------------------------------------------------------------------
 _sse_clients: set[asyncio.Queue[str]] = set()
+
+# ---------------------------------------------------------------------------
+# Card image redirect cache (name+face+size -> final CDN URL)
+# ---------------------------------------------------------------------------
+_CARD_IMAGE_CACHE: dict[tuple[str, int, str], str] = {}
+
+
+def _sleep_for_retry_after(headers: Any, attempt: int) -> None:
+    """Sleep for Retry-After if present; otherwise exponential backoff."""
+    retry_after_s: float | None = None
+    try:
+        if headers is not None and hasattr(headers, "get"):
+            ra = headers.get("Retry-After")
+            if isinstance(ra, str) and ra.strip():
+                retry_after_s = float(ra.strip())
+    except Exception:
+        retry_after_s = None
+    delay: float = retry_after_s if retry_after_s is not None else min(8.0, 0.5 * (2 ** attempt))
+    time.sleep(max(0.25, delay))
+
+
+def _prefetch_deck_image_redirects(deck: Deck) -> None:
+    """Prefetch Scryfall CDN redirect targets for all card faces in *deck*.
+
+    This avoids a burst of per-card image lookups that can hit Scryfall rate limits (429).
+    Best-effort: logs errors but does not raise (deck load should still succeed).
+    """
+    try:
+        import requests
+
+        # Collect unique display names from all boards + commander.
+        names: set[str] = set()
+        for c in deck.cards:
+            names.add(c.name)
+        for c in deck.maybe:
+            names.add(c.name)
+        for c in deck.sideboard:
+            names.add(c.name)
+        if deck.commander:
+            names.add(deck.commander)
+
+        # Expand to per-face names so DFC faces can be cached individually.
+        face_entries: list[tuple[str, int]] = []
+        for n in sorted(names):
+            try:
+                faces: list[Card] = CardDB.inst().resolve_faces(n)
+            except Exception as e:
+                LOGGER.error("_prefetch_deck_image_redirects: resolve_faces failed name=%r err=%s", n, e)
+                continue
+            for i, f in enumerate(faces):
+                face_entries.append((f.name, i))
+
+        if not face_entries:
+            return
+
+        # Query Scryfall in batches using /cards/collection.
+        # We request by name (not scryfall_id) because names are what the UI uses.
+        for i in range(0, len(face_entries), BATCH_SIZE):
+            batch = face_entries[i : i + BATCH_SIZE]
+            identifiers: list[dict[str, str]] = [{"name": face_name} for (face_name, _idx) in batch]
+            # Retry on 429 with backoff; otherwise fail fast (best-effort overall).
+            r = None
+            for attempt in range(4):
+                r = requests.post(
+                    SCRYFALL_COLLECTION_URL,
+                    json={"identifiers": identifiers},
+                    timeout=30,
+                    headers={"Accept": "application/json", "User-Agent": "MTG-MCP/1.0"},
+                )
+                if r.status_code == 429:
+                    LOGGER.error("_prefetch_deck_image_redirects: rate limited (429); backing off attempt=%d", attempt + 1)
+                    _sleep_for_retry_after(r.headers, attempt)
+                    continue
+                break
+            if r is None or not r.ok:
+                status = r.status_code if r is not None else "n/a"
+                LOGGER.error("_prefetch_deck_image_redirects: scryfall collection failed status=%s", status)
+                return
+            payload = r.json()
+            data = payload["data"] if isinstance(payload, dict) and "data" in payload else None
+            if not isinstance(data, list):
+                LOGGER.error("_prefetch_deck_image_redirects: invalid scryfall payload (missing data list)")
+                return
+
+            # Build quick lookup from returned card data.
+            for card_obj in data:
+                if not isinstance(card_obj, dict):
+                    continue
+                card_name = card_obj["name"] if "name" in card_obj and isinstance(card_obj["name"], str) else ""
+                if not card_name:
+                    continue
+
+                # For single-faced cards, images are in image_uris.
+                if "image_uris" in card_obj and isinstance(card_obj["image_uris"], dict):
+                    image_uris = card_obj["image_uris"]
+                    if "normal" in image_uris and isinstance(image_uris["normal"], str):
+                        _CARD_IMAGE_CACHE[(card_name, 0, "normal")] = image_uris["normal"]
+                    if "large" in image_uris and isinstance(image_uris["large"], str):
+                        _CARD_IMAGE_CACHE[(card_name, 0, "large")] = image_uris["large"]
+
+                # For multi-faced cards, images are per face.
+                if "card_faces" in card_obj and isinstance(card_obj["card_faces"], list):
+                    faces_list = card_obj["card_faces"]
+                    for face_idx, face_obj in enumerate(faces_list):
+                        if not isinstance(face_obj, dict):
+                            continue
+                        face_name = face_obj["name"] if "name" in face_obj and isinstance(face_obj["name"], str) else ""
+                        if not face_name:
+                            continue
+                        image_uris = face_obj["image_uris"] if "image_uris" in face_obj else None
+                        if not isinstance(image_uris, dict):
+                            continue
+                        if "normal" in image_uris and isinstance(image_uris["normal"], str):
+                            _CARD_IMAGE_CACHE[(face_name, face_idx, "normal")] = image_uris["normal"]
+                        if "large" in image_uris and isinstance(image_uris["large"], str):
+                            _CARD_IMAGE_CACHE[(face_name, face_idx, "large")] = image_uris["large"]
+
+            if i + BATCH_SIZE < len(face_entries):
+                time.sleep(DELAY_BETWEEN_BATCHES_S)
+    except Exception as e:
+        LOGGER.error("_prefetch_deck_image_redirects: unexpected failure: %s", e)
 
 
 def _broadcast(event_type: str, data_dict: dict) -> None:
@@ -679,6 +802,7 @@ async def load_deck(body: dict) -> dict:
         _current_deck.commander,
         len(_current_deck.cards),
     )
+    threading.Thread(target=_prefetch_deck_image_redirects, args=(_current_deck,), daemon=True).start()
     _notify_deck_updated()
     return _deck_to_response(_current_deck)
 
@@ -917,6 +1041,86 @@ async def get_synergy(
     return {"card_a": name1, "card_b": name2, "synergy_score": round(score, 4)}
 
 
+@app.get("/api/card_image")
+async def card_image(
+    name: str = Query(..., min_length=1),
+    face: int = Query(0, ge=0),
+    size: str = Query("normal"),
+) -> RedirectResponse:
+    """Redirect to a card image URL (Scryfall CDN).
+
+    The frontend uses this for <img src=...> so we can apply consistent request
+    headers to Scryfall and cache the resulting CDN URL.
+    """
+    req_name: str = name.strip()
+    if not req_name:
+        LOGGER.error("card_image: empty name")
+        raise HTTPException(status_code=400, detail="name must not be empty")
+    if size not in ("normal", "large"):
+        LOGGER.error("card_image: invalid size=%r", size)
+        raise HTTPException(status_code=400, detail="size must be 'normal' or 'large'")
+
+    try:
+        faces: list[Card] = CardDB.inst().resolve_faces(req_name)
+    except ValueError as e:
+        LOGGER.error("card_image: unknown card name: %r", req_name)
+        raise HTTPException(status_code=404, detail=str(e)) from e
+
+    if face >= len(faces):
+        LOGGER.error("card_image: face index out of range name=%r face=%d faces=%d", req_name, face, len(faces))
+        raise HTTPException(status_code=400, detail=f"face index out of range (faces={len(faces)})")
+
+    face_name: str = faces[face].name
+    cache_key: tuple[str, int, str] = (face_name, face, size)
+    if cache_key in _CARD_IMAGE_CACHE:
+        return RedirectResponse(url=_CARD_IMAGE_CACHE[cache_key], status_code=302)
+
+    scry_url: str = (
+        "https://api.scryfall.com/cards/named?exact="
+        + urllib.parse.quote(face_name, safe="")
+        + "&format=image&version="
+        + size
+    )
+    try:
+        import requests
+
+        r = None
+        for attempt in range(4):
+            r = requests.get(
+                scry_url,
+                timeout=15,
+                allow_redirects=True,
+                headers={"Accept": "*/*", "User-Agent": "MTG-MCP/1.0"},
+                stream=True,
+            )
+            if r.status_code == 429:
+                LOGGER.error("card_image: rate limited (429) name=%r attempt=%d", face_name, attempt + 1)
+                _sleep_for_retry_after(r.headers, attempt)
+                r.close()
+                continue
+            break
+        assert r is not None, "requests.get must return a response"
+        r.close()
+    except Exception as e:
+        LOGGER.error("card_image: request failed name=%r url=%s err=%s", face_name, scry_url, e)
+        raise HTTPException(status_code=502, detail="Failed to fetch card image") from e
+
+    if not r.ok:
+        LOGGER.error("card_image: scryfall error status=%s name=%r url=%s", r.status_code, face_name, scry_url)
+        raise HTTPException(status_code=502, detail=f"Scryfall image request failed ({r.status_code})")
+
+    final_url: str = r.url
+    if not isinstance(final_url, str) or not final_url:
+        LOGGER.error("card_image: missing final url name=%r url=%s", face_name, scry_url)
+        raise HTTPException(status_code=502, detail="Scryfall returned empty image URL")
+    if "cards.scryfall.io/" not in final_url:
+        LOGGER.error("card_image: unexpected redirect target name=%r final_url=%s", face_name, final_url)
+        raise HTTPException(status_code=502, detail="Unexpected image host from Scryfall")
+
+    _CARD_IMAGE_CACHE[cache_key] = final_url
+    return RedirectResponse(url=final_url, status_code=302)
+
+
 def _run_price_update_then_notify() -> None:
     """Background: run full price update, reload CardDB prices, broadcast deck_updated."""
     LOGGER.info("_run_price_update_then_notify: starting price update")
@@ -998,6 +1202,7 @@ async def import_deck(request: Request) -> dict:
     card_colors = _compute_deck_card_colors(_current_deck)
     existing = set(_current_deck.colors)
     _current_deck.colors = list(existing | card_colors)
+    threading.Thread(target=_prefetch_deck_image_redirects, args=(_current_deck,), daemon=True).start()
     _notify_deck_updated()
     resp = _deck_to_response(_current_deck)
     LOGGER.debug("import_deck: returning response; deck keys in out: %s", list(resp.get("deck", {}).keys())[:10])

@@ -21,8 +21,7 @@ function faceNameForIndex(name, faceIndex) {
 }
 
 export function scryfallImageUrlForSide(name, faceIndex) {
-  const exactName = faceNameForIndex(name, faceIndex);
-  return 'https://api.scryfall.com/cards/named?exact=' + encodeURIComponent(exactName) + '&format=image&version=normal';
+  return '/api/card_image?name=' + encodeURIComponent(name) + '&face=' + encodeURIComponent(String(faceIndex || 0)) + '&size=normal';
 }
 
 export function scryfallImageUrl(name) {
@@ -30,8 +29,7 @@ export function scryfallImageUrl(name) {
 }
 
 export function scryfallImageUrlLargeForSide(name, faceIndex) {
-  const exactName = faceNameForIndex(name, faceIndex);
-  return 'https://api.scryfall.com/cards/named?exact=' + encodeURIComponent(exactName) + '&format=image&version=large';
+  return '/api/card_image?name=' + encodeURIComponent(name) + '&face=' + encodeURIComponent(String(faceIndex || 0)) + '&size=large';
 }
 
 export function scryfallImageUrlLarge(name) {

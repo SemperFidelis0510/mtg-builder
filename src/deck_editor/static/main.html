@@ -264,6 +264,52 @@
     </div>
   </div>
 
+  <script>
+    // Capture fatal frontend errors even if module init fails.
+    (function () {
+      function report(kind, message) {
+        try {
+          fetch('/api/frontend_log', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ level: 'ERROR', module: 'bootstrap', message: kind + ': ' + message }),
+          });
+        } catch (e) {
+          // If fetch is unavailable, there's nothing else we can do here.
+        }
+      }
+
+      function showBanner(text) {
+        try {
+          var el = document.createElement('div');
+          el.style.position = 'fixed';
+          el.style.left = '0';
+          el.style.right = '0';
+          el.style.bottom = '0';
+          el.style.zIndex = '20000';
+          el.style.background = 'rgba(80, 0, 0, 0.92)';
+          el.style.color = '#fff';
+          el.style.padding = '10px 12px';
+          el.style.fontFamily = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace';
+          el.style.fontSize = '12px';
+          el.textContent = text;
+          document.body.appendChild(el);
+        } catch (e) {}
+      }
+
+      window.addEventListener('error', function (e) {
+        var msg = (e && e.message) ? String(e.message) : 'Unknown error';
+        report('error', msg);
+        showBanner('Frontend error: ' + msg + ' (see console)');
+      });
+      window.addEventListener('unhandledrejection', function (e) {
+        var reason = (e && e.reason) ? (e.reason.message || String(e.reason)) : 'Unknown rejection';
+        report('unhandledrejection', reason);
+        showBanner('Unhandled promise rejection: ' + reason + ' (see console)');
+      });
+    })();
+  </script>
+
   <script type="module" src="/js/main.js?v=7"></script>
 </body>
 </html>

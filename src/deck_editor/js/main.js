@@ -17,6 +17,43 @@ import { initMaybeBoardViewUi } from './maybe-board-view.js';
 const log = createLogger('main');
 
 log.info('Deck editor initializing');
+
+// Register core UI interactions before module inits, so basic folding/unfolding
+// continues to work even if a later init throws (and blocks the rest of this file).
+const deckSectionsZone = document.getElementById('deckSectionsZone');
+if (!deckSectionsZone) {
+  log.error('Missing #deckSectionsZone; section toggles will not work');
+} else {
+  deckSectionsZone.addEventListener('click', (e) => {
+    const header = e.target.closest('.section-header');
+    if (header) {
+      const section = header.closest('.section');
+      if (section) section.classList.toggle('collapsed');
+    }
+  });
+}
+
+const toolsHeader = document.getElementById('toolsHeader');
+const toolsSection = document.getElementById('toolsSection');
+if (!toolsHeader || !toolsSection) {
+  log.error('Missing tools section DOM (#toolsHeader or #toolsSection)');
+} else {
+  toolsHeader.addEventListener('click', () => {
+    toolsSection.classList.toggle('collapsed');
+  });
+}
+
+[document.getElementById('section-maybe'), document.getElementById('section-sideboard')].forEach((el) => {
+  if (!el) return;
+  el.addEventListener('click', (e) => {
+    const header = e.target.closest('.section-header');
+    if (header) {
+      const section = header.closest('.section');
+      if (section) section.classList.toggle('collapsed');
+    }
+  });
+});
+
 initCardPreview();
 initContextMenu();
 initSettings(syncDeckToServer);
@@ -30,32 +67,6 @@ initAgentChat();
 initAgentRules();
 initMaybeBoardViewUi();
 log.info('All modules initialized');
-
-document.getElementById('deckSectionsZone').addEventListener('click', (e) => {
-  const header = e.target.closest('.section-header');
-  if (header) {
-    const section = header.closest('.section');
-    if (section) section.classList.toggle('collapsed');
-  }
-});
-document.addEventListener('click', (e) => {
-  const toolsHeader = document.getElementById('toolsHeader');
-  const toolsSection = document.getElementById('toolsSection');
-  if (toolsHeader && toolsSection && toolsHeader.contains(e.target)) {
-    toolsSection.classList.toggle('collapsed');
-  }
-});
-[document.getElementById('section-maybe'), document.getElementById('section-sideboard')].forEach((el) => {
-  if (el) {
-    el.addEventListener('click', (e) => {
-      const header = e.target.closest('.section-header');
-      if (header) {
-        const section = header.closest('.section');
-        if (section) section.classList.toggle('collapsed');
-      }
-    });
-  }
-});
 document.getElementById('collapseAllBtn').addEventListener('click', () => {
   document.querySelectorAll('#commanderSectionHost .section, #deckSections .section, #section-maybe, #section-sideboard').forEach((s) => s.classList.add('collapsed'));
 });

@@ -1135,6 +1135,9 @@ body:has(#sideboardToggle:not(:checked)) #section-sideboard { display: none; }
   text-align: left;
   cursor: pointer;
 }
+#cardContextMenu .context-menu-item[hidden] {
+  display: none;
+}
 #cardContextMenu .context-menu-item:hover {
   background: var(--border);
 }

@@ -448,17 +448,25 @@ class Deck:
             LOGGER.debug("from_export_text: parsing arena; lines=%d", len(raw.splitlines()))
             by_type_arena: dict[str, list[str]] = {k: [] for k in _TYPE_KEYS}
             sideboard_names_arena: list[str] = []
+            commander_name_arena: str = ""
             parsing_sideboard: bool = False
+            parsing_commander: bool = False
             for line in raw.splitlines():
                 s_line: str = line.strip()
                 if not s_line:
                     continue
-                # Optional "Deck" header: skip. "Sideboard" or "Sideboard:" starts sideboard.
                 head_lower: str = s_line.split(None, 1)[0].lower() if s_line else ""
+                if head_lower in ("commander", "commander:"):
+                    parsing_commander = True
+                    parsing_sideboard = False
+                    continue
                 if head_lower in ("sideboard", "sideboard:"):
                     parsing_sideboard = True
+                    parsing_commander = False
                     continue
-                if head_lower == "deck":
+                if head_lower in ("deck", "deck:"):
+                    parsing_commander = False
+                    parsing_sideboard = False
                     continue
                 parts = s_line.split(None, 1)
                 if len(parts) < 2:
@@ -472,7 +480,10 @@ class Deck:
                 if count <= 0:
                     continue
                 canonical_name, type_key = _resolve_name_to_type_key(name_part)
-                if parsing_sideboard:
+                if parsing_commander:
+                    commander_name_arena = canonical_name
+                    parsing_commander = False
+                elif parsing_sideboard:
                     for _ in range(count):
                         sideboard_names_arena.append(canonical_name)
                 else:
@@ -485,11 +496,11 @@ class Deck:
             all_names_arena: list[str] = []
             for key in _TYPE_KEYS:
                 all_names_arena.extend(by_type_arena[key])
-            LOGGER.debug("from_export_text: arena names count=%d sideboard=%d", len(all_names_arena), len(sideboard_names_arena))
+            LOGGER.debug("from_export_text: arena names count=%d sideboard=%d cmdr=%r", len(all_names_arena), len(sideboard_names_arena), commander_name_arena)
             cards_arena: list["Card"] = _cards_from_names(all_names_arena) if all_names_arena else []
             sb_cards_arena: list["Card"] = _cards_from_names(sideboard_names_arena) if sideboard_names_arena else []
             LOGGER.debug("from_export_text: arena ok; cards=%d", len(cards_arena))
-            return cls(cards=cards_arena, sideboard=sb_cards_arena)
+            return cls(cards=cards_arena, sideboard=sb_cards_arena, commander=commander_name_arena)
 
         if fmt == "goldfish":
             LOGGER.debug("from_export_text: parsing goldfish; lines=%d", len(raw.splitlines()))
