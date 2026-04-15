@@ -373,6 +373,17 @@ def _board_phrase(board: str) -> str:
     return f"{board} board"
 
 
+def _cap_name_list(names: list[str], limit: int = 4) -> str:
+    """Join card names, capping at *limit* unique names with a '+ N more' tail."""
+    if not names:
+        return "(cards)"
+    unique = list(dict.fromkeys(names))
+    if len(unique) <= limit:
+        return ", ".join(unique)
+    rest = len(unique) - limit
+    return ", ".join(unique[:limit]) + f" + {rest} more"
+
+
 def format_tool_call_summary(name: str, args: dict[str, Any]) -> str:
     """Single-line human summary for UI and persisted tool_calls."""
     if name == "plain_search_card":
@@ -395,7 +406,7 @@ def format_tool_call_summary(name: str, args: dict[str, Any]) -> str:
             if key in args and args[key] is not None:
                 parts.append(f"{label} {args[key]}")
         if (args.get("semantic_query") or "").strip():
-            parts.append(f"semantic: “{(args['semantic_query'] or '').strip()}” ({args.get('search_type') or 'general'})")
+            parts.append(f"semantic: “{(args['semantic_query'] or '').strip()}”")
         if (args.get("format_legal") or "").strip():
             parts.append(f"legal in {args['format_legal']}")
         if (args.get("keywords") or "").strip():
@@ -403,36 +414,42 @@ def format_tool_call_summary(name: str, args: dict[str, Any]) -> str:
         if (args.get("subtype") or "").strip():
             parts.append(f"subtype {args['subtype']}")
         n: int = int(args["n_results"]) if "n_results" in args and args["n_results"] is not None else 20
-        base = "Search cards" + (f" ({', '.join(parts)})" if parts else " (broad)")
-        return f"{base}, up to {n} results."
+        _MAX_FILTERS = 3
+        if len(parts) > _MAX_FILTERS:
+            shown = ", ".join(parts[:_MAX_FILTERS])
+            extra = len(parts) - _MAX_FILTERS
+            filters_str = f"{shown} + {extra} more filters"
+        elif parts:
+            filters_str = ", ".join(parts)
+        else:
+            filters_str = "broad"
+        return f"Search cards ({filters_str}), up to {n} results."
     if name == "get_card_info":
-        cn = (args.get("card_names") or "").strip() or "(names)"
-        return f"Card info: {cn}"
+        cn_raw = (args.get("card_names") or "").strip() or "(names)"
+        names = [part.strip() for part in cn_raw.split(",") if part.strip()]
+        return f"Card info: {_cap_name_list(names, limit=3)}"
     if name == "extract_card_mechanics":
         return f"Extract {args.get('extract_type') or 'mechanics'} for “{args.get('card_name') or ''}”"
     if name == "append_cards_to_deck":
         names_raw = args.get("card_names") or ""
         board = args["board"] if "board" in args and args["board"] else "main"
         names = parse_card_names_arg(names_raw) if names_raw.strip() else []
-        listed = ", ".join(names) if names else names_raw.strip() or "(cards)"
-        return f"Add to {_board_phrase(board)}: {listed}"
+        return f"Add to {_board_phrase(board)}: {_cap_name_list(names)}"
     if name == "remove_cards_from_deck":
         names_raw = args.get("card_names") or ""
         board = args["board"] if "board" in args and args["board"] else "main"
         count = int(args["count"]) if "count" in args and args["count"] is not None else 1
         names = parse_card_names_arg(names_raw) if names_raw.strip() else []
-        listed = ", ".join(names) if names else names_raw.strip() or "(cards)"
         suffix = f" (×{count} each)" if count != 1 else ""
-        return f"Remove from {_board_phrase(board)}: {listed}{suffix}"
+        return f"Remove from {_board_phrase(board)}: {_cap_name_list(names)}{suffix}"
     if name == "move_cards_in_deck":
         names_raw = args.get("card_names") or ""
         fb = args.get("from_board") or "?"
         tb = args.get("to_board") or "?"
         count = int(args["count"]) if "count" in args and args["count"] is not None else 1
         names = parse_card_names_arg(names_raw) if names_raw.strip() else []
-        listed = ", ".join(names) if names else names_raw.strip() or "(cards)"
         suffix = f" (×{count} each)" if count != 1 else ""
-        return f"Move from {_board_phrase(fb)} → {_board_phrase(tb)}: {listed}{suffix}"
+        return f"Move from {_board_phrase(fb)} → {_board_phrase(tb)}: {_cap_name_list(names)}{suffix}"
     if name == "search_triggers":
         return f"Search triggers: “{args.get('query') or ''}”"
     if name == "search_effects":

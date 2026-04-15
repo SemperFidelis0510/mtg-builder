@@ -1475,6 +1475,7 @@ body.agent-panel-open {
   color: #ef9a9a;
 }
 .agent-tool-call-outcome {
+  display: none;
   padding: 0.35rem 0.6rem 0.5rem;
   background: var(--panel);
   color: #a8a8a8;
@@ -1482,6 +1483,9 @@ body.agent-panel-open {
   line-height: 1.4;
   white-space: pre-wrap;
   font-family: inherit;
+}
+.agent-tool-call.expanded .agent-tool-call-outcome {
+  display: block;
 }
 .agent-tool-call-details-wrap {
   display: none;
