@@ -1,8 +1,6 @@
 /** Card search and autocomplete. */
 
 import { createLogger } from './logger.js';
-import { typeLineToSectionKey } from './utils.js';
-import { addCardToDeck } from './deck.js';
 import { renderDeck } from './render.js';
 import { getSettings } from './settings.js';
 
@@ -40,33 +38,22 @@ function selectAutocomplete(name) {
   const msgEl = document.getElementById('searchMsg');
   msgEl.textContent = 'Adding…';
   msgEl.className = 'search-msg';
-  fetch('https://api.scryfall.com/cards/named?exact=' + encodeURIComponent(name))
-    .then((r) => r.json())
-    .then((data) => {
-      if (data.object === 'error') {
-        msgEl.textContent = data.details || 'Card not found.';
-        msgEl.className = 'search-msg error';
-        return;
-      }
-      addCardToDeck(name, typeLineToSectionKey(data.type_line));
-      return fetch('/api/add_card', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name }),
-      }).then((r) => {
-        if (!r.ok) return r.json().then((err) => { throw new Error(err.detail || 'Add failed'); });
-        return r.json().then((deckData) => {
-          renderDeck(deckData);
-          msgEl.textContent = 'Added: ' + name;
-          msgEl.className = 'search-msg';
-        });
-      });
-    })
-    .catch((err) => {
-      log.error('selectAutocomplete: failed to add card', name, err);
-      msgEl.textContent = 'Failed to add card.';
-      msgEl.className = 'search-msg error';
+  fetch('/api/add_card', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  }).then((r) => {
+    if (!r.ok) return r.json().then((err) => { throw new Error(err.detail || 'Add failed'); });
+    return r.json().then((deckData) => {
+      renderDeck(deckData);
+      msgEl.textContent = 'Added: ' + name;
+      msgEl.className = 'search-msg';
     });
+  }).catch((err) => {
+    log.error('selectAutocomplete: failed to add card', name, err);
+    msgEl.textContent = err.message || 'Failed to add card.';
+    msgEl.className = 'search-msg error';
+  });
 }
 
 function runAutocomplete(query) {
@@ -118,7 +105,6 @@ function doSearch() {
         return;
       }
       const name = data.name;
-      addCardToDeck(name, typeLineToSectionKey(data.type_line));
       return fetch('/api/add_card', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

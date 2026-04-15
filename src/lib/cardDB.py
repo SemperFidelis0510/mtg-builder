@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import json
+import re
 import threading
 import time
+import urllib.parse
 from dataclasses import fields as _dc_fields
+from pathlib import Path
 from typing import Any
 
 from src.lib.config import (
     ATOMIC_CARDS_PATH,
+    CARD_FACES_DIR,
     CHROMA_PATH,
     COLLECTION_NAME,
     EFFECTS_COLLECTION_NAME,
@@ -1044,3 +1048,134 @@ class CardDB:
                 seen.add(name)
                 out.append({"name": name, "text": doc or ""})
         return out
+
+    # -----------------------------------------------------------------------
+    # Card face image disk cache (data/faces/{size}/{safe_name}.jpg)
+    # -----------------------------------------------------------------------
+
+    _SCRYFALL_IMAGE_URL: str = "https://api.scryfall.com/cards/named"
+    _SCRYFALL_USER_AGENT: str = "MTG-MCP/1.0"
+    _FACE_NAME_SANITIZE_RE: re.Pattern[str] = re.compile(r"[^\w-]")
+    _FACE_NAME_COLLAPSE_RE: re.Pattern[str] = re.compile(r"_+")
+
+    @staticmethod
+    def _sanitize_face_name(name: str) -> str:
+        """Convert a card face name to a filesystem-safe lowercase string."""
+        safe: str = CardDB._FACE_NAME_SANITIZE_RE.sub("_", name.strip().lower())
+        safe = CardDB._FACE_NAME_COLLAPSE_RE.sub("_", safe)
+        return safe.strip("_")
+
+    @staticmethod
+    def _face_image_path(face_name: str, size: str) -> Path:
+        """Return the expected disk path for a cached face image (does not check existence)."""
+        return CARD_FACES_DIR / size / f"{CardDB._sanitize_face_name(face_name)}.jpg"
+
+    @staticmethod
+    def _sleep_for_retry_after(headers: Any, attempt: int) -> None:
+        """Sleep for Retry-After if present; otherwise exponential backoff."""
+        retry_after_s: float | None = None
+        try:
+            if headers is not None and hasattr(headers, "get"):
+                ra = headers.get("Retry-After")
+                if isinstance(ra, str) and ra.strip():
+                    retry_after_s = float(ra.strip())
+        except Exception:
+            retry_after_s = None
+        delay: float = retry_after_s if retry_after_s is not None else min(8.0, 0.5 * (2 ** attempt))
+        time.sleep(max(0.25, delay))
+
+    @staticmethod
+    def _fetch_face_image_bytes(face_name: str, size: str) -> bytes:
+        """Download card face image bytes from Scryfall.
+
+        Raises on network or HTTP errors after retrying 429s.
+        """
+        import requests
+
+        scry_url: str = (
+            CardDB._SCRYFALL_IMAGE_URL
+            + "?exact=" + urllib.parse.quote(face_name, safe="")
+            + "&format=image&version=" + size
+        )
+        LOGGER.info("_fetch_face_image_bytes: fetching face_name=%r size=%s", face_name, size)
+        r = None
+        for attempt in range(4):
+            r = requests.get(
+                scry_url,
+                timeout=15,
+                allow_redirects=True,
+                headers={"Accept": "*/*", "User-Agent": CardDB._SCRYFALL_USER_AGENT},
+            )
+            if r.status_code == 429:
+                LOGGER.error(
+                    "_fetch_face_image_bytes: rate limited (429) face_name=%r attempt=%d",
+                    face_name, attempt + 1,
+                )
+                CardDB._sleep_for_retry_after(r.headers, attempt)
+                continue
+            break
+        assert r is not None, "requests.get must return a response"
+        if not r.ok:
+            LOGGER.error(
+                "_fetch_face_image_bytes: scryfall error status=%s face_name=%r url=%s",
+                r.status_code, face_name, scry_url,
+            )
+            raise RuntimeError(
+                f"Scryfall image request failed ({r.status_code}) for {face_name!r}"
+            )
+        image_bytes: bytes = r.content
+        if not image_bytes:
+            LOGGER.error("_fetch_face_image_bytes: empty body face_name=%r url=%s", face_name, scry_url)
+            raise RuntimeError(f"Scryfall returned empty image body for {face_name!r}")
+        LOGGER.info(
+            "_fetch_face_image_bytes: downloaded face_name=%r size=%s bytes=%d",
+            face_name, size, len(image_bytes),
+        )
+        return image_bytes
+
+    def get_face_image(self, face_name: str, size: str) -> Path:
+        """Return path to a cached card face image, fetching from Scryfall if not yet cached.
+
+        Args:
+            face_name: individual face name (e.g. ``"Lightning Bolt"`` or ``"Delver of Secrets"``).
+            size: ``"normal"`` or ``"large"``.
+
+        Returns:
+            Path to the JPEG file on disk.
+        """
+        if not face_name or not face_name.strip():
+            LOGGER.error("get_face_image: face_name is empty")
+            raise ValueError("get_face_image: face_name is empty")
+        if size not in ("normal", "large"):
+            LOGGER.error("get_face_image: invalid size=%r", size)
+            raise ValueError(f"get_face_image: size must be 'normal' or 'large', got {size!r}")
+
+        path: Path = self._face_image_path(face_name, size)
+        if path.is_file():
+            LOGGER.debug("get_face_image: cache hit face_name=%r size=%s", face_name, size)
+            return path
+
+        LOGGER.info("get_face_image: cache miss face_name=%r size=%s — fetching", face_name, size)
+        image_bytes: bytes = self._fetch_face_image_bytes(face_name, size)
+        return self.save_face_image(face_name, size, image_bytes)
+
+    def save_face_image(self, face_name: str, size: str, image_bytes: bytes) -> Path:
+        """Write image bytes to the face cache and return the file path.
+
+        Used by ``get_face_image`` (lazy cache) and by the batch prefetch in ``app.py``.
+        """
+        if not face_name or not face_name.strip():
+            LOGGER.error("save_face_image: face_name is empty")
+            raise ValueError("save_face_image: face_name is empty")
+        if size not in ("normal", "large"):
+            LOGGER.error("save_face_image: invalid size=%r", size)
+            raise ValueError(f"save_face_image: size must be 'normal' or 'large', got {size!r}")
+        if not image_bytes:
+            LOGGER.error("save_face_image: image_bytes is empty for face_name=%r", face_name)
+            raise ValueError(f"save_face_image: image_bytes is empty for {face_name!r}")
+
+        path: Path = self._face_image_path(face_name, size)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(image_bytes)
+        LOGGER.info("save_face_image: cached face_name=%r size=%s path=%s", face_name, size, path)
+        return path

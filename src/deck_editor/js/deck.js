@@ -7,6 +7,7 @@ import {
   scryfallImageUrlForSide,
 } from './utils.js';
 import { getSettings } from './settings.js';
+import { canAddCopy } from './card-cap.js';
 
 const log = createLogger('deck');
 
@@ -83,6 +84,10 @@ function attachStackQuantityControls(wrap, li, badge) {
   });
   btnPlus.addEventListener('click', (e) => {
     e.stopPropagation();
+    const parentList = li.parentNode;
+    const isMaybe = parentList && parentList.id === 'list-maybe';
+    const cardName = wrap.getAttribute('data-name');
+    if (!isMaybe && cardName && !canAddCopy(cardName)) return;
     setCount(parseInt(wrap.getAttribute('data-count'), 10) + 1);
   });
   btnMinus.addEventListener('mousedown', (e) => {
