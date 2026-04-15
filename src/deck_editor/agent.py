@@ -693,8 +693,8 @@ def _execute_tool_call_body(name: str, args: dict[str, Any]) -> str:
         return _get_deck(url=args["url"])
     if name == "import_online_deck":
         from src.lib.deck_search import get_deck_as_card_list
-        from src.deck_editor.app import _current_deck, _notify_deck_updated, _compute_deck_card_colors
-        from src.obj.deck import Deck
+        from src.deck_editor.app import _current_deck, _notify_deck_updated, merge_deck_into
+        from src.obj.deck import Deck, _cards_from_names
 
         mainboard_raw, sideboard_raw = get_deck_as_card_list(url=args["url"])
         main_names: list[str] = []
@@ -709,15 +709,11 @@ def _execute_tool_call_body(name: str, args: dict[str, Any]) -> str:
         new_deck: Deck = Deck()
         new_deck.add_cards(main_names)
         if sb_names:
-            from src.obj.deck import _cards_from_names
             new_deck.sideboard = _cards_from_names(sb_names)
 
-        _current_deck.cards = new_deck.cards
-        _current_deck.sideboard = new_deck.sideboard
-        card_colors = _compute_deck_card_colors(_current_deck)
-        _current_deck.colors = list(card_colors)
+        merge_deck_into(_current_deck, new_deck)
         _notify_deck_updated()
-        return f"Imported deck with {len(main_names)} mainboard and {len(sb_names)} sideboard cards from {args['url']}."
+        return f"Merged online deck ({len(main_names)} mainboard, {len(sb_names)} sideboard cards) from {args['url']}."
     LOGGER.error("Unknown agent tool: %s", name)
     raise ValueError(f"Unknown tool: {name}")
 

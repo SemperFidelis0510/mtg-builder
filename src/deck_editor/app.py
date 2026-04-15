@@ -271,6 +271,94 @@ def _compute_deck_card_colors(deck: Deck) -> set[str]:
     return colors
 
 
+_BOARD_ATTRS: tuple[str, ...] = ("cards", "sideboard", "maybe")
+
+
+def _count_cards_per_board(deck: Deck) -> dict[str, dict[str, int]]:
+    """Return {canonical_name: {board_attr: count}} for main, sideboard, and maybe."""
+    result: dict[str, dict[str, int]] = {}
+    for attr in _BOARD_ATTRS:
+        for card in getattr(deck, attr):
+            n: str = CardDB.inst().card_display_name(card)
+            if n not in result:
+                result[n] = {}
+            result[n][attr] = result[n].get(attr, 0) + 1
+    return result
+
+
+def _remove_n_copies(board: list[Card], card_name: str, n: int) -> int:
+    """Remove up to *n* copies of *card_name* from *board*. Return count actually removed."""
+    indices: list[int] = []
+    for i, card in enumerate(board):
+        if CardDB.inst().card_display_name(card) == card_name:
+            indices.append(i)
+            if len(indices) >= n:
+                break
+    remove_cards_at_indices(board, indices)
+    return len(indices)
+
+
+def merge_deck_into(current: Deck, imported: Deck) -> None:
+    """Merge *imported* into *current* in-place.
+
+    - Cards in *current* that are absent from *imported* are kept (never removed).
+    - For each card in *imported*, copies on boards the imported deck does NOT use
+      are moved to the board(s) the imported deck specifies.  Only the remaining
+      deficit (after moves) causes new cards to be created.
+    - Commander: set from *imported* only when *current* has none.
+    - Colors: union of both decks' color lists.
+    """
+    cur_per_board: dict[str, dict[str, int]] = _count_cards_per_board(current)
+    imp_per_board: dict[str, dict[str, int]] = _count_cards_per_board(imported)
+
+    total_moved: int = 0
+    total_created: int = 0
+
+    for card_name, imp_boards in imp_per_board.items():
+        cur_boards: dict[str, int] = cur_per_board.get(card_name, {})
+
+        per_target_deficit: dict[str, int] = {}
+        for attr, imp_qty in imp_boards.items():
+            diff: int = imp_qty - cur_boards.get(attr, 0)
+            if diff > 0:
+                per_target_deficit[attr] = diff
+
+        total_deficit: int = sum(per_target_deficit.values())
+        if total_deficit == 0:
+            continue
+
+        freed: int = 0
+        for attr in _BOARD_ATTRS:
+            if cur_boards.get(attr, 0) > 0 and imp_boards.get(attr, 0) == 0:
+                can_free: int = min(cur_boards[attr], total_deficit - freed)
+                if can_free > 0:
+                    _remove_n_copies(getattr(current, attr), card_name, can_free)
+                    freed += can_free
+                    total_moved += can_free
+                if freed >= total_deficit:
+                    break
+
+        for attr, deficit in per_target_deficit.items():
+            new_cards: list[Card] = _cards_from_names([card_name] * deficit)
+            getattr(current, attr).extend(new_cards)
+
+        total_created += total_deficit - freed
+
+    if not current.commander and imported.commander:
+        current.commander = imported.commander
+
+    merged_colors: set[str] = set(current.colors) | set(imported.colors)
+    current.colors = list(merged_colors)
+
+    LOGGER.info(
+        "merge_deck_into: moved %d, created %d cards; commander=%r; colors=%s",
+        total_moved,
+        total_created,
+        current.commander,
+        current.colors,
+    )
+
+
 _VALID_BOARDS: frozenset[str] = frozenset({"main", "maybe", "sideboard", "commander"})
 
 
@@ -841,7 +929,7 @@ async def load_deck(body: dict) -> dict:
     try:
         _current_deck = Deck.from_dict(body)
     except (KeyError, TypeError) as e:
-        LOGGER.error( "load_deck: invalid deck payload: %s", e)
+        LOGGER.error("load_deck: invalid deck payload: %s", e)
         raise HTTPException(status_code=400, detail=f"Invalid deck payload: {e}") from e
     LOGGER.info(
         "load_deck: deck loaded name=%r format=%r commander=%r cards=%d",
@@ -1215,7 +1303,11 @@ async def export_deck(format: str) -> dict:
 
 @app.post("/api/import")
 async def import_deck(request: Request) -> dict:
-    """Import a deck from pasted text. Body: {"text": str, "format": str}. Replaces current deck."""
+    """Import a deck from pasted text. Body: {"text": str, "format": str, "merge"?: bool}.
+
+    When *merge* is true (the default) and a deck is already loaded, imported cards
+    are merged into the current deck instead of replacing it.
+    """
     global _current_deck
     LOGGER.debug("import_deck: POST /api/import received")
     try:
@@ -1229,7 +1321,8 @@ async def import_deck(request: Request) -> dict:
         raise HTTPException(status_code=400, detail="Body must include 'text' and 'format'")
     text: str = body["text"] if isinstance(body["text"], str) else ""
     fmt: str = (body["format"] or "").strip().lower()
-    LOGGER.debug("import_deck: format=%r text_len=%d text_preview=%r", fmt, len(text), (text[:80] + "..." if len(text) > 80 else text))
+    want_merge: bool = body.get("merge", True) is not False
+    LOGGER.debug("import_deck: format=%r merge=%s text_len=%d text_preview=%r", fmt, want_merge, len(text), (text[:80] + "..." if len(text) > 80 else text))
     if fmt not in Deck.EXPORT_FORMATS:
         LOGGER.warning("import_deck: unsupported format: %r allowed: %s", fmt, list(Deck.EXPORT_FORMATS.keys()))
         raise HTTPException(
@@ -1246,7 +1339,12 @@ async def import_deck(request: Request) -> dict:
     except Exception as e:
         LOGGER.error("import_deck: from_export_text unexpected: %s %s", type(e).__name__, e)
         raise
-    _current_deck = deck
+    deck_has_cards: bool = bool(_current_deck.cards or _current_deck.sideboard or _current_deck.maybe)
+    if want_merge and deck_has_cards:
+        LOGGER.info("import_deck: merging into existing deck (cards=%d)", len(_current_deck.cards))
+        merge_deck_into(_current_deck, deck)
+    else:
+        _current_deck = deck
     card_colors = _compute_deck_card_colors(_current_deck)
     existing = set(_current_deck.colors)
     _current_deck.colors = list(existing | card_colors)

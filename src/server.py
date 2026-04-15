@@ -349,7 +349,7 @@ def run_server() -> None:
         for card_name, qty in sideboard.items():
             for _ in range(qty):
                 sb_names.append(card_name)
-        payload: dict = {"mainboard": main_names, "sideboard": sb_names}
+        payload: dict = {"mainboard": main_names, "sideboard": sb_names, "merge": True}
         import_url: str = f"{DECK_EDITOR_BASE_URL.rstrip('/')}/api/import_deck"
         try:
             r = requests.post(import_url, json=payload, timeout=15)

@@ -46,6 +46,14 @@
       color: var(--text);
       font-size: 0.95rem;
     }
+    .import-merge-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+      font-size: 0.9rem;
+    }
+    .import-merge-row input[type="checkbox"] { accent-color: var(--accent); width: 1rem; height: 1rem; }
     .import-actions { display: flex; gap: 0.5rem; justify-content: flex-end; }
     .import-actions button {
       padding: 0.5rem 1rem;
@@ -67,6 +75,10 @@
   <select class="import-format-select" id="importFormatSelect" aria-label="Import format">
     <option value="">Loading…</option>
   </select>
+  <label class="import-merge-row">
+    <input type="checkbox" id="importMergeCheckbox" checked>
+    Merge with current deck
+  </label>
   <div class="import-actions">
     <button type="button" class="import-cancel-btn" id="importCancelBtn">Cancel</button>
     <button type="button" class="import-submit-btn" id="importSubmitBtn">Import</button>
@@ -76,6 +88,7 @@
       var cancelBtn = document.getElementById('importCancelBtn');
       var textarea = document.getElementById('importTextarea');
       var selectEl = document.getElementById('importFormatSelect');
+      var mergeCheckbox = document.getElementById('importMergeCheckbox');
       var submitBtn = document.getElementById('importSubmitBtn');
       var errorEl = document.getElementById('importError');
 
@@ -121,7 +134,7 @@
         fetch('/api/import', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: text, format: format })
+          body: JSON.stringify({ text: text, format: format, merge: mergeCheckbox.checked })
         })
           .then(function (r) {
             if (!r.ok) {
