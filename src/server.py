@@ -162,24 +162,40 @@ def run_server() -> None:
                 for value in raw_missing:
                     if isinstance(value, str):
                         missing.append(value)
-        added_count: int = len(names) - len(missing)
+        rejected: list[dict[str, str]] = []
+        if response_json is not None and "rejected" in response_json:
+            raw_rejected = response_json["rejected"]
+            if isinstance(raw_rejected, list):
+                for entry in raw_rejected:
+                    if isinstance(entry, dict) and "name" in entry and "reason" in entry:
+                        rejected.append({"name": str(entry["name"]), "reason": str(entry["reason"])})
+        added_count: int = len(names) - len(missing) - len(rejected)
         LOGGER.info(
-            "Request completed tool=append_cards_to_deck added=%s requested=%s board=%s missing=%s",
+            "Request completed tool=append_cards_to_deck added=%s requested=%s board=%s missing=%s rejected=%s",
             added_count,
             len(names),
             board,
             missing,
+            [r["name"] for r in rejected],
         )
-        if missing:
+        parts: list[str] = []
+        if added_count > 0:
             added_names: list[str] = list(names)
             for missing_name in missing:
                 if missing_name in added_names:
                     added_names.remove(missing_name)
-            return (
-                f"Added {added_count} card(s) to the {board_label}: {', '.join(added_names)}. "
-                f"Could not find {len(missing)} card(s): {', '.join(missing)}."
-            )
-        return f"Added {len(names)} card(s) to the {board_label}: {', '.join(names)}."
+            for rej in rejected:
+                if rej["name"] in added_names:
+                    added_names.remove(rej["name"])
+            parts.append(f"Added {added_count} card(s) to the {board_label}: {', '.join(added_names)}.")
+        if missing:
+            parts.append(f"Could not find {len(missing)} card(s): {', '.join(missing)}.")
+        if rejected:
+            rej_details: list[str] = [f"{r['name']} ({r['reason']})" for r in rejected]
+            parts.append(f"Could not add {len(rejected)} card(s): {', '.join(rej_details)}.")
+        if not parts:
+            return f"Added {len(names)} card(s) to the {board_label}: {', '.join(names)}."
+        return " ".join(parts)
 
     @mcp.tool()
     def remove_cards_from_deck(card_names: str, board: str = "main", count: int = 1) -> str:

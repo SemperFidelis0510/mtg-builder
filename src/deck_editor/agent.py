@@ -550,19 +550,35 @@ def _execute_tool_call_body(name: str, args: dict[str, Any]) -> str:
             _notify_deck_updated,
             _recompute_and_set_colors,
             _VALID_BOARDS,
+            validate_cards_for_deck,
         )
         from src.obj.deck import _cards_from_names
         if board not in _VALID_BOARDS:
             return f"Error: invalid board {board!r}. Must be main, maybe, sideboard, or commander."
-        cards_to_append: list[Any] = []
+        resolved_cards: list[Any] = []
+        resolved_names: list[str] = []
         not_found: list[str] = []
         for card_name in names_list:
             try:
-                cards_to_append.extend(_cards_from_names([card_name]))
+                cards = _cards_from_names([card_name])
+                resolved_cards.extend(cards)
+                resolved_names.extend([card_name] * len(cards))
             except ValueError:
                 not_found.append(card_name)
-        if not cards_to_append:
+        if not resolved_cards:
             return f"Error: card(s) not found: {', '.join(not_found)}"
+
+        cards_to_append, valid_names, rejected = validate_cards_for_deck(
+            resolved_cards, resolved_names, _current_deck, board,
+        )
+
+        if not cards_to_append:
+            reasons = "; ".join(f"{r['name']}: {r['reason']}" for r in rejected)
+            msg = f"Error: no cards could be added. {reasons}"
+            if not_found:
+                msg += f". Card(s) not found: {', '.join(not_found)}"
+            return msg
+
         if board == "commander":
             if len(names_list) != 1 or len(cards_to_append) != 1:
                 return "Error: board 'commander' accepts exactly one card name per request."
@@ -579,16 +595,19 @@ def _execute_tool_call_body(name: str, args: dict[str, Any]) -> str:
             board_label = "commander slot"
         else:
             board_label = f"{board} board"
+        parts: list[str] = []
+        added_count: int = len(cards_to_append)
+        if added_count > 0:
+            added_names: list[str] = list(valid_names)
+            parts.append(f"Added {added_count} card(s) to the {board_label}: {', '.join(added_names)}.")
         if not_found:
-            added_names: list[str] = list(names_list)
-            for missing_name in not_found:
-                if missing_name in added_names:
-                    added_names.remove(missing_name)
-            return (
-                f"Added {len(added_names)} card(s) to the {board_label}: {', '.join(added_names)}. "
-                f"Could not find {len(not_found)} card(s): {', '.join(not_found)}."
-            )
-        return f"Added {len(names_list)} card(s) to the {board_label}: {', '.join(names_list)}."
+            parts.append(f"Could not find {len(not_found)} card(s): {', '.join(not_found)}.")
+        if rejected:
+            rej_details: list[str] = [f"{r['name']} ({r['reason']})" for r in rejected]
+            parts.append(f"Could not add {len(rejected)} card(s): {', '.join(rej_details)}.")
+        if not parts:
+            return f"Added {len(names_list)} card(s) to the {board_label}: {', '.join(names_list)}."
+        return " ".join(parts)
     if name == "remove_cards_from_deck":
         card_names_str = args["card_names"]
         names_list = parse_card_names_arg(card_names_str)

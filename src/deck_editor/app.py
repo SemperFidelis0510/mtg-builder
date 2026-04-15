@@ -493,8 +493,69 @@ def _move_cards_between_boards(
         move_cards_at_indices(source_list, dest_list, idx_asc)
 
 
+def validate_cards_for_deck(
+    cards: list[Card],
+    card_names: list[str],
+    deck: Deck,
+    board: str,
+) -> tuple[list[Card], list[str], list[dict[str, str]]]:
+    """Validate cards against deck color-identity and format-legality restrictions.
+
+    Returns ``(valid_cards, valid_names, rejected)`` where *rejected* is a list of
+    ``{"name": ..., "reason": ...}`` dicts.  Validation is skipped for the *maybe*
+    board (all cards pass).
+    """
+    if board == "maybe":
+        return list(cards), list(card_names), []
+
+    deck_colors: set[str] = set(deck.colors) if deck.colors else set()
+    deck_format: str = (deck.format or "").strip().lower()
+
+    if not deck_colors and not deck_format:
+        return list(cards), list(card_names), []
+
+    valid_cards: list[Card] = []
+    valid_names: list[str] = []
+    rejected: list[dict[str, str]] = []
+
+    for card, name in zip(cards, card_names):
+        reasons: list[str] = []
+
+        if deck_colors:
+            card_identity: set[str] = set(card.color_identity) if card.color_identity else set()
+            if card_identity and not card_identity.issubset(deck_colors):
+                reasons.append(
+                    f"Color identity [{', '.join(sorted(card_identity))}] "
+                    f"is not within deck colors [{', '.join(sorted(deck_colors))}]"
+                )
+
+        if deck_format:
+            legal_val: str = ""
+            for k, v in card.legalities.items():
+                if k.lower() == deck_format and v:
+                    legal_val = (v if isinstance(v, str) else str(v)).lower()
+                    break
+            if legal_val != "legal":
+                status_str: str = legal_val if legal_val else "not found"
+                reasons.append(f"Not legal in {deck.format} format (status: {status_str})")
+
+        if reasons:
+            rejected.append({"name": name, "reason": "; ".join(reasons)})
+        else:
+            valid_cards.append(card)
+            valid_names.append(name)
+
+    return valid_cards, valid_names, rejected
+
+
 def _recompute_and_set_colors(deck: Deck) -> None:
-    """Recompute deck colors from all boards (main + maybe + sideboard + commander) and update deck.colors."""
+    """Recompute deck colors from all boards (main + maybe + sideboard + commander) and update deck.colors.
+
+    If *deck.colors* is already non-empty (user-set), the existing value is
+    preserved and no recomputation is performed.
+    """
+    if deck.colors:
+        return
     colors: set[str] = set()
     for card in deck.cards:
         for c in getattr(card, "color_identity", []) or []:
@@ -995,15 +1056,30 @@ async def add_card(body: dict) -> dict:
     board: str = body["board"] if "board" in body and isinstance(body["board"], str) else "main"
     if board not in _VALID_BOARDS:
         raise HTTPException(status_code=400, detail=f"Invalid board: {board!r}. Must be {_valid_boards_detail()}.")
-    cards_to_append: list[Card] = []
+    resolved_cards: list[Card] = []
+    resolved_names: list[str] = []
     not_found: list[str] = []
     for name in names_to_add:
         try:
-            cards_to_append.extend(_cards_from_names([name]))
+            cards = _cards_from_names([name])
+            resolved_cards.extend(cards)
+            resolved_names.extend([name] * len(cards))
         except ValueError:
             not_found.append(name)
-    if not cards_to_append:
+    if not resolved_cards:
         raise HTTPException(status_code=404, detail=f"Card(s) not found: {', '.join(not_found)}")
+
+    cards_to_append, valid_names, rejected = validate_cards_for_deck(
+        resolved_cards, resolved_names, _current_deck, board,
+    )
+
+    if not cards_to_append:
+        reasons = "; ".join(f"{r['name']}: {r['reason']}" for r in rejected)
+        detail = f"No cards could be added. {reasons}"
+        if not_found:
+            detail += f". Card(s) not found: {', '.join(not_found)}"
+        raise HTTPException(status_code=400, detail=detail)
+
     if board == "commander":
         if len(names_to_add) != 1 or len(cards_to_append) != 1:
             raise HTTPException(
@@ -1015,13 +1091,14 @@ async def add_card(body: dict) -> dict:
         target_list: list[Card] = _get_board_list(_current_deck, board)
         for card in cards_to_append:
             target_list.append(card)
-    if not_found:
+    if not_found or rejected:
         LOGGER.warning(
-            "add_card: partially added=%s requested=%s board=%s not_found=%s",
+            "add_card: added=%s requested=%s board=%s not_found=%s rejected=%s",
             len(cards_to_append),
             len(names_to_add),
             board,
             not_found,
+            [r["name"] for r in rejected],
         )
     _recompute_and_set_colors(_current_deck)
     _notify_deck_updated()
@@ -1029,6 +1106,8 @@ async def add_card(body: dict) -> dict:
     response: dict = _deck_to_response(_current_deck)
     if not_found:
         response["not_found"] = not_found
+    if rejected:
+        response["rejected"] = rejected
     return response
 
 
