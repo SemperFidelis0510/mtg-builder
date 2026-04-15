@@ -762,21 +762,31 @@
       createColorPalette({ name: 'color', colorlessName: 'colorless', idPrefix: 'c' })
     );
 
-    var params = new URLSearchParams(window.location.search);
-    var deckColors = params.get('deck_colors');
-    var deckFormat = params.get('deck_format');
-    var deckColorless = params.get('deck_colorless') === 'true';
+    function applyDeckSettings(deckColors, deckFormat, deckColorless) {
+      if (deckColorless) {
+        setColorPaletteValues(document.getElementById('colorsContainer'), [], true);
+      } else if (deckColors) {
+        var colors = deckColors.split(',').map(function (c) { return c.trim().toUpperCase(); }).filter(Boolean);
+        setColorPaletteValues(document.getElementById('colorsContainer'), colors, false);
+      }
+      if (deckFormat) {
+        var formatEl = document.getElementById('format_legal');
+        if (formatEl && deckFormat.trim()) formatEl.value = deckFormat.trim();
+      }
+    }
 
-    if (deckColorless) {
-      setColorPaletteValues(document.getElementById('colorsContainer'), [], true);
-    } else if (deckColors) {
-      var colors = deckColors.split(',').map(function (c) { return c.trim().toUpperCase(); }).filter(Boolean);
-      setColorPaletteValues(document.getElementById('colorsContainer'), colors, false);
-    }
-    if (deckFormat) {
-      var formatEl = document.getElementById('format_legal');
-      if (formatEl && deckFormat.trim()) formatEl.value = deckFormat.trim();
-    }
+    var params = new URLSearchParams(window.location.search);
+    applyDeckSettings(
+      params.get('deck_colors'),
+      params.get('deck_format'),
+      params.get('deck_colorless') === 'true'
+    );
+
+    window.addEventListener('message', function (e) {
+      if (e.data && e.data.type === 'update-deck-settings') {
+        applyDeckSettings(e.data.deck_colors || '', e.data.deck_format || '', !!e.data.deck_colorless);
+      }
+    });
   </script>
 </body>
 </html>

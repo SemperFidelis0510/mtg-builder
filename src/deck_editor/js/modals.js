@@ -9,21 +9,37 @@ export function initAdvSearchModal() {
   const modal = document.getElementById('advSearchModal');
   const iframe = document.getElementById('advSearchIframe');
   const closeBtn = document.getElementById('advSearchModalClose');
+  let loaded = false;
+
+  function ensureLoaded() {
+    if (loaded) return;
+    loaded = true;
+    iframe.src = '/search';
+  }
+
+  function pushSettings() {
+    if (!iframe.contentWindow) return;
+    const { colors, format, colorlessOnly } = getSettings();
+    iframe.contentWindow.postMessage({
+      type: 'update-deck-settings',
+      deck_colors: colors && colors.length ? colors.join(',') : '',
+      deck_format: format || '',
+      deck_colorless: !!colorlessOnly,
+    }, '*');
+  }
+
+  ensureLoaded();
+
   document.getElementById('advancedSearchBtn').addEventListener('click', () => {
     log.info('Opening advanced search modal');
-    const params = new URLSearchParams({ t: String(Date.now()) });
-    const { colors, format, colorlessOnly } = getSettings();
-    if (colors && colors.length) params.set('deck_colors', colors.join(','));
-    if (format) params.set('deck_format', format);
-    if (colorlessOnly) params.set('deck_colorless', 'true');
-    iframe.src = '/search?' + params.toString();
+    ensureLoaded();
+    pushSettings();
     modal.classList.add('open');
     modal.setAttribute('aria-hidden', 'false');
   });
   function closeModal() {
     modal.classList.remove('open');
     modal.setAttribute('aria-hidden', 'true');
-    iframe.src = 'about:blank';
   }
   closeBtn.addEventListener('click', closeModal);
   modal.addEventListener('click', (e) => {
