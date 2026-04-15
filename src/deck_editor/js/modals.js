@@ -149,34 +149,69 @@ export function initExportModal() {
 export function initImportModal() {
   const modal = document.getElementById('importFormatModal');
   const closeBtn = document.getElementById('importFormatModalClose');
-  const iframe = document.getElementById('importFormatIframe');
+  const textarea = document.getElementById('importTextarea');
+  const selectEl = document.getElementById('importFormatSelect');
+  const mergeCheckbox = document.getElementById('importMergeCheckbox');
+  const submitBtn = document.getElementById('importSubmitBtn');
+  const cancelBtn = document.getElementById('importCancelBtn');
+  const errorEl = document.getElementById('importError');
   const resultEl = document.getElementById('saveResult');
 
-  document.getElementById('importDeckBtn').addEventListener('click', () => {
+  function openImportModal() {
     log.info('Opening import modal');
     resultEl.textContent = '';
-    iframe.src = '/import-modal?t=' + Date.now();
+    errorEl.textContent = '';
+    textarea.value = '';
     modal.classList.add('open');
     modal.setAttribute('aria-hidden', 'false');
-  });
-
-  function closeImportModal() {
-    modal.classList.remove('open');
-    modal.setAttribute('aria-hidden', 'true');
-    iframe.src = 'about:blank';
+    textarea.focus();
   }
 
-  window.addEventListener('message', (e) => {
-    if (e.data && e.data.type === 'import-done') {
-      closeImportModal();
-      resultEl.textContent = e.data.message || 'Deck imported.';
-      resultEl.style.color = e.data.isError ? '#f88' : '';
+  function closeImportModal(message, isError) {
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden', 'true');
+    if (message) {
+      resultEl.textContent = message;
+      resultEl.style.color = isError ? '#f88' : '';
     }
-  });
+  }
 
-  closeBtn.addEventListener('click', closeImportModal);
+  document.getElementById('importDeckBtn').addEventListener('click', openImportModal);
+  closeBtn.addEventListener('click', () => closeImportModal());
+  cancelBtn.addEventListener('click', () => closeImportModal('Cancelled.', false));
   modal.addEventListener('click', (e) => {
     if (e.target === modal) closeImportModal();
+  });
+
+  submitBtn.addEventListener('click', () => {
+    const text = textarea.value.trim();
+    const format = selectEl.value;
+    errorEl.textContent = '';
+    if (!format) {
+      errorEl.textContent = 'Select a format.';
+      return;
+    }
+    fetch('/api/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, format, merge: mergeCheckbox.checked }),
+    })
+      .then((r) => {
+        if (!r.ok) {
+          return r.json().then((err) => {
+            let msg = 'Import failed.';
+            if (typeof err.detail === 'string') msg = err.detail;
+            else if (Array.isArray(err.detail) && err.detail[0] && err.detail[0].msg)
+              msg = err.detail[0].msg;
+            throw new Error(msg);
+          });
+        }
+        return r.json();
+      })
+      .then(() => closeImportModal('Deck imported.', false))
+      .catch((err) => {
+        errorEl.textContent = err.message || 'Import failed.';
+      });
   });
 }
 

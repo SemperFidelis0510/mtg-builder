@@ -117,6 +117,21 @@ document.getElementById('clearAllBtn').addEventListener('click', () => {
     .catch((err) => { log.error('Clear deck sync failed', err); });
 });
 
+function moveAllCards(fromBoard, toBoard) {
+  log.info('Moving all cards from %s to %s', fromBoard, toBoard);
+  fetch('/api/move_all_cards', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from_board: fromBoard, to_board: toBoard }),
+  })
+    .then((r) => r.ok ? r.json() : Promise.reject(new Error('Move all failed')))
+    .then(() => log.info('Moved all cards from %s to %s', fromBoard, toBoard))
+    .catch((err) => log.error('Move all cards failed', err));
+}
+
+document.getElementById('moveAllToMaybeBtn').addEventListener('click', () => moveAllCards('main', 'maybe'));
+document.getElementById('moveAllToMainBtn').addEventListener('click', () => moveAllCards('maybe', 'main'));
+
 document.getElementById('saveBtn').addEventListener('click', () => {
   log.info('Save button clicked');
   const resultEl = document.getElementById('saveResult');

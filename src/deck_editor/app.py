@@ -1109,6 +1109,40 @@ async def move_card(body: dict) -> dict:
     return _deck_to_response(_current_deck)
 
 
+_MOVE_ALL_BOARDS: frozenset[str] = frozenset({"main", "maybe", "sideboard"})
+
+
+@app.post("/api/move_all_cards")
+async def move_all_cards(body: dict) -> dict:
+    """Move every card from one board to another in one shot. Broadcasts deck_updated via SSE.
+
+    Body: {"from_board": "main"|"maybe"|"sideboard", "to_board": "main"|"maybe"|"sideboard"}
+    """
+    if "from_board" not in body or not isinstance(body["from_board"], str):
+        raise HTTPException(status_code=400, detail=f"'from_board' is required (string: {', '.join(sorted(_MOVE_ALL_BOARDS))})")
+    if "to_board" not in body or not isinstance(body["to_board"], str):
+        raise HTTPException(status_code=400, detail=f"'to_board' is required (string: {', '.join(sorted(_MOVE_ALL_BOARDS))})")
+    from_board: str = body["from_board"]
+    to_board: str = body["to_board"]
+    if from_board not in _MOVE_ALL_BOARDS:
+        raise HTTPException(status_code=400, detail=f"Invalid from_board: {from_board!r}.")
+    if to_board not in _MOVE_ALL_BOARDS:
+        raise HTTPException(status_code=400, detail=f"Invalid to_board: {to_board!r}.")
+    if from_board == to_board:
+        raise HTTPException(status_code=400, detail=f"from_board and to_board must differ (both are {from_board!r})")
+    source: list[Card] = _get_board_list(_current_deck, from_board)
+    dest: list[Card] = _get_board_list(_current_deck, to_board)
+    moved_count: int = len(source)
+    if moved_count == 0:
+        return _deck_to_response(_current_deck)
+    dest.extend(source)
+    source.clear()
+    _recompute_and_set_colors(_current_deck)
+    _notify_deck_updated()
+    LOGGER.info("move_all_cards: moved %d cards from %s to %s", moved_count, from_board, to_board)
+    return _deck_to_response(_current_deck)
+
+
 @app.get("/api/deck")
 async def get_deck() -> dict:
     """Return current deck and removed list (empty deck if none loaded yet)."""
