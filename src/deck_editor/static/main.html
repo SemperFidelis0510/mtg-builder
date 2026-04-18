@@ -93,6 +93,7 @@
       <button type="button" class="tab-btn active" data-tab="board" id="tabBoard">Board</button>
       <button type="button" class="tab-btn" data-tab="statistics" id="tabStatistics">Statistics</button>
       <button type="button" class="tab-btn" data-tab="agent" id="tabAgent">Agent</button>
+      <button type="button" class="tab-btn" data-tab="wishlist" id="tabWishlist">Wishlist</button>
       <button type="button" class="agent-toggle-btn" id="agentPanelToggle" title="Toggle AI Assistant">AI Assistant</button>
     </div>
     <div class="tab-panel active" id="boardTab">
@@ -166,6 +167,18 @@
         </div>
         <div id="agentRulesList" class="agent-rules-list"></div>
       </div>
+    </div>
+    <div class="tab-panel" id="wishlistTab">
+      <div class="wishlist-header">
+        <span class="wishlist-title">Wishlist</span>
+        <div class="wishlist-controls">
+          <button type="button" class="wishlist-sort-btn" id="wishlistSortNameBtn" title="Sort cards alphabetically by name">Sort by Name</button>
+          <button type="button" class="wishlist-sort-btn" id="wishlistSortPriceBtn" title="Sort cards by price (most expensive first)">Sort by Price</button>
+          <button type="button" class="wishlist-view-toggle-btn" id="wishlistViewToggleBtn" aria-pressed="false" title="Toggle between compact list and card images">Card images</button>
+          <span class="wishlist-total-price" id="wishlistTotalPrice">$0.00</span>
+        </div>
+      </div>
+      <ul class="wishlist-card-list" id="list-wishlist"></ul>
     </div>
   </div>
   <div id="cardPreview" class="card-preview" aria-hidden="true"><img src="" alt=""></div>
@@ -328,6 +341,6 @@
     })();
   </script>
 
-  <script type="module" src="/js/main.js?v=7"></script>
+  <script type="module" src="/js/main.js?v=8"></script>
 </body>
 </html>

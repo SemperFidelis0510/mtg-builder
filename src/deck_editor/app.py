@@ -52,6 +52,11 @@ async def add_no_cache_for_static_assets(request: Request, call_next):
     return response
 
 # ---------------------------------------------------------------------------
+# Wishlist persistence
+# ---------------------------------------------------------------------------
+WISHLIST_FILE: Path = Path.home() / ".mtgbuilder" / "wishlist.json"
+
+# ---------------------------------------------------------------------------
 # In-memory state (always a deck; starts empty; POST replaces it)
 # ---------------------------------------------------------------------------
 _current_deck: Deck = Deck()
@@ -235,6 +240,54 @@ def _startup_rag_async() -> None:
     LOGGER.info("_startup_rag_async: launching RAG background thread")
     thread: threading.Thread = threading.Thread(target=_startup_load_rag, daemon=True)
     thread.start()
+
+
+@app.on_event("startup")
+def _startup_ensure_wishlist_file() -> None:
+    """Create ~/.mtgbuilder/wishlist.json with an empty list if it does not exist."""
+    if WISHLIST_FILE.is_file():
+        LOGGER.info("_startup_ensure_wishlist_file: wishlist file exists at %s", WISHLIST_FILE)
+        return
+    WISHLIST_FILE.parent.mkdir(parents=True, exist_ok=True)
+    WISHLIST_FILE.write_text("[]", encoding="utf-8")
+    LOGGER.info("_startup_ensure_wishlist_file: created empty wishlist at %s", WISHLIST_FILE)
+
+
+def _read_wishlist() -> list[dict[str, Any]]:
+    """Read and return the wishlist entries from disk."""
+    if not WISHLIST_FILE.is_file():
+        return []
+    raw: str = WISHLIST_FILE.read_text(encoding="utf-8").strip()
+    if not raw:
+        return []
+    entries: list[dict[str, Any]] = json.loads(raw)
+    if not isinstance(entries, list):
+        LOGGER.error("_read_wishlist: expected list, got %s", type(entries).__name__)
+        raise TypeError(f"_read_wishlist: expected list in wishlist file, got {type(entries).__name__}")
+    return entries
+
+
+def _write_wishlist(entries: list[dict[str, Any]]) -> None:
+    """Atomically write wishlist entries to disk."""
+    WISHLIST_FILE.parent.mkdir(parents=True, exist_ok=True)
+    WISHLIST_FILE.write_text(json.dumps(entries, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def _enrich_wishlist_with_prices(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Attach price_usd to each wishlist entry from the card database."""
+    card_db: CardDB = CardDB.inst()
+    enriched: list[dict[str, Any]] = []
+    for entry in entries:
+        name: str = entry["name"]
+        quantity: int = entry["quantity"]
+        price_usd: float | None = None
+        card: Card | None = card_db.try_resolve_primary_card(name)
+        if card is not None:
+            p: float = getattr(card, "price_usd", -1.0)
+            if p >= 0:
+                price_usd = p
+        enriched.append({"name": name, "quantity": quantity, "price_usd": price_usd})
+    return enriched
 
 
 # Type-group keys used by the client (order: creature, instant, sorcery, artifact, enchantment, planeswalker, battle, land)
@@ -1627,6 +1680,127 @@ async def file_bug_report(body: dict) -> dict:
     relative: str = str(br_dir.relative_to(REPO_ROOT))
     LOGGER.info("Bug report filed: %s (logs: %s)", relative, attached)
     return {"path": relative, "logs_attached": attached}
+
+
+# ---------------------------------------------------------------------------
+# Wishlist routes
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/wishlist")
+async def get_wishlist() -> dict:
+    """Return the full wishlist with prices attached."""
+    entries: list[dict[str, Any]] = _read_wishlist()
+    enriched: list[dict[str, Any]] = _enrich_wishlist_with_prices(entries)
+    total_price: float = 0.0
+    for item in enriched:
+        p = item["price_usd"]
+        if p is not None and p >= 0:
+            total_price += p * item["quantity"]
+    return {"items": enriched, "total_price_usd": round(total_price, 2)}
+
+
+@app.put("/api/wishlist")
+async def put_wishlist(request: Request) -> dict:
+    """Replace the entire wishlist (used after reorder, sort, quantity edits)."""
+    body: Any = await request.json()
+    if not isinstance(body, list):
+        raise HTTPException(status_code=400, detail="Body must be a JSON array of {name, quantity} objects")
+    entries: list[dict[str, Any]] = []
+    for item in body:
+        if not isinstance(item, dict) or "name" not in item:
+            raise HTTPException(status_code=400, detail="Each item must have a 'name' field")
+        qty: int = max(1, int(item["quantity"]) if "quantity" in item else 1)
+        entries.append({"name": str(item["name"]), "quantity": qty})
+    _write_wishlist(entries)
+    LOGGER.info("put_wishlist: saved %d entries", len(entries))
+    enriched: list[dict[str, Any]] = _enrich_wishlist_with_prices(entries)
+    total_price: float = 0.0
+    for it in enriched:
+        p = it["price_usd"]
+        if p is not None and p >= 0:
+            total_price += p * it["quantity"]
+    return {"items": enriched, "total_price_usd": round(total_price, 2)}
+
+
+@app.post("/api/wishlist/add")
+async def add_to_wishlist(request: Request) -> dict:
+    """Append card(s) to the wishlist; increment quantity if already present."""
+    body: dict = await request.json()
+    names_raw: Any = body["names"] if "names" in body else None
+    name_single: Any = body["name"] if "name" in body else None
+    if names_raw is None and name_single is None:
+        raise HTTPException(status_code=400, detail="Provide 'name' (string) or 'names' (list of strings)")
+    names: list[str] = []
+    if names_raw is not None:
+        if not isinstance(names_raw, list):
+            raise HTTPException(status_code=400, detail="'names' must be a list of strings")
+        names = [str(n) for n in names_raw]
+    elif name_single is not None:
+        names = [str(name_single)]
+    entries: list[dict[str, Any]] = _read_wishlist()
+    name_to_idx: dict[str, int] = {e["name"].lower(): i for i, e in enumerate(entries)}
+    for n in names:
+        key: str = n.strip().lower()
+        if not key:
+            continue
+        card_db: CardDB = CardDB.inst()
+        resolved: Card | None = card_db.try_resolve_primary_card(n.strip())
+        display_name: str = card_db.card_display_name(resolved) if resolved is not None else n.strip()
+        existing_key: str = display_name.lower()
+        if existing_key in name_to_idx:
+            idx: int = name_to_idx[existing_key]
+            entries[idx]["quantity"] = entries[idx]["quantity"] + 1
+        else:
+            entries.append({"name": display_name, "quantity": 1})
+            name_to_idx[existing_key] = len(entries) - 1
+    _write_wishlist(entries)
+    LOGGER.info("add_to_wishlist: added %s, total entries=%d", names, len(entries))
+    enriched: list[dict[str, Any]] = _enrich_wishlist_with_prices(entries)
+    total_price: float = 0.0
+    for it in enriched:
+        p = it["price_usd"]
+        if p is not None and p >= 0:
+            total_price += p * it["quantity"]
+    return {"items": enriched, "total_price_usd": round(total_price, 2)}
+
+
+@app.post("/api/wishlist/remove")
+async def remove_from_wishlist(request: Request) -> dict:
+    """Remove card(s) from the wishlist or decrement quantity."""
+    body: dict = await request.json()
+    names_raw: Any = body["names"] if "names" in body else None
+    name_single: Any = body["name"] if "name" in body else None
+    if names_raw is None and name_single is None:
+        raise HTTPException(status_code=400, detail="Provide 'name' (string) or 'names' (list of strings)")
+    names: list[str] = []
+    if names_raw is not None:
+        if not isinstance(names_raw, list):
+            raise HTTPException(status_code=400, detail="'names' must be a list of strings")
+        names = [str(n) for n in names_raw]
+    elif name_single is not None:
+        names = [str(name_single)]
+    count: int = max(1, int(body["count"]) if "count" in body else 1)
+    entries: list[dict[str, Any]] = _read_wishlist()
+    for n in names:
+        key: str = n.strip().lower()
+        if not key:
+            continue
+        for i, e in enumerate(entries):
+            if e["name"].lower() == key:
+                e["quantity"] -= count
+                if e["quantity"] <= 0:
+                    entries.pop(i)
+                break
+    _write_wishlist(entries)
+    LOGGER.info("remove_from_wishlist: removed %s (count=%d), total entries=%d", names, count, len(entries))
+    enriched: list[dict[str, Any]] = _enrich_wishlist_with_prices(entries)
+    total_price: float = 0.0
+    for it in enriched:
+        p = it["price_usd"]
+        if p is not None and p >= 0:
+            total_price += p * it["quantity"]
+    return {"items": enriched, "total_price_usd": round(total_price, 2)}
 
 
 # Static file mounts for JS and CSS (must be after specific routes)

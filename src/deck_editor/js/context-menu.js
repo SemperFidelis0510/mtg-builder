@@ -6,6 +6,7 @@ import {
   moveStackFromMainToMaybe,
   moveStackFromMaybeToMain,
 } from './board-move.js';
+import { addToWishlist } from './wishlist.js';
 
 const log = createLogger('context-menu');
 
@@ -26,6 +27,7 @@ function createMenuElement() {
     '<button type="button" class="context-menu-item" data-action="mtgmintcard">Open in MTGMintCard</button>',
     '<button type="button" class="context-menu-item context-menu-board-move" data-action="move-to-maybe" hidden>Move to maybe board</button>',
     '<button type="button" class="context-menu-item context-menu-board-move" data-action="move-to-main" hidden>Move to main deck</button>',
+    '<button type="button" class="context-menu-item context-menu-wishlist" data-action="add-to-wishlist" hidden>Add to Wishlist</button>',
   ].join('');
   document.body.appendChild(div);
   return div;
@@ -38,8 +40,10 @@ function showMenu(x, y, cardName, stack) {
   const ctx = stack ? getStackBoardContext(stack) : null;
   const moveMaybeBtn = menuEl.querySelector('[data-action="move-to-maybe"]');
   const moveMainBtn = menuEl.querySelector('[data-action="move-to-main"]');
+  const addWishlistBtn = menuEl.querySelector('[data-action="add-to-wishlist"]');
   if (moveMaybeBtn) moveMaybeBtn.hidden = ctx !== 'main';
   if (moveMainBtn) moveMainBtn.hidden = ctx !== 'maybe';
+  if (addWishlistBtn) addWishlistBtn.hidden = ctx !== 'main' && ctx !== 'maybe';
   menuEl.style.left = x + 'px';
   menuEl.style.top = y + 'px';
   menuEl.classList.add('visible');
@@ -113,6 +117,12 @@ function handleMenuAction(e) {
         window.alert(err.message != null ? String(err.message) : String(err));
       });
     }
+    return;
+  }
+  if (action === 'add-to-wishlist') {
+    const name = currentCardName;
+    hideMenu();
+    addToWishlist(name);
     return;
   }
   if (action === 'copy') copyCardName(currentCardName);
