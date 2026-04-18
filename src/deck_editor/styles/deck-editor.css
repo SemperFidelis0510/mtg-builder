@@ -1166,6 +1166,37 @@ body:has(#sideboardToggle:not(:checked)) #section-sideboard { display: none; }
 #cardContextMenu .context-menu-item:hover {
   background: var(--border);
 }
+#cardContextMenu .context-menu-has-submenu {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  padding: 0.4rem 0.75rem;
+  color: var(--text);
+  font-size: 0.9rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+#cardContextMenu .context-menu-has-submenu:hover {
+  background: var(--border);
+}
+.context-submenu {
+  display: none;
+  position: absolute;
+  left: 100%;
+  top: 0;
+  min-width: 160px;
+  padding: 4px 0;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  z-index: 10002;
+}
+#cardContextMenu .context-menu-has-submenu:hover .context-submenu {
+  display: block;
+}
 
 /* =========================================================================
    Agent toggle button (in tab bar)

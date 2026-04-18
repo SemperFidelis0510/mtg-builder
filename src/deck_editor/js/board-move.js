@@ -15,6 +15,7 @@ export function getStackBoardContext(stack) {
   const ul = stack.closest('ul');
   if (!ul || !ul.id) return null;
   if (ul.id === 'list-maybe') return 'maybe';
+  if (ul.id === 'list-wishlist') return 'wishlist';
   for (let i = 0; i < TYPE_KEYS.length; i++) {
     if (ul.id === 'list-' + TYPE_KEYS[i]) return 'main';
   }

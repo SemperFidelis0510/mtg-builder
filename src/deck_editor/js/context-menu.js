@@ -6,11 +6,12 @@ import {
   moveStackFromMainToMaybe,
   moveStackFromMaybeToMain,
 } from './board-move.js';
-import { addToWishlist } from './wishlist.js';
+import { addToWishlist, moveWishlistCardToDeck } from './wishlist.js';
 
 const log = createLogger('context-menu');
 
 const MTGMINTCARD_SEARCH_BASE = 'https://www.mtgmintcard.com/mtg/singles/search?action=normal_search&ed=0&keywords=';
+const CARDKINGDOM_SEARCH_BASE = 'https://www.cardkingdom.com/catalog/search?search=header&filter[name]=';
 
 let menuEl = null;
 let currentCardName = null;
@@ -24,10 +25,11 @@ function createMenuElement() {
     '<button type="button" class="context-menu-item" data-action="copy">Copy card name</button>',
     '<button type="button" class="context-menu-item" data-action="triggers">Extract triggers</button>',
     '<button type="button" class="context-menu-item" data-action="effects">Extract effects</button>',
-    '<button type="button" class="context-menu-item" data-action="mtgmintcard">Open in MTGMintCard</button>',
+    '<div class="context-menu-item context-menu-has-submenu" data-action="buy">Buy &#9654;<div class="context-submenu"><button type="button" class="context-menu-item" data-action="mtgmintcard">MTGMintCard</button><button type="button" class="context-menu-item" data-action="cardkingdom">CardKingdom</button></div></div>',
     '<button type="button" class="context-menu-item context-menu-board-move" data-action="move-to-maybe" hidden>Move to maybe board</button>',
     '<button type="button" class="context-menu-item context-menu-board-move" data-action="move-to-main" hidden>Move to main deck</button>',
     '<button type="button" class="context-menu-item context-menu-wishlist" data-action="add-to-wishlist" hidden>Add to Wishlist</button>',
+    '<button type="button" class="context-menu-item context-menu-wishlist" data-action="move-wishlist-to-deck" hidden>Move to Deck</button>',
   ].join('');
   document.body.appendChild(div);
   return div;
@@ -44,6 +46,8 @@ function showMenu(x, y, cardName, stack) {
   if (moveMaybeBtn) moveMaybeBtn.hidden = ctx !== 'main';
   if (moveMainBtn) moveMainBtn.hidden = ctx !== 'maybe';
   if (addWishlistBtn) addWishlistBtn.hidden = ctx !== 'main' && ctx !== 'maybe';
+  const moveWishlistBtn = menuEl.querySelector('[data-action="move-wishlist-to-deck"]');
+  if (moveWishlistBtn) moveWishlistBtn.hidden = ctx !== 'wishlist';
   menuEl.style.left = x + 'px';
   menuEl.style.top = y + 'px';
   menuEl.classList.add('visible');
@@ -68,6 +72,11 @@ function copyCardName(name) {
 function openInMTGMintCard(name) {
   const encoded = encodeURIComponent(name).replace(/%20/g, '+');
   window.open(MTGMINTCARD_SEARCH_BASE + encoded, '_blank', 'noopener,noreferrer');
+}
+
+function openInCardKingdom(name) {
+  const encoded = encodeURIComponent(name);
+  window.open(CARDKINGDOM_SEARCH_BASE + encoded, '_blank', 'noopener,noreferrer');
 }
 
 async function extractAndCopy(cardName, type) {
@@ -125,8 +134,15 @@ function handleMenuAction(e) {
     addToWishlist(name);
     return;
   }
+  if (action === 'move-wishlist-to-deck') {
+    const name = currentCardName;
+    hideMenu();
+    moveWishlistCardToDeck(name);
+    return;
+  }
   if (action === 'copy') copyCardName(currentCardName);
   if (action === 'mtgmintcard') openInMTGMintCard(currentCardName);
+  if (action === 'cardkingdom') openInCardKingdom(currentCardName);
   if (action === 'triggers') extractAndCopy(currentCardName, 'triggers');
   if (action === 'effects') extractAndCopy(currentCardName, 'effects');
   hideMenu();

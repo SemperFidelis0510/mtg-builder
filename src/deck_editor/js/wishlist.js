@@ -2,7 +2,8 @@
 
 import { createLogger } from './logger.js';
 import { scryfallImageUrlForSide, splitCardFaces } from './utils.js';
-import { getCardFaceIndex } from './deck.js';
+import { getCardFaceIndex, makeCardStackEl, updateSectionHeaderTotal } from './deck.js';
+import { initSortable } from './sortable.js';
 
 const log = createLogger('wishlist');
 
@@ -353,3 +354,55 @@ export function initWishlist() {
     })
     .catch((err) => { log.error('initWishlist: load failed', err); });
 }
+
+export function moveWishlistCardToDeck(cardName) {
+  log.info('moveWishlistCardToDeck: %s', cardName);
+  fetch('/api/card_type?name=' + encodeURIComponent(cardName))
+    .then((r) => {
+      if (!r.ok) throw new Error('card_type lookup failed: ' + r.status);
+      return r.json();
+    })
+    .then((data) => {
+      const typeKey = data.type_key;
+      let targetList = document.getElementById('list-' + typeKey)
+                    || document.getElementById('list-sorcery');
+      if (!targetList) throw new Error('No main deck section for type: ' + typeKey);
+      const existing = targetList.querySelector(
+        '.card-stack[data-name="' + CSS.escape(cardName) + '"]'
+      );
+      if (existing) {
+        const c = parseInt(existing.getAttribute('data-count'), 10) || 1;
+        existing.setAttribute('data-count', String(c + 1));
+        const badge = existing.querySelector('.card-stack-badge');
+        if (badge) badge.textContent = String(c + 1);
+      } else {
+        targetList.appendChild(makeCardStackEl(cardName, 1));
+      }
+      updateSectionHeaderTotal(targetList);
+      const section = targetList.closest('.section');
+      if (section) {
+        section.classList.remove('section-hidden');
+        section.classList.remove('collapsed');
+      }
+      initSortable();
+      return fetch('/api/wishlist/remove', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: cardName, count: 1 }),
+      });
+    })
+    .then((r) => {
+      if (!r.ok) throw new Error('wishlist remove failed: ' + r.status);
+      return r.json();
+    })
+    .then((data) => {
+      wishlistItems = data.items.map((it) => ({ name: it.name, quantity: it.quantity }));
+      wishlistPrices = {};
+      for (const item of data.items) {
+        if (item.price_usd != null) wishlistPrices[item.name] = item.price_usd;
+      }
+      renderWishlist();
+    })
+    .catch((err) => { log.error('moveWishlistCardToDeck failed', err); throw err; });
+}
+
