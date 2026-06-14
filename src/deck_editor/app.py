@@ -1632,35 +1632,60 @@ async def frontend_log(body: dict) -> dict:
 
 
 _BUG_REPORT_DIR: Path = REPO_ROOT / ".ai" / "BR"
+_FEATURE_REQUEST_DIR: Path = REPO_ROOT / ".ai" / "FR"
 
 
-@app.post("/api/bug_report")
-async def file_bug_report(body: dict) -> dict:
-    """File a bug report: save user description and a snapshot of the latest logs to .ai/BR/."""
-    if "description" not in body or not isinstance(body["description"], str):
-        LOGGER.error("file_bug_report: missing or invalid 'description' in body")
-        raise HTTPException(status_code=400, detail="'description' (string) is required")
-    description: str = body["description"].strip()
-    if not description:
-        LOGGER.error("file_bug_report: empty description")
-        raise HTTPException(status_code=400, detail="'description' must not be empty")
-
-    now: datetime = datetime.now()
-    ts: str = now.strftime("%Y-%m-%d_%H-%M-%S")
-    br_dir: Path = _BUG_REPORT_DIR / f"BR_{ts}"
-    br_dir.mkdir(parents=True, exist_ok=True)
-
+def _attach_latest_log(dest_dir: Path) -> list[str]:
+    """Copy the most recent deck editor log into dest_dir; return the attached file names."""
     deck_editor_logs: Path = REPO_ROOT / "logs" / "deck_editor"
     attached: list[str] = []
     if deck_editor_logs.is_dir():
         log_files: list[Path] = sorted(deck_editor_logs.glob("*.log"), key=lambda p: p.stat().st_mtime)
         if log_files:
             latest: Path = log_files[-1]
-            shutil.copy2(latest, br_dir / latest.name)
+            shutil.copy2(latest, dest_dir / latest.name)
             attached.append(latest.name)
+    return attached
+
+
+@app.post("/api/submit_issue")
+async def file_issue(body: dict) -> dict:
+    """File an issue: a bug report (saved to .ai/BR/ with the latest log attached) or a
+    feature request (saved to .ai/FR/ with no log)."""
+    if "description" not in body or not isinstance(body["description"], str):
+        LOGGER.error("file_issue: missing or invalid 'description' in body")
+        raise HTTPException(status_code=400, detail="'description' (string) is required")
+    description: str = body["description"].strip()
+    if not description:
+        LOGGER.error("file_issue: empty description")
+        raise HTTPException(status_code=400, detail="'description' must not be empty")
+
+    if "issue_type" not in body or not isinstance(body["issue_type"], str):
+        LOGGER.error("file_issue: missing or invalid 'issue_type' in body")
+        raise HTTPException(status_code=400, detail="'issue_type' (string) is required")
+    issue_type: str = body["issue_type"].strip().lower()
+    if issue_type not in ("bug", "feature"):
+        LOGGER.error("file_issue: invalid issue_type=%r (expected 'bug' or 'feature')", issue_type)
+        raise HTTPException(status_code=400, detail="'issue_type' must be 'bug' or 'feature'")
+
+    now: datetime = datetime.now()
+    ts: str = now.strftime("%Y-%m-%d_%H-%M-%S")
+
+    if issue_type == "bug":
+        issue_dir: Path = _BUG_REPORT_DIR / f"BR_{ts}"
+        report_name: str = "bug_report.md"
+        title: str = "# Bug Report"
+    else:
+        issue_dir = _FEATURE_REQUEST_DIR / f"FR_{ts}"
+        report_name = "feature_request.md"
+        title = "# Feature Request"
+    issue_dir.mkdir(parents=True, exist_ok=True)
+
+    # Only bug reports get a log snapshot; feature requests do not need one.
+    attached: list[str] = _attach_latest_log(issue_dir) if issue_type == "bug" else []
 
     report_lines: list[str] = [
-        "# Bug Report",
+        title,
         "",
         f"**Date:** {now.strftime('%Y-%m-%d %H:%M:%S')}",
         "",
@@ -1675,11 +1700,11 @@ async def file_bug_report(body: dict) -> dict:
             report_lines.append(f"- `{name}`")
         report_lines.append("")
 
-    (br_dir / "bug_report.md").write_text("\n".join(report_lines), encoding="utf-8")
+    (issue_dir / report_name).write_text("\n".join(report_lines), encoding="utf-8")
 
-    relative: str = str(br_dir.relative_to(REPO_ROOT))
-    LOGGER.info("Bug report filed: %s (logs: %s)", relative, attached)
-    return {"path": relative, "logs_attached": attached}
+    relative: str = str(issue_dir.relative_to(REPO_ROOT))
+    LOGGER.info("Issue filed: type=%s path=%s (logs: %s)", issue_type, relative, attached)
+    return {"path": relative, "issue_type": issue_type, "logs_attached": attached}
 
 
 # ---------------------------------------------------------------------------

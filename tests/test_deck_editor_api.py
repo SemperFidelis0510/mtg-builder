@@ -231,18 +231,55 @@ def test_search_semantic_requires_rag(client: TestClient) -> None:
     assert r.status_code == 503
 
 
-@pytest.mark.integration
-def test_bug_report_writes_to_overridden_dir(client: TestClient, tmp_path, monkeypatch) -> None:
-    # Avoid writing into the repo's .ai/BR during tests.
+def _redirect_issue_dirs(monkeypatch, tmp_path) -> None:
+    """Point the issue/bug/feature directories and log source under tmp_path for tests."""
     import src.deck_editor.app as app_mod
 
-    # The endpoint computes a repo-relative path using REPO_ROOT, so keep the bug report dir under it.
+    # The endpoint computes a repo-relative path using REPO_ROOT, so keep all dirs under it.
     monkeypatch.setattr(app_mod, "REPO_ROOT", tmp_path, raising=True)
     monkeypatch.setattr(app_mod, "_BUG_REPORT_DIR", tmp_path / ".ai" / "BR", raising=True)
-    r = client.post("/api/bug_report", json={"description": "test bug"})
+    monkeypatch.setattr(app_mod, "_FEATURE_REQUEST_DIR", tmp_path / ".ai" / "FR", raising=True)
+
+
+@pytest.mark.integration
+def test_submit_issue_bug_attaches_log(client: TestClient, tmp_path, monkeypatch) -> None:
+    _redirect_issue_dirs(monkeypatch, tmp_path)
+    # A log file under logs/deck_editor should be snapshotted into the bug report folder.
+    logs_dir = tmp_path / "logs" / "deck_editor"
+    logs_dir.mkdir(parents=True)
+    (logs_dir / "mtg_test.log").write_text("log line", encoding="utf-8")
+
+    r = client.post("/api/submit_issue", json={"description": "test bug", "issue_type": "bug"})
     assert r.status_code == 200
     out = r.json()
-    assert "path" in out
-    # Ensure the directory was created under our tmp dir.
+    assert out["issue_type"] == "bug"
+    assert out["logs_attached"] == ["mtg_test.log"]
     assert (tmp_path / ".ai" / "BR").is_dir()
+    assert (tmp_path / out["path"] / "bug_report.md").is_file()
+    assert (tmp_path / out["path"] / "mtg_test.log").is_file()
+
+
+@pytest.mark.integration
+def test_submit_issue_feature_has_no_log(client: TestClient, tmp_path, monkeypatch) -> None:
+    _redirect_issue_dirs(monkeypatch, tmp_path)
+    # Even if a log exists, feature requests must not copy it.
+    logs_dir = tmp_path / "logs" / "deck_editor"
+    logs_dir.mkdir(parents=True)
+    (logs_dir / "mtg_test.log").write_text("log line", encoding="utf-8")
+
+    r = client.post("/api/submit_issue", json={"description": "please add X", "issue_type": "feature"})
+    assert r.status_code == 200
+    out = r.json()
+    assert out["issue_type"] == "feature"
+    assert out["logs_attached"] == []
+    assert (tmp_path / ".ai" / "FR").is_dir()
+    assert (tmp_path / out["path"] / "feature_request.md").is_file()
+    assert not list((tmp_path / out["path"]).glob("*.log"))
+
+
+@pytest.mark.integration
+def test_submit_issue_rejects_invalid_or_missing_type(client: TestClient, tmp_path, monkeypatch) -> None:
+    _redirect_issue_dirs(monkeypatch, tmp_path)
+    assert client.post("/api/submit_issue", json={"description": "x", "issue_type": "nonsense"}).status_code == 400
+    assert client.post("/api/submit_issue", json={"description": "x"}).status_code == 400
 

@@ -84,7 +84,7 @@
       </div>
       <div class="tools-row">
         <button type="button" class="save-btn" id="synergyCheckerBtn" title="Check synergy between two cards">Synergy Checker</button>
-        <button type="button" class="save-btn bug-report-btn" id="bugReportBtn" title="Report a bug with the deck editor">Report Bug</button>
+        <button type="button" class="save-btn issue-btn" id="issueBtn" title="Report a bug or request a feature">Report Issue</button>
       </div>
     </div>
   </div>
@@ -281,17 +281,22 @@
     </div>
   </div>
 
-  <div class="bug-report-modal" id="bugReportModal" aria-hidden="true" role="dialog" aria-labelledby="bugReportTitle">
-    <div class="bug-report-modal-backdrop"></div>
-    <div class="bug-report-modal-content">
-      <h2 class="bug-report-modal-title" id="bugReportTitle">Report a Bug</h2>
-      <p class="bug-report-modal-hint">Describe what went wrong. The latest server logs will be attached automatically.</p>
-      <textarea class="bug-report-modal-textarea" id="bugReportTextarea" rows="6" placeholder="Describe the bug..."></textarea>
-      <div class="bug-report-modal-actions">
-        <button type="button" class="bug-report-modal-cancel" id="bugReportCancel">Cancel</button>
-        <button type="button" class="bug-report-modal-submit" id="bugReportSubmit">Submit</button>
+  <div class="issue-modal" id="issueModal" aria-hidden="true" role="dialog" aria-labelledby="issueTitle">
+    <div class="issue-modal-backdrop"></div>
+    <div class="issue-modal-content">
+      <h2 class="issue-modal-title" id="issueTitle">Submit an Issue</h2>
+      <label class="issue-modal-label" for="issueTypeSelect">Issue type</label>
+      <select class="issue-modal-select" id="issueTypeSelect">
+        <option value="bug">Bug Report</option>
+        <option value="feature">Feature Request</option>
+      </select>
+      <p class="issue-modal-hint" id="issueHint">Describe what went wrong. The latest server logs will be attached automatically.</p>
+      <textarea class="issue-modal-textarea" id="issueTextarea" rows="6" placeholder="Describe the bug..."></textarea>
+      <div class="issue-modal-actions">
+        <button type="button" class="issue-modal-cancel" id="issueCancel">Cancel</button>
+        <button type="button" class="issue-modal-submit" id="issueSubmit">Submit</button>
       </div>
-      <p class="bug-report-modal-status" id="bugReportStatus"></p>
+      <p class="issue-modal-status" id="issueStatus"></p>
     </div>
   </div>
 

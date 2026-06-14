@@ -231,18 +231,37 @@ export function initImportModal() {
   });
 }
 
-export function initBugReportModal() {
-  const modal = document.getElementById('bugReportModal');
-  const backdrop = modal.querySelector('.bug-report-modal-backdrop');
-  const textarea = document.getElementById('bugReportTextarea');
-  const submitBtn = document.getElementById('bugReportSubmit');
-  const cancelBtn = document.getElementById('bugReportCancel');
-  const statusEl = document.getElementById('bugReportStatus');
+const ISSUE_HINTS = {
+  bug: 'Describe what went wrong. The latest server logs will be attached automatically.',
+  feature: 'Describe the feature you would like. No logs are attached for feature requests.',
+};
+const ISSUE_PLACEHOLDERS = {
+  bug: 'Describe the bug...',
+  feature: 'Describe the feature you would like...',
+};
+
+export function initIssueModal() {
+  const modal = document.getElementById('issueModal');
+  const backdrop = modal.querySelector('.issue-modal-backdrop');
+  const typeSelect = document.getElementById('issueTypeSelect');
+  const hintEl = document.getElementById('issueHint');
+  const textarea = document.getElementById('issueTextarea');
+  const submitBtn = document.getElementById('issueSubmit');
+  const cancelBtn = document.getElementById('issueCancel');
+  const statusEl = document.getElementById('issueStatus');
+
+  function applyType() {
+    const type = typeSelect.value;
+    hintEl.textContent = ISSUE_HINTS[type];
+    textarea.placeholder = ISSUE_PLACEHOLDERS[type];
+  }
 
   function openModal() {
+    typeSelect.value = 'bug';
+    applyType();
     textarea.value = '';
     statusEl.textContent = '';
-    statusEl.className = 'bug-report-modal-status';
+    statusEl.className = 'issue-modal-status';
     submitBtn.disabled = false;
     modal.classList.add('visible');
     modal.setAttribute('aria-hidden', 'false');
@@ -254,40 +273,43 @@ export function initBugReportModal() {
     modal.setAttribute('aria-hidden', 'true');
   }
 
-  document.getElementById('bugReportBtn').addEventListener('click', () => { log.info('Opening bug report modal'); openModal(); });
+  typeSelect.addEventListener('change', applyType);
+  document.getElementById('issueBtn').addEventListener('click', () => { log.info('Opening issue modal'); openModal(); });
   cancelBtn.addEventListener('click', closeModal);
   backdrop.addEventListener('click', closeModal);
 
   submitBtn.addEventListener('click', () => {
     const description = textarea.value.trim();
+    const issueType = typeSelect.value;
     if (!description) {
       statusEl.textContent = 'Please enter a description.';
-      statusEl.className = 'bug-report-modal-status error';
+      statusEl.className = 'issue-modal-status error';
       return;
     }
     submitBtn.disabled = true;
     statusEl.textContent = 'Submitting...';
-    statusEl.className = 'bug-report-modal-status';
+    statusEl.className = 'issue-modal-status';
 
-    fetch('/api/bug_report', {
+    fetch('/api/submit_issue', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ description }),
+      body: JSON.stringify({ description, issue_type: issueType }),
     })
       .then((r) => {
         if (!r.ok) return r.json().then((err) => { throw new Error(err.detail || 'Failed'); });
         return r.json();
       })
       .then((data) => {
-        log.info('Bug report filed at', data.path);
-        statusEl.textContent = 'Bug report filed: ' + data.path;
-        statusEl.className = 'bug-report-modal-status success';
+        const label = data.issue_type === 'feature' ? 'Feature request' : 'Bug report';
+        log.info('Issue filed at', data.path);
+        statusEl.textContent = label + ' filed: ' + data.path;
+        statusEl.className = 'issue-modal-status success';
         setTimeout(closeModal, 2000);
       })
       .catch((err) => {
-        log.error('Bug report submission failed', err.message);
+        log.error('Issue submission failed', err.message);
         statusEl.textContent = 'Error: ' + (err.message || 'submission failed');
-        statusEl.className = 'bug-report-modal-status error';
+        statusEl.className = 'issue-modal-status error';
         submitBtn.disabled = false;
       });
   });

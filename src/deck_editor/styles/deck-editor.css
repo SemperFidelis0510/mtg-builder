@@ -239,8 +239,8 @@ body {
 }
 .rag-loading-popup-dismiss:hover { opacity: 0.9; }
 
-/* Bug report modal */
-.bug-report-modal {
+/* Issue submission modal */
+.issue-modal {
   display: none;
   position: fixed;
   inset: 0;
@@ -250,13 +250,13 @@ body {
   padding: 1rem;
   box-sizing: border-box;
 }
-.bug-report-modal.visible { display: flex; }
-.bug-report-modal-backdrop {
+.issue-modal.visible { display: flex; }
+.issue-modal-backdrop {
   position: absolute;
   inset: 0;
   background: rgba(0, 0, 0, 0.65);
 }
-.bug-report-modal-content {
+.issue-modal-content {
   position: relative;
   background: var(--panel);
   border: 1px solid var(--border);
@@ -266,17 +266,42 @@ body {
   max-width: 460px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
-.bug-report-modal-title {
-  margin: 0 0 0.25rem 0;
+.issue-modal-title {
+  margin: 0 0 0.5rem 0;
   font-size: 1.15rem;
   color: var(--text);
 }
-.bug-report-modal-hint {
+.issue-modal-label {
+  display: block;
+  margin: 0 0 0.25rem 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #a0a0a0;
+}
+.issue-modal-select {
+  display: block;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.75rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+.issue-modal-select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.issue-modal-hint {
   margin: 0 0 0.75rem 0;
   font-size: 0.85rem;
   color: #a0a0a0;
 }
-.bug-report-modal-textarea {
+.issue-modal-textarea {
   display: block;
   width: 100%;
   min-height: 100px;
@@ -290,18 +315,18 @@ body {
   resize: vertical;
   box-sizing: border-box;
 }
-.bug-report-modal-textarea:focus {
+.issue-modal-textarea:focus {
   outline: none;
   border-color: var(--accent);
 }
-.bug-report-modal-actions {
+.issue-modal-actions {
   display: flex;
   justify-content: flex-end;
   gap: 0.5rem;
   margin-top: 0.75rem;
 }
-.bug-report-modal-cancel,
-.bug-report-modal-submit {
+.issue-modal-cancel,
+.issue-modal-submit {
   padding: 0.45rem 1.1rem;
   border: none;
   border-radius: 6px;
@@ -309,29 +334,29 @@ body {
   font-weight: 600;
   cursor: pointer;
 }
-.bug-report-modal-cancel {
+.issue-modal-cancel {
   background: var(--border);
   color: var(--text);
 }
-.bug-report-modal-cancel:hover { opacity: 0.85; }
-.bug-report-modal-submit {
+.issue-modal-cancel:hover { opacity: 0.85; }
+.issue-modal-submit {
   background: var(--accent);
   color: #fff;
 }
-.bug-report-modal-submit:hover { opacity: 0.9; }
-.bug-report-modal-submit:disabled {
+.issue-modal-submit:hover { opacity: 0.9; }
+.issue-modal-submit:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
-.bug-report-modal-status {
+.issue-modal-status {
   margin: 0.5rem 0 0 0;
   font-size: 0.85rem;
   color: #a0a0a0;
   min-height: 1.2em;
 }
-.bug-report-modal-status.error { color: #f88; }
-.bug-report-modal-status.success { color: #6f6; }
-.bug-report-btn { color: #f0c040 !important; }
+.issue-modal-status.error { color: #f88; }
+.issue-modal-status.success { color: #6f6; }
+.issue-btn { color: #f0c040 !important; }
 
 .export-format-modal {
   display: none;
