@@ -97,32 +97,25 @@ def _download_and_cache_image(face_name: str, url: str, size: str) -> None:
         LOGGER.error("_download_and_cache_image: failed face_name=%r size=%s err=%s", face_name, size, e)
 
 
-def _prefetch_deck_images(deck: Deck) -> None:
-    """Prefetch and disk-cache card face images for all cards in *deck*.
+def _prefetch_images_for_names(names: set[str]) -> None:
+    """Prefetch and disk-cache card face images (normal + large) for *names*.
 
     Uses the Scryfall ``/cards/collection`` batch endpoint to discover image URLs,
     then downloads and saves each face image via ``CardDB.save_face_image``.
-    Best-effort: logs errors but does not raise (deck load should still succeed).
+    Best-effort: logs errors but does not raise (callers should not fail on prefetch).
     """
     try:
         import requests
 
-        names: set[str] = set()
-        for c in deck.cards:
-            names.add(c.name)
-        for c in deck.maybe:
-            names.add(c.name)
-        for c in deck.sideboard:
-            names.add(c.name)
-        if deck.commander:
-            names.add(deck.commander)
+        if not names:
+            return
 
         face_entries: list[tuple[str, int]] = []
         for n in sorted(names):
             try:
                 faces: list[Card] = CardDB.inst().resolve_faces(n)
             except Exception as e:
-                LOGGER.error("_prefetch_deck_images: resolve_faces failed name=%r err=%s", n, e)
+                LOGGER.error("_prefetch_images_for_names: resolve_faces failed name=%r err=%s", n, e)
                 continue
             for i, f in enumerate(faces):
                 face_entries.append((f.name, i))
@@ -142,18 +135,18 @@ def _prefetch_deck_images(deck: Deck) -> None:
                     headers={"Accept": "application/json", "User-Agent": "MTG-MCP/1.0"},
                 )
                 if r.status_code == 429:
-                    LOGGER.error("_prefetch_deck_images: rate limited (429); backing off attempt=%d", attempt + 1)
+                    LOGGER.error("_prefetch_images_for_names: rate limited (429); backing off attempt=%d", attempt + 1)
                     CardDB._sleep_for_retry_after(r.headers, attempt)
                     continue
                 break
             if r is None or not r.ok:
                 status = r.status_code if r is not None else "n/a"
-                LOGGER.error("_prefetch_deck_images: scryfall collection failed status=%s", status)
+                LOGGER.error("_prefetch_images_for_names: scryfall collection failed status=%s", status)
                 return
             payload = r.json()
             data = payload["data"] if isinstance(payload, dict) and "data" in payload else None
             if not isinstance(data, list):
-                LOGGER.error("_prefetch_deck_images: invalid scryfall payload (missing data list)")
+                LOGGER.error("_prefetch_images_for_names: invalid scryfall payload (missing data list)")
                 return
 
             # Collect (face_name, url, size) tuples to download.
@@ -192,7 +185,21 @@ def _prefetch_deck_images(deck: Deck) -> None:
             if i + BATCH_SIZE < len(face_entries):
                 time.sleep(DELAY_BETWEEN_BATCHES_S)
     except Exception as e:
-        LOGGER.error("_prefetch_deck_images: unexpected failure: %s", e)
+        LOGGER.error("_prefetch_images_for_names: unexpected failure: %s", e)
+
+
+def _prefetch_deck_images(deck: Deck) -> None:
+    """Prefetch and disk-cache face images for every card in *deck* (all boards + commander)."""
+    names: set[str] = set()
+    for c in deck.cards:
+        names.add(c.name)
+    for c in deck.maybe:
+        names.add(c.name)
+    for c in deck.sideboard:
+        names.add(c.name)
+    if deck.commander:
+        names.add(deck.commander)
+    _prefetch_images_for_names(names)
 
 
 def _broadcast(event_type: str, data_dict: dict) -> None:
@@ -1209,6 +1216,11 @@ async def add_card(body: dict) -> dict:
             [r["name"] for r in rejected],
         )
     _recompute_and_set_colors(_current_deck)
+    added_names: set[str] = {c.name for c in cards_to_append}
+    if added_names:
+        threading.Thread(
+            target=_prefetch_images_for_names, args=(added_names,), daemon=True,
+        ).start()
     _notify_deck_updated()
     LOGGER.info("add_card: added %d cards to %s", len(cards_to_append), board)
     response: dict = _deck_to_response(_current_deck)
@@ -1600,6 +1612,7 @@ async def update_deck(body: dict) -> dict:
         len(_current_deck.maybe),
         len(_current_deck.sideboard),
     )
+    threading.Thread(target=_prefetch_deck_images, args=(_current_deck,), daemon=True).start()
     _notify_deck_updated()
     return _deck_to_response(_current_deck)
 
