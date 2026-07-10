@@ -4,7 +4,7 @@
 
 ## Description
 
-feature request: to be able to drag a card into the chat
+feature request: to be able to drag a card into the chat. it should show with a nice UI as a dragged card in the user prompt, but when actually sent to the agent it should just paste the card name in quotes.
 
 ## Attached Logs
 

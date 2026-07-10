@@ -1682,9 +1682,62 @@ body.agent-panel-open {
   color: var(--text);
   font-size: 0.9rem;
   font-family: inherit;
-  resize: none;
+  line-height: 1.5;
+  min-height: 1.5em;
   max-height: 100px;
   overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  cursor: text;
+}
+.agent-chat-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.agent-chat-input:empty:before {
+  content: attr(data-placeholder);
+  color: rgba(232, 232, 232, 0.4);
+  pointer-events: none;
+}
+.agent-chat-input.drag-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(233, 69, 96, 0.35) inset;
+}
+.agent-card-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin: 0 1px;
+  padding: 0.05rem 0.1rem 0.05rem 0.45rem;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 10px;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  vertical-align: middle;
+  white-space: nowrap;
+  user-select: none;
+}
+.agent-card-chip-name {
+  white-space: nowrap;
+}
+.agent-card-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.25);
+  color: #fff;
+  font-size: 0.78rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.agent-card-chip-remove:hover {
+  background: rgba(0, 0, 0, 0.5);
 }
 .agent-send-btn {
   width: 36px;

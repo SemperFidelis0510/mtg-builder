@@ -1,6 +1,7 @@
 /** Agent chat panel: toggle, streaming SSE, markdown, tool calls, conversations. */
 
 import { createLogger } from './logger.js';
+import { getPromptText, setPromptText, clearPrompt, initPromptEditor } from './prompt-editor.js';
 
 const log = createLogger('agent-chat');
 
@@ -196,9 +197,7 @@ function _onEditUserMessage(row, messageIndex) {
   const bubble = row.querySelector('.agent-msg-user');
   if (!bubble) return;
   const text = bubble.textContent;
-  chatInput.value = text;
-  chatInput.style.height = 'auto';
-  chatInput.style.height = Math.min(chatInput.scrollHeight, 100) + 'px';
+  setPromptText(chatInput, text);
   chatInput.focus();
   _truncateFromIndex = messageIndex;
   let n = row.nextSibling;
@@ -439,19 +438,9 @@ function _setStreamingControls(active) {
 }
 
 function _restorePromptToInput(promptText) {
-  chatInput.value = promptText;
-  chatInput.style.height = 'auto';
-  chatInput.style.height = Math.min(chatInput.scrollHeight, 100) + 'px';
+  setPromptText(chatInput, promptText);
   chatInput.focus();
 }
-
-// -----------------------------------------------------------------------
-// Auto-resize textarea
-// -----------------------------------------------------------------------
-chatInput.addEventListener('input', () => {
-  chatInput.style.height = 'auto';
-  chatInput.style.height = Math.min(chatInput.scrollHeight, 100) + 'px';
-});
 
 // -----------------------------------------------------------------------
 // Send message (streaming SSE)
@@ -462,7 +451,7 @@ stopBtn.addEventListener('click', () => {
 });
 
 async function sendMessage() {
-  const rawMessage = chatInput.value;
+  const rawMessage = getPromptText(chatInput);
   const text = rawMessage.trim();
   if (!text || _sending) return;
   log.info('sendMessage: conv=%s len=%d', _currentConvId, text.length);
@@ -474,8 +463,7 @@ async function sendMessage() {
   sendBtn.disabled = true;
   _setStreamingControls(true);
   _setEditButtonsDisabled(true);
-  chatInput.value = '';
-  chatInput.style.height = 'auto';
+  clearPrompt(chatInput);
 
   const userRow = _appendUserMessage(text, _convMessageCount);
   _showTypingIndicator();
@@ -641,6 +629,7 @@ chatInput.addEventListener('keydown', (e) => {
 // -----------------------------------------------------------------------
 
 export async function initAgentChat() {
+  initPromptEditor(chatInput);
   await checkApiKey();
   await loadConversationList();
 }
