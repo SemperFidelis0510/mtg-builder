@@ -27,3 +27,41 @@ def test_requested_name_matches_mdfc_full_string_to_face_card() -> None:
     db.get_card_data()
     front = db.resolve_primary_card("Fell the Profane")
     assert requested_name_matches_deck_card(front, "Fell the Profane // Fell Mire")
+
+
+@pytest.mark.skipif(not ATOMIC_CARDS_PATH.is_file(), reason="AtomicCards.json not present")
+def test_card_arena_export_name_mdfc_uses_front_face() -> None:
+    from src.lib.cardDB import CardDB
+
+    db = CardDB.inst()
+    card = db.resolve_primary_card("Bala Ged Recovery // Bala Ged Sanctuary")
+    assert db.card_arena_export_name(card) == "Bala Ged Recovery"
+
+
+@pytest.mark.skipif(not ATOMIC_CARDS_PATH.is_file(), reason="AtomicCards.json not present")
+def test_card_arena_export_name_split_uses_full_name() -> None:
+    from src.lib.cardDB import CardDB
+
+    db = CardDB.inst()
+    card = db.resolve_primary_card("Fire // Ice")
+    assert db.card_arena_export_name(card) == "Fire // Ice"
+
+
+@pytest.mark.skipif(not ATOMIC_CARDS_PATH.is_file(), reason="AtomicCards.json not present")
+def test_deck_export_arena_mdfc_lines() -> None:
+    from src.obj.deck import Deck
+
+    deck = Deck()
+    deck.add_cards(
+        [
+            "Bala Ged Recovery // Bala Ged Sanctuary",
+            "Turntimber Symbiosis // Turntimber, Serpentine Wood",
+            "Fire // Ice",
+        ]
+    )
+    text = deck.export("arena")
+    assert "1 Bala Ged Recovery" in text
+    assert "Bala Ged Sanctuary" not in text
+    assert "Turntimber, Serpentine Wood" not in text
+    assert "1 Fire // Ice" in text
+    assert "Bala Ged Recovery //" not in text

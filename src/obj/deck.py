@@ -264,14 +264,16 @@ class Deck:
         if fmt == "json":
             return json.dumps(self.to_dict(), indent=2)
         if fmt == "arena":
-            names: list[str] = self._all_card_names()
+            from src.lib.cardDB import CardDB
+
+            card_db = CardDB.inst()
+            names: list[str] = [card_db.card_arena_export_name(c) for c in self.cards]
             counts: Counter[str] = Counter(names)
             lines: list[str] = [
                 f"{n} {name}" for name, n in sorted(counts.items(), key=lambda x: (-x[1], x[0]))
             ]
             if self.sideboard:
-                from src.lib.cardDB import CardDB
-                sb_names: list[str] = [CardDB.inst().card_display_name(c) for c in self.sideboard]
+                sb_names: list[str] = [card_db.card_arena_export_name(c) for c in self.sideboard]
                 sb_counts: Counter[str] = Counter(sb_names)
                 if lines:
                     lines.append("")

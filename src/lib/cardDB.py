@@ -211,6 +211,35 @@ class CardDB:
         return card.name
 
     @staticmethod
+    def _is_split_card(faces: list[Card]) -> bool:
+        """True for classic split cards (both faces instant or both sorcery, neither a land)."""
+        if len(faces) < 2:
+            return False
+        type_lines: list[str] = [f.type_line.lower() for f in faces[:2]]
+        if "land" in type_lines[0] or "land" in type_lines[1]:
+            return False
+        both_instant: bool = "instant" in type_lines[0] and "instant" in type_lines[1]
+        both_sorcery: bool = "sorcery" in type_lines[0] and "sorcery" in type_lines[1]
+        return both_instant or both_sorcery
+
+    def card_arena_export_name(self, card: Card) -> str:
+        """Name to use in MTG Arena deck import/export lines.
+
+        Arena accepts full ``//`` names for split cards but expects the front face
+        only for MDFCs, transform DFCs, adventures, and similar multi-face cards.
+        """
+        lookup_name: str = card.canonical_name if card.canonical_name else card.name
+        faces: list[Card] = self.resolve_faces(lookup_name)
+        if len(faces) >= 2 and self._is_split_card(faces):
+            return self.card_display_name(card)
+        primary: Card = faces[0]
+        if primary.face_name:
+            return primary.face_name
+        if primary.face_names:
+            return primary.face_names[0]
+        return self.card_display_name(card)
+
+    @staticmethod
     def _name_query_matches_card(card: Card, query_lower: str) -> bool:
         aliases: list[str] = []
         aliases.append(card.name.lower())
