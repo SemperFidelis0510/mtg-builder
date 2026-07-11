@@ -89,6 +89,22 @@ This step benefits significantly from a CUDA GPU but works on CPU as well (just 
 
 The server communicates over **stdio** and is intended to be launched by Cursor via the `mcp.json` config.
 
+## Updating the Card Database
+
+When new sets release (or you want fresh Scryfall prices), run:
+
+```bat
+.\install.bat update
+```
+
+This runs three steps in order:
+
+1. **Download** — force-refresh `data/AtomicCards.json` from MTGJSON.
+2. **Prices** — refresh USD prices from Scryfall into `data/prices.json`.
+3. **Rebuild** — clean-rebuild every ChromaDB collection (`mtg_cards`, `mtg_triggers`, `mtg_effects`) so cards removed or renamed upstream do not leave stale rows behind.
+
+**Restart required.** The MCP server (`server.bat`) and the deck editor (`editor.bat`) cache card JSON, name indexes, and ChromaDB client handles in memory. Stop them before running the update — or restart them afterward — so they pick up the new data.
+
 ## Cursor Integration
 
 The repo includes an `mcp.json` that Cursor reads automatically:

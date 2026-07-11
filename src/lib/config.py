@@ -22,3 +22,15 @@ CONFIG_DIR: Path = REPO_ROOT / "src" / "config"
 THRESHOLDS_INI_PATH: Path = CONFIG_DIR / "thresholds.ini"
 KEYWORD_EXPLANATIONS_PATH: Path = CONFIG_DIR / "keyword_explanations.json"
 DECK_SITES_KEYS_PATH: Path = CONFIG_DIR / "deck_sites_keys.json"
+
+_MTGJSON_LEGALITY_ALIASES: dict[str, str] = {
+    "historicbrawl": "brawl",
+}
+
+
+def mtgjson_legality_key(format_name: str) -> str:
+    """Return the normalized MTGJSON legality key for an application format."""
+    normalized: str = format_name.strip().lower()
+    if normalized in _MTGJSON_LEGALITY_ALIASES:
+        return _MTGJSON_LEGALITY_ALIASES[normalized]
+    return normalized

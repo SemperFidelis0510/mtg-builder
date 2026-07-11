@@ -19,6 +19,7 @@ from src.lib.config import (
     EFFECTS_COLLECTION_NAME,
     MODEL_NAME,
     TRIGGERS_COLLECTION_NAME,
+    mtgjson_legality_key,
 )
 from src.lib.rag_device import embedding_torch_device
 from src.lib.prices import load_prices
@@ -720,7 +721,7 @@ class CardDB:
         keywords_lower: str = keywords.strip().lower() if keywords else ""
         subtype_lower: str = subtype.strip().lower() if subtype else ""
         supertype_lower: str = supertype.strip().lower() if supertype else ""
-        format_lower: str = format_legal.strip().lower() if format_legal else ""
+        format_lower: str = mtgjson_legality_key(format_legal) if format_legal else ""
 
         sem: str = semantic_stripped
         if sem:

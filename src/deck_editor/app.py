@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from src.lib.cardDB import CardDB
-from src.lib.config import DECK_EDITOR_SAVE_DIR, REPO_ROOT
+from src.lib.config import DECK_EDITOR_SAVE_DIR, REPO_ROOT, mtgjson_legality_key
 from src.lib.deck_board_ops import collect_matching_indices_asc, move_cards_at_indices, remove_cards_at_indices
 from src.lib.deck_name_match import commander_string_matches_request, requested_name_matches_deck_card
 from src.lib.prices import BATCH_SIZE, DELAY_BETWEEN_BATCHES_S, SCRYFALL_COLLECTION_URL, prices_age_hours, update_all_prices
@@ -627,7 +627,7 @@ def validate_cards_for_deck(
         return list(cards), list(card_names), []
 
     deck_colors: set[str] = set(deck.colors) if deck.colors else set()
-    deck_format: str = (deck.format or "").strip().lower()
+    deck_format: str = mtgjson_legality_key(deck.format) if deck.format else ""
 
     valid_cards: list[Card] = []
     valid_names: list[str] = []

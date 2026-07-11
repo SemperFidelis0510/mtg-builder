@@ -100,7 +100,7 @@ def do_download(force: bool) -> None:
             data = json.load(f)
         if "data" not in data:
             raise ValueError("JSON missing 'data' key")
-        tmp_path.rename(ATOMIC_CARDS_PATH)
+        tmp_path.replace(ATOMIC_CARDS_PATH)
         print(f"Saved: {ATOMIC_CARDS_PATH}")
     except requests.RequestException as e:
         if tmp_path.exists():

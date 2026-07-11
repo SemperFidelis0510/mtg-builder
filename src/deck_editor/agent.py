@@ -917,7 +917,12 @@ def get_resolved_model() -> str | None:
 # Streaming chat
 # ---------------------------------------------------------------------------
 
-MAX_TOOL_ROUNDS: int = 10
+# Deliberately unreachable ceiling for realistic conversations. It bounds the
+# manual Gemini tool loop against runaway work (model looping on tool calls,
+# repeated MAX_TOKENS continuations, etc.) without capping normal multi-step
+# tasks. Hitting this ceiling is surfaced to the user as an error, not silently
+# reported as a completed turn.
+SAFETY_MAX_TOOL_ROUNDS: int = 200
 
 
 async def chat_stream(
@@ -926,6 +931,12 @@ async def chat_stream(
     deck_state: dict,
 ) -> AsyncGenerator[dict, None]:
     """Stream agent response. Yields dicts with keys: type, and type-specific data.
+
+    The generator keeps issuing follow-up Gemini calls automatically as long as
+    the model either requested tool calls or hit the output-length cap
+    (``MAX_TOKENS``) mid-thought. It only terminates when the model produces a
+    natural stop, an API error occurs, the client disconnects, or the safety
+    ceiling ``SAFETY_MAX_TOOL_ROUNDS`` is reached.
 
     Event types:
       text_delta  -> {"type": "text_delta", "content": "..."}
@@ -969,9 +980,11 @@ async def chat_stream(
     approval_ids_this_stream: list[str] = []
 
     try:
-        for _round in range(MAX_TOOL_ROUNDS):
+        for _round in range(SAFETY_MAX_TOOL_ROUNDS):
             function_calls_this_round: list[types.FunctionCall] = []
             model_content_parts: list[types.Part] = []
+            round_text: str = ""
+            finish_reason: types.FinishReason | None = None
             # Gemini may emit function_call parts in early stream chunks and later chunks may
             # replace candidate.content without those parts; collect from every chunk (dedupe).
             seen_function_call_keys: set[tuple[str, str]] = set()
@@ -984,10 +997,13 @@ async def chat_stream(
                 ):
                     if chunk.text:
                         accumulated_text += chunk.text
+                        round_text += chunk.text
                         yield {"type": "text_delta", "content": chunk.text}
 
                     if chunk.candidates:
                         for candidate in chunk.candidates:
+                            if candidate.finish_reason:
+                                finish_reason = candidate.finish_reason
                             content = candidate.content
                             if not content or not content.parts:
                                 continue
@@ -1021,50 +1037,88 @@ async def chat_stream(
                 conv["messages"].pop()
                 return
 
-            if not function_calls_this_round:
-                break
+            if function_calls_this_round:
+                contents.append(types.Content(role="model", parts=model_content_parts))
 
-            contents.append(types.Content(role="model", parts=model_content_parts))
-
-            fr_parts: list[types.Part] = []
-            for fc in function_calls_this_round:
-                fc_name: str = fc.name
-                fc_args: dict = dict(fc.args) if fc.args else {}
-                summary: str = format_tool_call_summary(fc_name, fc_args)
-                tool_event: dict[str, Any] = {
-                    "type": "tool_call",
-                    "name": fc_name,
-                    "args": fc_args,
-                    "summary": summary,
-                }
-                if fc_name in DECK_MUTATION_TOOLS:
-                    approval_id, approval_future = await register_tool_approval()
-                    approval_ids_this_stream.append(approval_id)
-                    tool_event["requires_approval"] = True
-                    tool_event["approval_id"] = approval_id
-                    yield tool_event
-                    user_ok: bool = await approval_future
-                    if user_ok:
-                        result_str = execute_tool_call(fc_name, fc_args)
+                fr_parts: list[types.Part] = []
+                for fc in function_calls_this_round:
+                    fc_name: str = fc.name
+                    fc_args = dict(fc.args) if fc.args else {}
+                    summary: str = format_tool_call_summary(fc_name, fc_args)
+                    tool_event: dict[str, Any] = {
+                        "type": "tool_call",
+                        "name": fc_name,
+                        "args": fc_args,
+                        "summary": summary,
+                    }
+                    if fc_name in DECK_MUTATION_TOOLS:
+                        approval_id, approval_future = await register_tool_approval()
+                        approval_ids_this_stream.append(approval_id)
+                        tool_event["requires_approval"] = True
+                        tool_event["approval_id"] = approval_id
+                        yield tool_event
+                        user_ok: bool = await approval_future
+                        if user_ok:
+                            result_str = execute_tool_call(fc_name, fc_args)
+                        else:
+                            result_str = USER_DECLINED_DECK_CHANGE
                     else:
-                        result_str = USER_DECLINED_DECK_CHANGE
-                else:
-                    yield tool_event
-                    result_str = execute_tool_call(fc_name, fc_args)
-                yield {"type": "tool_result", "name": fc_name, "result": result_str}
+                        yield tool_event
+                        result_str = execute_tool_call(fc_name, fc_args)
+                    yield {"type": "tool_result", "name": fc_name, "result": result_str}
 
-                all_tool_calls.append({
-                    "name": fc_name,
-                    "args": fc_args,
-                    "result": result_str,
-                    "summary": summary,
-                })
-                fr_parts.append(types.Part.from_function_response(
-                    name=fc_name,
-                    response={"result": result_str},
-                ))
+                    all_tool_calls.append({
+                        "name": fc_name,
+                        "args": fc_args,
+                        "result": result_str,
+                        "summary": summary,
+                    })
+                    fr_parts.append(types.Part.from_function_response(
+                        name=fc_name,
+                        response={"result": result_str},
+                    ))
 
-            contents.append(types.Content(role="tool", parts=fr_parts))
+                contents.append(types.Content(role="tool", parts=fr_parts))
+                continue
+
+            # No tool calls this round. If the model was cut off by the output
+            # cap mid-thought, feed the partial response back and let the loop
+            # request a continuation instead of ending the turn.
+            if finish_reason == types.FinishReason.MAX_TOKENS:
+                LOGGER.warning(
+                    "chat_stream: MAX_TOKENS with no tool call, continuing (conv=%s round=%d text_len=%d)",
+                    conv["id"], _round, len(round_text),
+                )
+                if round_text:
+                    contents.append(types.Content(
+                        role="model",
+                        parts=[types.Part(text=round_text)],
+                    ))
+                continue
+
+            break
+        else:
+            LOGGER.error(
+                "chat_stream: safety limit reached (conv=%s rounds=%d text_len=%d tool_calls=%d)",
+                conv["id"], SAFETY_MAX_TOOL_ROUNDS, len(accumulated_text), len(all_tool_calls),
+            )
+            conv["messages"].append({
+                "role": "assistant",
+                "content": accumulated_text,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "tool_calls": all_tool_calls if all_tool_calls else None,
+            })
+            conv["model"] = model_name
+            save_conversation(conv)
+            yield {
+                "type": "error",
+                "message": (
+                    f"Agent safety limit reached after {SAFETY_MAX_TOOL_ROUNDS} tool rounds. "
+                    "The partial reply has been saved. This should not happen in normal use — "
+                    "please review the conversation or start a new one."
+                ),
+            }
+            return
 
         conv["messages"].append({
             "role": "assistant",

@@ -4,7 +4,7 @@ set "CONDA_ENV=mtg-rag"
 cd /d "%~dp0"
 
 REM --- Parse arguments ---
-REM   Usage: install.bat [install|download|build|prices|uninstall|reinstall] [--force] [--cuda 11|12|cpu]
+REM   Usage: install.bat [install|download|build|prices|update|uninstall|reinstall] [--force] [--cuda 11|12|cpu]
 REM   Default (no stage): run all three stages in order.
 
 set "STAGE="
@@ -17,6 +17,7 @@ if /i "%~1"=="install"    ( set "STAGE=install"    & shift & goto parse_args )
 if /i "%~1"=="download"   ( set "STAGE=download"   & shift & goto parse_args )
 if /i "%~1"=="build"      ( set "STAGE=build"      & shift & goto parse_args )
 if /i "%~1"=="prices"     ( set "STAGE=prices"     & shift & goto parse_args )
+if /i "%~1"=="update"     ( set "STAGE=update"     & shift & goto parse_args )
 if /i "%~1"=="uninstall"  ( set "STAGE=uninstall"  & shift & goto parse_args )
 if /i "%~1"=="reinstall"  ( set "STAGE=reinstall"  & shift & goto parse_args )
 if /i "%~1"=="--force"  ( set "FORCE=1"        & shift & goto parse_args )
@@ -74,6 +75,7 @@ if /i "%STAGE%"=="install"    ( call :do_install    & if errorlevel 1 exit /b 1 
 if /i "%STAGE%"=="download"   ( call :do_download   & if errorlevel 1 exit /b 1 & goto end )
 if /i "%STAGE%"=="build"      ( call :do_build      & if errorlevel 1 exit /b 1 & goto end )
 if /i "%STAGE%"=="prices"     ( call :do_prices     & if errorlevel 1 exit /b 1 & goto end )
+if /i "%STAGE%"=="update"     ( call :do_update     & if errorlevel 1 exit /b 1 & goto end )
 if /i "%STAGE%"=="uninstall"  ( call :do_uninstall  & if errorlevel 1 exit /b 1 & goto end )
 if /i "%STAGE%"=="reinstall"  ( call :do_reinstall  & if errorlevel 1 exit /b 1 & goto end )
 
@@ -154,6 +156,19 @@ if errorlevel 1 (
 echo === [prices] Done ===
 exit /b 0
 
+:do_update
+echo.
+echo === [update] Refreshing card database (download + prices + clean rebuild) ===
+call "%_ACTIVATE%" %CONDA_ENV%
+python -m src.lib.update_card_database
+if errorlevel 1 (
+    echo ERROR: Update failed.
+    exit /b 1
+)
+echo === [update] Done ===
+echo NOTE: Restart the MCP server and deck editor so they pick up the new card data.
+exit /b 0
+
 :do_uninstall
 echo.
 echo === [uninstall] Removing all installed dependencies ===
@@ -214,13 +229,17 @@ exit /b 0
 
 :usage
 echo.
-echo Usage: .\%~nx0 [install^|download^|build^|prices^|uninstall^|reinstall] [--force] [--cuda 11^|12^|cpu]
+echo Usage: .\%~nx0 [install^|download^|build^|prices^|update^|uninstall^|reinstall] [--force] [--cuda 11^|12^|cpu]
 echo.
 echo   (no stage)           Run all stages: install, download, build
 echo   install              Create conda env and install Python deps
 echo   download             Download AtomicCards.json
 echo   build                Ingest data and build ChromaDB vector index
 echo   prices               Update card prices from Scryfall to data/prices.json
+echo   update               Refresh card database when new cards come out:
+echo                          force-download AtomicCards.json, refresh prices,
+echo                          and clean-rebuild all ChromaDB collections.
+echo                          Restart MCP server and deck editor afterwards.
 echo   uninstall            Remove conda env, downloaded data, and ChromaDB index
 echo   reinstall            Full uninstall then full install (install + download + build)
 echo.

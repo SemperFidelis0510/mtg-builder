@@ -85,8 +85,12 @@ def _build_collection(
     collection_name: str,
     rows: list[tuple[str, str, dict]],
     label: str,
+    clean: bool = False,
 ) -> None:
     """Encode *rows* and upsert them into ChromaDB collection *collection_name*.
+
+    When *clean* is True, delete the existing collection (if any) before
+    recreating it so removed or renamed cards do not leave stale rows behind.
 
     Heavy imports (torch, sentence_transformers, chromadb, tqdm) happen here
     so they are only loaded when building.
@@ -101,6 +105,11 @@ def _build_collection(
 
     CHROMA_PATH.mkdir(parents=True, exist_ok=True)
     client = chromadb.PersistentClient(path=str(CHROMA_PATH))
+    if clean:
+        existing_names: set[str] = {c.name for c in client.list_collections()}
+        if collection_name in existing_names:
+            LOGGER.info("%s: clean rebuild - deleting existing collection %s", label, collection_name)
+            client.delete_collection(name=collection_name)
     collection = client.get_or_create_collection(
         name=collection_name,
         metadata={"hnsw:space": "cosine"},
@@ -145,39 +154,44 @@ def _name_only_meta(card: Card) -> dict:
 # Public build functions
 # ---------------------------------------------------------------------------
 
-def do_build() -> None:
+def do_build(clean: bool = False) -> None:
     """Build the main card RAG collection (semantic search over full card text)."""
     cards = _load_cards()
     rows = _prepare_rows(cards, Card.to_rag_document, Card.to_chroma_metadata)
-    _build_collection(COLLECTION_NAME, rows, "cards")
+    _build_collection(COLLECTION_NAME, rows, "cards", clean=clean)
 
 
-def do_build_triggers() -> None:
+def do_build_triggers(clean: bool = False) -> None:
     """Build the triggers RAG collection (semantic search over card trigger phrases)."""
     cards = _load_cards()
     rows = _prepare_rows(cards, Card.to_triggers_document, _name_only_meta)
-    _build_collection(TRIGGERS_COLLECTION_NAME, rows, "triggers")
+    _build_collection(TRIGGERS_COLLECTION_NAME, rows, "triggers", clean=clean)
 
 
-def do_build_effects() -> None:
+def do_build_effects(clean: bool = False) -> None:
     """Build the effects RAG collection (semantic search over card effect phrases)."""
     cards = _load_cards()
     rows = _prepare_rows(cards, Card.to_effects_document, _name_only_meta)
-    _build_collection(EFFECTS_COLLECTION_NAME, rows, "effects")
+    _build_collection(EFFECTS_COLLECTION_NAME, rows, "effects", clean=clean)
 
 
-def do_build_all() -> None:
-    """Build all three RAG collections, sharing one card load pass."""
+def do_build_all(clean: bool = False) -> None:
+    """Build all three RAG collections, sharing one card load pass.
+
+    When *clean* is True, each collection is deleted and recreated before
+    indexing so cards removed from MTGJSON (or renamed) do not leave stale
+    rows behind. Used by the card database update routine.
+    """
     cards = _load_cards()
 
     card_rows = _prepare_rows(cards, Card.to_rag_document, Card.to_chroma_metadata)
-    _build_collection(COLLECTION_NAME, card_rows, "cards")
+    _build_collection(COLLECTION_NAME, card_rows, "cards", clean=clean)
 
     trigger_rows = _prepare_rows(cards, Card.to_triggers_document, _name_only_meta)
-    _build_collection(TRIGGERS_COLLECTION_NAME, trigger_rows, "triggers")
+    _build_collection(TRIGGERS_COLLECTION_NAME, trigger_rows, "triggers", clean=clean)
 
     effect_rows = _prepare_rows(cards, Card.to_effects_document, _name_only_meta)
-    _build_collection(EFFECTS_COLLECTION_NAME, effect_rows, "effects")
+    _build_collection(EFFECTS_COLLECTION_NAME, effect_rows, "effects", clean=clean)
 
 
 if __name__ == "__main__":

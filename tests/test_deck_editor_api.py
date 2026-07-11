@@ -57,6 +57,35 @@ def test_deck_meta_round_trip_empty(client: TestClient) -> None:
 
 
 @pytest.mark.integration
+def test_historic_brawl_accepts_cards_with_mtgjson_brawl_legality(client: TestClient) -> None:
+    load_response = client.post("/api/deck", json={"name": "Historic Brawl", "format": "historicbrawl"})
+    assert load_response.status_code == 200
+
+    add_response = client.post(
+        "/api/add_card",
+        json={
+            "names": ["Awaken the Woods", "Craterhoof Behemoth", "Azusa, Lost but Seeking"],
+            "board": "main",
+        },
+    )
+    assert add_response.status_code == 200
+    deck = add_response.json()["deck"]
+    assert "Awaken the Woods" in deck["sorcery"]
+    assert "Craterhoof Behemoth" in deck["creature"]
+    assert "Azusa, Lost but Seeking" in deck["creature"]
+
+
+@pytest.mark.integration
+def test_historic_brawl_search_uses_mtgjson_brawl_legality(client: TestClient) -> None:
+    response = client.post(
+        "/api/search",
+        json={"name": "Awaken the Woods", "format_legal": "historicbrawl"},
+    )
+    assert response.status_code == 200
+    assert any(card["name"] == "Awaken the Woods" for card in response.json()["results"])
+
+
+@pytest.mark.integration
 def test_sse_emits_initial_and_update_events_real_server() -> None:
     """
     SSE behaves like an infinite stream; in-process ASGI transports tend to buffer forever.

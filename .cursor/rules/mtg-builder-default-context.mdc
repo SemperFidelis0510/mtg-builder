@@ -1,0 +1,13 @@
+---
+description: Interpret project references as the MTG builder app by default
+alwaysApply: true
+---
+
+# Default App Context
+
+By default, assume the user is referring to the MTG builder app.
+
+- If the user mentions a feature, behavior, UI, backend flow, bug, test, or other project work without further qualification, interpret it as work on the MTG builder app.
+- Only treat a request as referring to the MCP when the user explicitly says to discuss, inspect, modify, or work on the MCP.
+- If the user explicitly mentions both the MTG builder app and the MCP, consider both contexts as requested.
+- When the request is ambiguous, prefer the MTG builder app context instead of asking whether the user meant the MCP.
