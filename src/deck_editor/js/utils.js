@@ -54,15 +54,24 @@ export function expandStacks(stacks) {
   return out;
 }
 
-export function suggestedSaveName() {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  const h = String(d.getHours()).padStart(2, '0');
-  const min = String(d.getMinutes()).padStart(2, '0');
-  const s = String(d.getSeconds()).padStart(2, '0');
-  return 'deck_' + y + m + day + '_' + h + min + s + '.json';
+/** Match backend _sanitize_filename in app.py. */
+export function sanitizeFilename(name) {
+  const sanitized = String(name || '').replace(/[^\w\-.]/g, '_').replace(/^_+|_+$/g, '');
+  return sanitized || 'deck';
+}
+
+/**
+ * Suggested JSON filename for the save dialog.
+ * Prefers the last loaded deck filename; otherwise uses sanitized deck name.
+ */
+export function suggestedSaveName(deckName, lastLoadedFileName) {
+  if (lastLoadedFileName) {
+    const trimmed = String(lastLoadedFileName).trim();
+    if (trimmed) {
+      return trimmed.toLowerCase().endsWith('.json') ? trimmed : trimmed + '.json';
+    }
+  }
+  return sanitizeFilename(deckName) + '.json';
 }
 
 export function typeLineToSectionKey(typeLine) {

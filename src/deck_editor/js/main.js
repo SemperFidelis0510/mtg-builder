@@ -3,6 +3,14 @@
 import { createLogger } from './logger.js';
 import { TYPE_KEYS } from './constants.js';
 import { suggestedSaveName } from './utils.js';
+import {
+  buildOpenFilePickerOptions,
+  buildSaveFilePickerOptions,
+  clearLastLoadedDeckFile,
+  getLastLoadedFileName,
+  rememberSavedFileHandle,
+  setLastLoadedDeckFile,
+} from './deck-file.js';
 import { initCardPreview } from './card-preview.js';
 import { initContextMenu } from './context-menu.js';
 import { updateSectionHeaderTotal, getDeckMeta, collectState, syncDeckToServer } from './deck.js';
@@ -79,6 +87,7 @@ document.getElementById('expandAllBtn').addEventListener('click', () => {
 document.getElementById('clearAllBtn').addEventListener('click', () => {
   if (!confirm('Clear all cards from the deck (including sideboard and maybe board)?')) return;
   log.info('Clearing all cards from deck');
+  clearLastLoadedDeckFile();
   populateSettings({ name: '', description: '', colors: [], format: '', commander: '', colorless_only: false });
   TYPE_KEYS.forEach((key) => {
     const listEl = document.getElementById('list-' + key);
@@ -167,12 +176,11 @@ document.getElementById('saveBtn').addEventListener('click', () => {
     })
     .then((data) => {
       const blob = new Blob([data.text], { type: 'application/json' });
+      const saveName = suggestedSaveName(state.name, getLastLoadedFileName());
       if (typeof window.showSaveFilePicker === 'function') {
         window
-          .showSaveFilePicker({
-            suggestedName: suggestedSaveName(),
-            types: [{ description: 'JSON deck', accept: { 'application/json': ['.json'] } }],
-          })
+          .showSaveFilePicker(buildSaveFilePickerOptions(saveName))
+          .then((handle) => rememberSavedFileHandle(handle).then(() => handle))
           .then((handle) => handle.createWritable())
           .then((writable) => writable.write(blob).then(() => writable.close()))
           .then(() => {
@@ -193,7 +201,7 @@ document.getElementById('saveBtn').addEventListener('click', () => {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = suggestedSaveName();
+        a.download = saveName;
         a.click();
         URL.revokeObjectURL(url);
         resultEl.textContent = 'Download started (browser may not support save dialog).';
@@ -206,47 +214,81 @@ document.getElementById('saveBtn').addEventListener('click', () => {
     });
 });
 
+function loadDeckFromJson(json, sourceFileName, sourceFileHandle) {
+  return fetch('/api/deck', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(json),
+  })
+    .then((r) => {
+      if (!r.ok) throw new Error('Load failed');
+      return fetch('/api/deck');
+    })
+    .then((r) => r.json())
+    .then(renderDeck)
+    .then(() => setLastLoadedDeckFile(sourceFileHandle || null, sourceFileName || null))
+    .then(() => {
+      log.info('Deck loaded from file', sourceFileName || '(unknown)');
+      document.getElementById('searchMsg').textContent = 'Deck loaded.';
+      document.getElementById('searchMsg').className = 'search-msg';
+    });
+}
+
+function loadDeckFromFile(file, fileHandle) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => {
+      let json;
+      try {
+        json = JSON.parse(fr.result);
+      } catch (e) {
+        log.error('Invalid JSON in loaded file', e.message);
+        document.getElementById('searchMsg').textContent = 'Invalid JSON file.';
+        document.getElementById('searchMsg').className = 'search-msg error';
+        reject(e);
+        return;
+      }
+      loadDeckFromJson(json, file.name, fileHandle)
+        .then(resolve)
+        .catch(reject);
+    };
+    fr.onerror = () => reject(fr.error || new Error('File read failed'));
+    fr.readAsText(file);
+  });
+}
+
 document.getElementById('loadBtn').addEventListener('click', () => {
+  if (typeof window.showOpenFilePicker === 'function') {
+    window
+      .showOpenFilePicker(buildOpenFilePickerOptions())
+      .then((handles) => {
+        const handle = handles[0];
+        if (!handle) return;
+        return handle.getFile().then((file) => loadDeckFromFile(file, handle));
+      })
+      .catch((err) => {
+        if (err.name === 'AbortError') {
+          log.debug('Load cancelled by user');
+          return;
+        }
+        log.error('Load deck via file picker failed', err);
+        document.getElementById('searchMsg').textContent = 'Load failed.';
+        document.getElementById('searchMsg').className = 'search-msg error';
+      });
+    return;
+  }
   document.getElementById('loadFileInput').click();
 });
 document.getElementById('loadFileInput').addEventListener('change', function () {
   const file = this.files && this.files[0];
   if (!file) return;
   log.info('Loading deck from file', file.name);
-  const fr = new FileReader();
-  fr.onload = () => {
-    let json;
-    try {
-      json = JSON.parse(fr.result);
-    } catch (e) {
-      log.error('Invalid JSON in loaded file', e.message);
-      document.getElementById('searchMsg').textContent = 'Invalid JSON file.';
-      document.getElementById('searchMsg').className = 'search-msg error';
-      return;
-    }
-    fetch('/api/deck', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(json),
-    })
-      .then((r) => {
-        if (!r.ok) throw new Error('Load failed');
-        return fetch('/api/deck');
-      })
-      .then((r) => r.json())
-      .then(renderDeck)
-      .then(() => {
-        log.info('Deck loaded from file');
-        document.getElementById('searchMsg').textContent = 'Deck loaded.';
-        document.getElementById('searchMsg').className = 'search-msg';
-      })
-      .catch((err) => {
-        log.error('Load deck from file failed', err);
-        document.getElementById('searchMsg').textContent = 'Load failed.';
-        document.getElementById('searchMsg').className = 'search-msg error';
-      });
-  };
-  fr.readAsText(file);
+  loadDeckFromFile(file, null).catch((err) => {
+    if (err && err.message !== 'Load failed') return;
+    log.error('Load deck from file failed', err);
+    document.getElementById('searchMsg').textContent = 'Load failed.';
+    document.getElementById('searchMsg').className = 'search-msg error';
+  });
   this.value = '';
 });
 

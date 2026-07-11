@@ -421,25 +421,23 @@ function _toolCallLabel(name, args) {
   return fn ? fn(args) : `Tool: ${name}`;
 }
 
-/** Remove partial assistant output after an aborted send (everything after user row). */
-function _cleanupPartialReplyAfterUserRow(userRow) {
-  let n = userRow.nextSibling;
-  while (n) {
-    const next = n.nextSibling;
-    n.remove();
-    n = next;
-  }
-}
-
 function _setStreamingControls(active) {
   sendBtn.style.display = active ? 'none' : '';
   stopBtn.style.display = active ? '' : 'none';
   stopBtn.disabled = !active;
 }
 
-function _restorePromptToInput(promptText) {
-  setPromptText(chatInput, promptText);
-  chatInput.focus();
+/** @param {HTMLElement} userRow */
+function _hasPartialAssistantAfterUserRow(userRow) {
+  let n = userRow.nextSibling;
+  while (n) {
+    if (n === welcomeMsg) break;
+    if (n.classList?.contains('agent-msg-assistant') || n.classList?.contains('agent-tool-call')) {
+      return true;
+    }
+    n = n.nextSibling;
+  }
+  return false;
 }
 
 // -----------------------------------------------------------------------
@@ -495,6 +493,12 @@ async function sendMessage() {
       _appendAssistantMessage(`Error: ${err.detail || resp.statusText}`);
       _scrollToBottom();
       return;
+    }
+
+    const convHeader = resp.headers.get('X-Conversation-Id');
+    if (convHeader) {
+      _currentConvId = convHeader;
+      deleteConvBtn.disabled = false;
     }
 
     _removeTypingIndicator();
@@ -586,15 +590,16 @@ async function sendMessage() {
     _removeTypingIndicator();
     if (e.name === 'AbortError') {
       log.info('sendMessage: aborted by user');
-      _cleanupPartialReplyAfterUserRow(userRow);
-      userRow.remove();
-      if (_currentConvId) {
-        await loadConversation(_currentConvId);
+      const hadPartialAssistant = _hasPartialAssistantAfterUserRow(userRow);
+      const delta = hadPartialAssistant ? 2 : 1;
+      if (savedTruncate !== null) {
+        _convMessageCount = savedTruncate + delta;
       } else {
-        _convMessageCount = savedTruncate !== null ? savedTruncate : 0;
-        if (_convMessageCount === 0) welcomeMsg.style.display = 'block';
+        _convMessageCount += delta;
       }
-      _restorePromptToInput(rawMessage);
+      if (_currentConvId) {
+        await loadConversationList();
+      }
     } else {
       log.error('sendMessage: network error', e.message);
       userRow.remove();

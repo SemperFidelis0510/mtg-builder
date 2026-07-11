@@ -1134,3 +1134,21 @@ async def chat_stream(
     finally:
         if approval_ids_this_stream:
             await cancel_pending_tool_approvals(approval_ids_this_stream)
+        msgs: list[dict] = conv["messages"]
+        if msgs and msgs[-1]["role"] == "user":
+            if accumulated_text or all_tool_calls:
+                msgs.append({
+                    "role": "assistant",
+                    "content": accumulated_text,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "tool_calls": all_tool_calls if all_tool_calls else None,
+                })
+            conv["model"] = model_name
+            save_conversation(conv)
+            LOGGER.info(
+                "chat_stream: saved interrupted turn conv=%s messages=%d text_len=%d tool_calls=%d",
+                conv["id"],
+                len(msgs),
+                len(accumulated_text),
+                len(all_tool_calls),
+            )
