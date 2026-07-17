@@ -45,6 +45,7 @@
     (function () {
       var container = document.getElementById('formatButtons');
       var msgEl = document.getElementById('msg');
+      var cardKingdomImportUrl = 'https://www.cardkingdom.com/static/csvImport';
       msgEl.textContent = '';
 
       function sendDone(message, isError) {
@@ -85,6 +86,16 @@
                     return;
                   }
                   return navigator.clipboard.writeText(text).then(function () {
+                    if (key === 'cardkingdom') {
+                      var cardKingdomWindow = window.open(cardKingdomImportUrl, '_blank');
+                      if (!cardKingdomWindow) {
+                        sendDone('Copied to clipboard (Card Kingdom Buylist CSV), but your browser blocked the Card Kingdom import tab.', true);
+                        return;
+                      }
+                      cardKingdomWindow.opener = null;
+                      sendDone('Copied to clipboard (Card Kingdom Buylist CSV). In the Card Kingdom tab, select “Paste CSV Text”.');
+                      return;
+                    }
                     sendDone('Copied to clipboard (' + (formats[key] || key) + ').');
                   });
                 })

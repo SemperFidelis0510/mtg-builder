@@ -234,6 +234,27 @@ def test_export_formats_and_export_json(client: TestClient) -> None:
 
 
 @pytest.mark.integration
+def test_export_cardkingdom_buylist_is_versionless_and_main_deck_only(client: TestClient) -> None:
+    update = client.put(
+        "/api/deck",
+        json={
+            "artifact": ["Sol Ring", "Sol Ring"],
+            "sideboard": ["Sol Ring"],
+        },
+    )
+    assert update.status_code == 200
+
+    formats = client.get("/api/export/formats")
+    assert formats.status_code == 200
+    assert formats.json()["formats"]["cardkingdom"] == "Card Kingdom Buylist CSV"
+
+    response = client.get("/api/export", params={"format": "cardkingdom"})
+
+    assert response.status_code == 200
+    assert response.json()["text"] == "Title,Edition,Foil,Quantity\nSol Ring,,,2\n"
+
+
+@pytest.mark.integration
 def test_import_rejects_invalid_body(client: TestClient) -> None:
     r = client.post("/api/import", json={"format": "arena"})
     assert r.status_code == 400

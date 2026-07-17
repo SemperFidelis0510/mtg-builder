@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+from csv import writer
 from collections import Counter
+from io import StringIO
 from pathlib import Path
 # from typing import TYPE_CHECKING
 from src.obj.card import Card
@@ -154,12 +156,17 @@ class Deck:
         land: (Read-only.) Card names that are lands.
     """
 
-    # Import and export support the same formats (arena first, json last).
-    EXPORT_FORMATS: dict[str, str] = {
+    # Formats accepted by the deck import parser (arena first, json last).
+    IMPORT_FORMATS: dict[str, str] = {
         "arena": "MTG Arena",
         "goldfish": "MTGGoldfish",
         "moxfield": "Moxfield",
         "json": "JSON",
+    }
+    # Export supports every import format plus Card Kingdom's buylist CSV.
+    EXPORT_FORMATS: dict[str, str] = {
+        **IMPORT_FORMATS,
+        "cardkingdom": "Card Kingdom Buylist CSV",
     }
 
     def __init__(
@@ -252,17 +259,25 @@ class Deck:
         """Export the deck as a string in the given format.
 
         Args:
-            format: One of "arena", "goldfish", "moxfield", or "json".
+            format: One of "arena", "goldfish", "moxfield", "json", or "cardkingdom".
 
         Returns:
             The deck as a string (JSON text or decklist lines).
 
         Raises:
-            ValueError: If format is not "arena", "goldfish", "moxfield", or "json".
+            ValueError: If format is unsupported.
         """
         fmt: str = format.strip().lower()
         if fmt == "json":
             return json.dumps(self.to_dict(), indent=2)
+        if fmt == "cardkingdom":
+            output = StringIO(newline="")
+            csv_writer = writer(output, lineterminator="\n")
+            csv_writer.writerow(["Title", "Edition", "Foil", "Quantity"])
+            counts: Counter[str] = Counter(self._all_card_names())
+            for name in sorted(counts, key=str.casefold):
+                csv_writer.writerow([name, "", "", counts[name]])
+            return output.getvalue()
         if fmt == "arena":
             from src.lib.cardDB import CardDB
 
@@ -315,18 +330,18 @@ class Deck:
                     mox_lines.append(f"{sb_counts_m[name]} {name}")
             return "\n".join(mox_lines)
         raise ValueError(
-            f"deck export: unsupported format {format!r}; use 'arena', 'goldfish', 'moxfield', or 'json'"
+            f"deck export: unsupported format {format!r}; use 'arena', 'goldfish', 'moxfield', 'json', or 'cardkingdom'"
         )
 
     def save(self, format: str, path: Path | str) -> None:
         """Export the deck in the given format and write it to a file.
 
         Args:
-            format: One of "arena", "goldfish", "moxfield", or "json".
+            format: One of "arena", "goldfish", "moxfield", "json", or "cardkingdom".
             path: File path to write to (str or Path).
 
         Raises:
-            ValueError: If format is not "arena", "goldfish", "moxfield", or "json".
+            ValueError: If format is unsupported.
         """
         text: str = self.export(format)
         out_path: Path = Path(path) if isinstance(path, str) else path
@@ -410,7 +425,7 @@ class Deck:
 
     @classmethod
     def from_export_text(cls, text: str, format: str) -> "Deck":
-        """Parse decklist text and return a new Deck. Supports same formats as export(): arena, goldfish, moxfield, json.
+        """Parse decklist text and return a new Deck.
 
         Args:
             text: Pasted decklist string.
@@ -425,7 +440,7 @@ class Deck:
         fmt: str = (format or "").strip().lower()
         raw: str = (text or "").strip()
         LOGGER.debug("from_export_text: fmt=%r raw_len=%d", fmt, len(raw))
-        if fmt not in cls.EXPORT_FORMATS:
+        if fmt not in cls.IMPORT_FORMATS:
             raise ValueError(
                 f"unsupported import format {format!r}; use 'arena', 'goldfish', 'moxfield', or 'json'"
             )

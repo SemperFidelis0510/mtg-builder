@@ -1511,11 +1511,11 @@ async def import_deck(request: Request) -> dict:
     fmt: str = (body["format"] or "").strip().lower()
     want_merge: bool = body.get("merge", True) is not False
     LOGGER.debug("import_deck: format=%r merge=%s text_len=%d text_preview=%r", fmt, want_merge, len(text), (text[:80] + "..." if len(text) > 80 else text))
-    if fmt not in Deck.EXPORT_FORMATS:
-        LOGGER.warning("import_deck: unsupported format: %r allowed: %s", fmt, list(Deck.EXPORT_FORMATS.keys()))
+    if fmt not in Deck.IMPORT_FORMATS:
+        LOGGER.warning("import_deck: unsupported format: %r allowed: %s", fmt, list(Deck.IMPORT_FORMATS.keys()))
         raise HTTPException(
             status_code=400,
-            detail=f"Unsupported format {body['format']!r}; use one of: {list(Deck.EXPORT_FORMATS.keys())}",
+            detail=f"Unsupported format {body['format']!r}; use one of: {list(Deck.IMPORT_FORMATS.keys())}",
         )
     try:
         LOGGER.debug("import_deck: calling Deck.from_export_text(...)")
