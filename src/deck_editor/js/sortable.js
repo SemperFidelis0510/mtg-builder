@@ -4,6 +4,7 @@ import { createLogger } from './logger.js';
 import { TYPE_KEYS } from './constants.js';
 import { isMaybeFullCardView } from './maybe-board-prefs.js';
 import { makeMaybeBoardCardEl, makeCardStackEl, updateSectionHeaderTotal } from './deck.js';
+import { isDeckSortManual } from './deck-sort.js';
 
 const log = createLogger('sortable');
 
@@ -148,6 +149,7 @@ export function initSortable() {
     sortables.push(
       Sortable.create(dropTargetEl, {
         group: { name: 'cards', pull: false, put: allowPutDeckDropTarget },
+        disabled: !isDeckSortManual(),
         animation: 150,
         ghostClass: 'sortable-ghost',
         dragClass: 'sortable-drag',
@@ -165,6 +167,7 @@ export function initSortable() {
       sortables.push(
         Sortable.create(el, {
           group: { name: 'cards', pull: true, put: allowPutIntoMainTypedList },
+          disabled: !isDeckSortManual(),
           handle: '.card-img',
           animation: 150,
           ghostClass: 'sortable-ghost',
@@ -187,6 +190,7 @@ export function initSortable() {
     sortables.push(
       Sortable.create(commanderListEl, {
         group: { name: 'cards', pull: true, put: true },
+        disabled: !isDeckSortManual(),
         handle: '.card-img, .maybe-board-item',
         animation: 150,
         ghostClass: 'sortable-ghost',
@@ -223,6 +227,7 @@ export function initSortable() {
       sortables.push(
         Sortable.create(el, {
           group: { name: 'cards', pull: true, put: allowPutIntoSideZone },
+          disabled: !isDeckSortManual(),
           handle: '.card-img, .maybe-board-item',
           animation: 150,
           ghostClass: 'sortable-ghost',

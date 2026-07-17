@@ -1022,8 +1022,73 @@ body {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  flex-wrap: wrap;
 }
 .tools-section .section-body .save-btn { flex-shrink: 0; }
+.deck-sort-control {
+  position: relative;
+  flex-shrink: 0;
+}
+.deck-sort-popup {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  left: 0;
+  z-index: 200;
+  display: grid;
+  grid-template-columns: auto minmax(130px, 1fr);
+  gap: 0.45rem 0.6rem;
+  min-width: 270px;
+  padding: 0.75rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 5px 18px rgba(0, 0, 0, 0.4);
+}
+.deck-sort-popup[hidden] { display: none; }
+.deck-sort-popup label {
+  align-self: center;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #a0a0a0;
+}
+.deck-sort-popup select {
+  min-width: 0;
+  padding: 0.35rem 0.5rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+}
+.deck-sort-popup select:disabled { opacity: 0.5; cursor: not-allowed; }
+.deck-sort-error {
+  grid-column: 1 / -1;
+  min-height: 1.1em;
+  margin: 0;
+  color: #f88;
+  font-size: 0.8rem;
+}
+.deck-sort-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.45rem;
+}
+.deck-sort-actions button {
+  padding: 0.3rem 0.7rem;
+  border: none;
+  border-radius: 4px;
+  background: var(--border);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.deck-sort-actions button:hover:not(:disabled) { background: #1a4a7a; }
+.deck-sort-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
+.deck-sort-actions #deckSortApplyBtn { background: var(--accent); color: #fff; }
 
 .deck-settings-row {
   display: flex;

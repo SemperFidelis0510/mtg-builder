@@ -84,6 +84,9 @@ function renderStatsCharts(stats) {
 
 export function renderDeck(data) {
   const deck = data.deck || data;
+  if (data.sort != null) {
+    window.dispatchEvent(new CustomEvent('deck-sort-updated', { detail: data.sort }));
+  }
   const totalCards = TYPE_KEYS.reduce((n, k) => n + (Array.isArray(deck[k]) ? deck[k].length : 0), 0);
   log.info('renderDeck: total main-board cards', totalCards);
   resetCardFaceState();

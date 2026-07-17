@@ -22,6 +22,7 @@ import { initAgentChat } from './agent-chat.js';
 import { initAgentRules } from './agent-rules.js';
 import { initMaybeBoardViewUi } from './maybe-board-view.js';
 import { initWishlist } from './wishlist.js';
+import { initDeckSort } from './deck-sort.js';
 
 const log = createLogger('main');
 
@@ -76,6 +77,7 @@ initAgentChat();
 initAgentRules();
 initMaybeBoardViewUi();
 initWishlist();
+initDeckSort();
 log.info('All modules initialized');
 document.getElementById('collapseAllBtn').addEventListener('click', () => {
   document.querySelectorAll('#commanderSectionHost .section, #deckSections .section, #section-maybe, #section-sideboard').forEach((s) => s.classList.add('collapsed'));

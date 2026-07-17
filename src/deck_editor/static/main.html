@@ -80,6 +80,28 @@
         <button type="button" class="save-btn" id="loadBtn">Load</button>
         <input type="file" id="loadFileInput" accept=".json" style="display: none">
         <button class="save-btn" id="saveBtn" disabled title="Opens save dialog. Defaults to the last loaded deck file, or a sanitized deck name for new decks.">Save</button>
+        <div class="deck-sort-control" id="deckSortControl">
+          <button type="button" class="save-btn" id="deckSortBtn" aria-expanded="false" aria-controls="deckSortPopup">Sort</button>
+          <div class="deck-sort-popup" id="deckSortPopup" role="dialog" aria-label="Sort deck cards" hidden>
+            <label for="deckSortCriterion">Sort by</label>
+            <select id="deckSortCriterion">
+              <option value="manual">Manual</option>
+              <option value="name">Name</option>
+              <option value="mana_value">Mana cost</option>
+              <option value="price">Price</option>
+            </select>
+            <label for="deckSortDirection">Direction</label>
+            <select id="deckSortDirection">
+              <option value="ascending">Ascending</option>
+              <option value="descending">Descending</option>
+            </select>
+            <p class="deck-sort-error" id="deckSortError" role="alert"></p>
+            <div class="deck-sort-actions">
+              <button type="button" id="deckSortCancelBtn">Cancel</button>
+              <button type="button" id="deckSortApplyBtn">Apply</button>
+            </div>
+          </div>
+        </div>
         <span class="save-result" id="saveResult"></span>
       </div>
       <div class="tools-row">

@@ -9,6 +9,7 @@ import shutil
 import threading
 import time
 from datetime import datetime
+from functools import cmp_to_key
 from pathlib import Path
 from typing import Any
 
@@ -60,6 +61,9 @@ WISHLIST_FILE: Path = Path.home() / ".mtgbuilder" / "wishlist.json"
 # In-memory state (always a deck; starts empty; POST replaces it)
 # ---------------------------------------------------------------------------
 _current_deck: Deck = Deck()
+_VALID_DECK_SORT_CRITERIA: frozenset[str] = frozenset({"manual", "name", "mana_value", "price"})
+_VALID_DECK_SORT_DIRECTIONS: frozenset[str] = frozenset({"ascending", "descending"})
+_active_deck_sort: tuple[str, str] = ("manual", "ascending")
 
 # ---------------------------------------------------------------------------
 # SSE event bus
@@ -312,6 +316,74 @@ TYPE_KEYS: list[str] = [
 
 _COLOR_SYMBOLS: str = "WUBRG"
 _MANA_SYMBOL_RE = re.compile(r"\{([^}]+)\}")
+
+
+def _compare_sort_values(left: Any, right: Any, direction: str) -> int:
+    """Compare primary sort values, reversing only for descending direction."""
+    if left < right:
+        return 1 if direction == "descending" else -1
+    if left > right:
+        return -1 if direction == "descending" else 1
+    return 0
+
+
+def _color_sort_key(card: Card) -> tuple[int, int, tuple[int, ...]]:
+    """Return the configured color-identity tie-break key for a card."""
+    identity: frozenset[str] = frozenset(c for c in card.color_identity if c in _COLOR_SYMBOLS)
+    if not identity:
+        return (0, 0, ())
+    indices: tuple[int, ...] = tuple(i for i, color in enumerate(_COLOR_SYMBOLS) if color in identity)
+    if len(indices) == 1:
+        return (1, indices[0], ())
+    return (2, len(indices), indices)
+
+
+def _card_display_sort_name(card: Card) -> str:
+    """Return the canonical card display name normalized for stable sorting."""
+    return CardDB.inst().card_display_name(card).casefold()
+
+
+def _compare_cards_for_deck_sort(left: Card, right: Card, criterion: str, direction: str) -> int:
+    """Compare cards for a configured deck-viewer sort."""
+    left_name: str = _card_display_sort_name(left)
+    right_name: str = _card_display_sort_name(right)
+    if criterion == "name":
+        return _compare_sort_values(left_name, right_name, direction)
+
+    if criterion == "mana_value":
+        primary: int = _compare_sort_values(left.mana_value, right.mana_value, direction)
+        if primary != 0:
+            return primary
+        left_color_key: tuple[int, int, tuple[int, ...]] = _color_sort_key(left)
+        right_color_key: tuple[int, int, tuple[int, ...]] = _color_sort_key(right)
+        if left_color_key < right_color_key:
+            return -1
+        if left_color_key > right_color_key:
+            return 1
+        return _compare_sort_values(left_name, right_name, "ascending")
+
+    assert criterion == "price", f"Unexpected deck sort criterion: {criterion!r}"
+    left_has_price: bool = left.price_usd >= 0
+    right_has_price: bool = right.price_usd >= 0
+    if left_has_price != right_has_price:
+        return -1 if left_has_price else 1
+    if left_has_price:
+        primary = _compare_sort_values(left.price_usd, right.price_usd, direction)
+        if primary != 0:
+            return primary
+    return _compare_sort_values(left_name, right_name, "ascending")
+
+
+def _apply_active_deck_sort(deck: Deck) -> None:
+    """Sort every mutable deck board in place when an automatic sort is active."""
+    criterion, direction = _active_deck_sort
+    if criterion == "manual":
+        return
+    key = cmp_to_key(lambda left, right: _compare_cards_for_deck_sort(left, right, criterion, direction))
+    deck.cards.sort(key=key)
+    deck.maybe.sort(key=key)
+    deck.sideboard.sort(key=key)
+    LOGGER.info("_apply_active_deck_sort: criterion=%s direction=%s", criterion, direction)
 
 
 def _count_colored_mana_in_cost(mana_cost: str) -> dict[str, int]:
@@ -824,7 +896,12 @@ def _deck_to_response(deck: Deck) -> dict:
             seen_names.add(display_name)
             price = getattr(c, "price_usd", -1.0)
             out["prices"][display_name] = price if price >= 0 else None
-    resp: dict = {"deck": out, "stats": _compute_deck_stats(deck)}
+    criterion, direction = _active_deck_sort
+    resp: dict = {
+        "deck": out,
+        "stats": _compute_deck_stats(deck),
+        "sort": {"criterion": criterion, "direction": direction},
+    }
     return resp
 
 
@@ -1098,7 +1175,7 @@ def _names_from_cards_array(cards: list) -> list[str]:
 @app.post("/api/deck")
 async def load_deck(body: dict) -> dict:
     """Load a deck from JSON. Replaces current deck."""
-    global _current_deck
+    global _active_deck_sort, _current_deck
     LOGGER.info("load_deck: POST /api/deck")
     if "deck" in body:
         body = body["deck"]
@@ -1114,9 +1191,40 @@ async def load_deck(body: dict) -> dict:
         _current_deck.commander,
         len(_current_deck.cards),
     )
+    _active_deck_sort = ("manual", "ascending")
+    LOGGER.info("load_deck: reset active deck sort to manual")
     threading.Thread(target=_prefetch_deck_images, args=(_current_deck,), daemon=True).start()
     _notify_deck_updated()
     return _deck_to_response(_current_deck)
+
+
+@app.post("/api/deck/sort")
+async def sort_deck(body: dict) -> dict:
+    """Configure the active deck-viewer sort and apply it to every mutable board."""
+    global _active_deck_sort
+    if "criterion" not in body or not isinstance(body["criterion"], str):
+        raise HTTPException(status_code=400, detail="'criterion' must be a string")
+    if "direction" not in body or not isinstance(body["direction"], str):
+        raise HTTPException(status_code=400, detail="'direction' must be a string")
+    criterion: str = body["criterion"].strip().lower()
+    direction: str = body["direction"].strip().lower()
+    if criterion not in _VALID_DECK_SORT_CRITERIA:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid sort criterion: {criterion!r}. Must be one of {sorted(_VALID_DECK_SORT_CRITERIA)}.",
+        )
+    if direction not in _VALID_DECK_SORT_DIRECTIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid sort direction: {direction!r}. Must be one of {sorted(_VALID_DECK_SORT_DIRECTIONS)}.",
+        )
+    _active_deck_sort = (criterion, direction)
+    _apply_active_deck_sort(_current_deck)
+    _notify_deck_updated()
+    LOGGER.info("sort_deck: criterion=%s direction=%s", criterion, direction)
+    response: dict = _deck_to_response(_current_deck)
+    response["sort"] = {"criterion": criterion, "direction": direction}
+    return response
 
 
 @app.get("/api/events")
@@ -1221,6 +1329,7 @@ async def add_card(body: dict) -> dict:
         threading.Thread(
             target=_prefetch_images_for_names, args=(added_names,), daemon=True,
         ).start()
+    _apply_active_deck_sort(_current_deck)
     _notify_deck_updated()
     LOGGER.info("add_card: added %d cards to %s", len(cards_to_append), board)
     response: dict = _deck_to_response(_current_deck)
@@ -1268,6 +1377,7 @@ async def remove_card(body: dict) -> dict:
             raise HTTPException(status_code=404, detail=f"Card(s) not found in {board} board: {', '.join(not_found)}")
         remove_cards_at_indices(target_list, idx_asc)
     _recompute_and_set_colors(_current_deck)
+    _apply_active_deck_sort(_current_deck)
     _notify_deck_updated()
     LOGGER.info("remove_card: removed %s from %s", names_to_remove, board)
     return _deck_to_response(_current_deck)
@@ -1303,6 +1413,7 @@ async def move_card(body: dict) -> dict:
     except DeckEditorError as e:
         raise HTTPException(status_code=e.status_code, detail=e.detail) from None
     _recompute_and_set_colors(_current_deck)
+    _apply_active_deck_sort(_current_deck)
     _notify_deck_updated()
     LOGGER.info("move_card: moved %s from %s to %s", names_to_move, from_board, to_board)
     return _deck_to_response(_current_deck)
@@ -1337,6 +1448,7 @@ async def move_all_cards(body: dict) -> dict:
     dest.extend(source)
     source.clear()
     _recompute_and_set_colors(_current_deck)
+    _apply_active_deck_sort(_current_deck)
     _notify_deck_updated()
     LOGGER.info("move_all_cards: moved %d cards from %s to %s", moved_count, from_board, to_board)
     return _deck_to_response(_current_deck)
@@ -1451,6 +1563,7 @@ def _run_price_update_then_notify() -> None:
     try:
         update_all_prices()
         CardDB.inst().reload_prices()
+        _apply_active_deck_sort(_current_deck)
         _notify_deck_updated()
         LOGGER.info("_run_price_update_then_notify: price update completed")
     except Exception as e:
@@ -1496,7 +1609,7 @@ async def import_deck(request: Request) -> dict:
     When *merge* is true (the default) and a deck is already loaded, imported cards
     are merged into the current deck instead of replacing it.
     """
-    global _current_deck
+    global _active_deck_sort, _current_deck
     LOGGER.debug("import_deck: POST /api/import received")
     try:
         body: dict = await request.json()
@@ -1533,6 +1646,8 @@ async def import_deck(request: Request) -> dict:
         merge_deck_into(_current_deck, deck)
     else:
         _current_deck = deck
+    _active_deck_sort = ("manual", "ascending")
+    LOGGER.info("import_deck: reset active deck sort to manual")
     card_colors = _compute_deck_card_colors(_current_deck)
     existing = set(_current_deck.colors)
     _current_deck.colors = list(existing | card_colors)
@@ -1603,6 +1718,7 @@ async def update_deck(body: dict) -> dict:
         maybe=maybe_cards,
         sideboard=sideboard_cards,
     )
+    _apply_active_deck_sort(_current_deck)
     LOGGER.info(
         "update_deck: applied name=%r format=%r commander=%r main=%d maybe=%d sideboard=%d",
         _current_deck.name,
