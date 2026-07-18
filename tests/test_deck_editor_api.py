@@ -107,8 +107,7 @@ def test_sse_emits_initial_and_update_events_real_server() -> None:
 
     env = dict(os.environ)
     env["MTG_DISABLE_RAG_STARTUP"] = "1"
-    # Some environments (Windows + MKL/OpenMP) can otherwise error when torch is imported.
-    env.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+    env["MTG_DISABLE_PRICE_STARTUP"] = "1"
 
     proc = subprocess.Popen(
         [
@@ -420,4 +419,92 @@ def test_deck_sort_reapplies_after_add_and_resets_on_load_or_manual(client: Test
 def test_deck_sort_rejects_invalid_criterion_and_direction(client: TestClient) -> None:
     assert client.post("/api/deck/sort", json={"criterion": "wrong", "direction": "ascending"}).status_code == 400
     assert client.post("/api/deck/sort", json={"criterion": "name", "direction": "wrong"}).status_code == 400
+
+
+@pytest.mark.integration
+def test_recommendations_prevalidate_and_reuse_add_to_maybe(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The recommendation endpoint excludes illegal colors and keeps mutation on /api/add_card."""
+    from types import SimpleNamespace
+
+    from src.lib.cardDB import CardDB
+
+    loaded = client.post(
+        "/api/deck",
+        json={"name": "White", "format": "commander", "colors": ["W"], "cards": ["Plains"]},
+    )
+    assert loaded.status_code == 200
+    card_db = CardDB.inst()
+    monkeypatch.setattr(card_db, "is_rag_ready", lambda: True)
+    monkeypatch.setattr(card_db, "get_graph_manifest_hash", lambda: "manifest-hash")
+
+    async def fake_analyze(deck_cards, eligible_candidates, limit, deck_context):
+        eligible_names = {card.canonical_name or card.name for card in eligible_candidates}
+        assert "Soul Warden" in eligible_names
+        assert "Lightning Bolt" not in eligible_names
+        assert deck_context["format"] == "commander"
+        return SimpleNamespace(
+            recommendations=(
+                SimpleNamespace(
+                    name="Soul Warden",
+                    score=8.0,
+                    reasons=("Provides deck needs: gain_life",),
+                    sources=("MTGJSON oracle text",),
+                ),
+            ),
+            explanation="Soul Warden matches the deck's creature plan [Data: Entities].",
+            fingerprint="analysis-fingerprint",
+        )
+
+    monkeypatch.setattr(card_db, "analyze_deck", fake_analyze)
+    response = client.post("/api/recommendations", json={"limit": 5})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [item["name"] for item in body["recommendations"]] == ["Soul Warden"]
+    assert body["analysis_fingerprint"] == "analysis-fingerprint"
+    assert body["graph_manifest_hash"] == "manifest-hash"
+
+    add_response = client.post("/api/add_card", json={"name": "Soul Warden", "board": "maybe"})
+    assert add_response.status_code == 200
+    assert "Soul Warden" in add_response.json()["deck"]["maybe_names"]
+
+
+@pytest.mark.integration
+def test_synergy_response_exposes_graph_evidence_and_provenance(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.lib.cardDB import CardDB
+
+    card_db = CardDB.inst()
+    monkeypatch.setattr(card_db, "is_rag_ready", lambda: True)
+    monkeypatch.setattr(
+        card_db,
+        "get_synergy_evidence",
+        lambda name_a, name_b: (
+            16.0,
+            [
+                {
+                    "source": name_a,
+                    "target": name_b,
+                    "token": "combo-1",
+                    "kind": "combo",
+                    "provenance": "Commander Spellbook",
+                }
+            ],
+        ),
+    )
+
+    response = client.get(
+        "/api/synergy",
+        params={"name1": "Sanguine Bond", "name2": "Exquisite Blood"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["synergy_score"] == 16.0
+    assert response.json()["sources"] == ["Commander Spellbook"]
+    assert response.json()["evidence"][0]["kind"] == "combo"
 

@@ -1,68 +1,39 @@
 ---
-description: Comprehensive overview of the MTG Card Search MCP repository structure, purpose, and logic distribution.
-globs: 
+description: Current MTG builder architecture and logic ownership.
+globs:
+alwaysApply: false
 ---
-# MTG Card Search MCP - Repository Overview
+# MTG Builder Repository Overview
 
-This repository hosts a **Model Context Protocol (MCP)** server that provides semantic and structured search capabilities for Magic: The Gathering (MTG) cards. It is designed to be integrated with Cursor to allow AI agents to query the MTG card database.
+This repository provides a FastAPI deck editor and a FastMCP card-search server over MTGJSON card data.
 
-## 1. Project Purpose
+## Runtime architecture
 
-The main goal is to expose MTG card data to LLMs via MCP tools:
--   **Semantic Search**: Find cards by meaning (e.g., "creatures that draw cards on attack") using vector embeddings.
--   **Structured Search**: Filter cards by specific attributes (name, type, color, mana value, etc.).
+- `server.bat` / `src/server.py`: MCP stdio entry point and `plain_search_card`.
+- `editor.bat` / `src/deck_editor/app.py`: deck editor HTTP API, SSE updates, recommendations, and synergy checker.
+- `src/lib/cardDB.py`: canonical card/face resolution, exact structural filters, and GraphRAG integration.
+- `src/obj/card.py`: card model, oracle parsing, and typed mechanic signatures.
+- `src/lib/graphrag_build.py`: deterministic BYOG entities, relationships, text units, adjacency, and Commander Spellbook provenance.
+- `src/lib/build_rag.py`: GraphRAG community detection, cached top-level reports, and deduplicated Gemini/LanceDB embeddings.
+- `src/lib/graphrag_service.py`: validated runtime loading, semantic ranking, graph traversal, pair evidence, recommendation analysis, and exact cache invalidation.
+- `src/lib/graphrag_benchmark.py`: frozen-baseline and representative-deck cutover gate.
+- `data/graphrag/`: generated Parquet, manifest, reports, and LanceDB data.
 
-## 2. File System Structure
+## Retrieval behavior
 
-The project follows a modular Python structure:
+- Exact CardDB filters remain authoritative for name, type, colors, mana value, legality, and price.
+- General semantic search combines card embeddings, exact query-to-mechanic mappings, typed traversal, and MTGJSON EDHREC rank.
+- Trigger/effect search maps known query phrases to typed mechanics; unknown phrases use mechanic embeddings before traversal.
+- Recommendations are prevalidated by current deck format/color/copy rules, then combine graph evidence, deck embeddings, and popularity.
+- Pair synergy and additions cite MTGJSON or Commander Spellbook evidence.
+- Runtime loading fails unless manifest and artifact hashes validate.
 
-```text
-D:/scripts/MTG/
-├── server.py              # [ENTRY POINT] The MCP server implementation using FastMCP.
-├── main.bat               # [UTILITY] Windows batch script for install, download, build, and serve.
-├── mcp.json               # [CONFIG] Cursor MCP configuration file.
-├── requirements.txt       # [DEPS] Python dependencies (torch, sentence-transformers, chromadb, etc.).
-├── src/
-│   ├── lib/               # [CORE LOGIC]
-│   │   ├── config.py      # -> Constants, paths, and model configuration.
-│   │   ├── cardDB.py      # -> CardDB: AtomicCards load/filter + RAG semantic search (ChromaDB + embeddings).
-│   │   └── build_rag.py   # -> Scripts for downloading data and building the vector index.
-│   ├── obj/               # [MODELS]
-│   │   └── card.py        # -> Data class representing a card (Card).
-│   └── utils/             # [UTILS]
-│       └── logger.py      # -> Centralized logging configuration.
-├── data/                  # [DATA] Stores AtomicCards.json (downloaded from MTGJSON).
-├── chroma_db/             # [STORAGE] Persistent ChromaDB vector index.
-└── logs/                  # [LOGS] Server log files.
-```
+## Commands
 
-## 3. Logic Distribution
+- `install.bat install`: create/update the Python 3.11 `mtg-rag` environment.
+- `install.bat download`: fetch MTGJSON data.
+- `install.bat build`: clean-build GraphRAG and LanceDB artifacts.
+- `install.bat update`: refresh cards, prices, and the full index.
+- `server.bat`: run MCP; `editor.bat`: run deck editor.
 
-### A. MCP Server (`server.py`)
--   Initializes the `FastMCP` server.
--   Registers `plain_search_card(...)`: delegates to `CardDB.inst().filter_cards` (structured filters; optional `semantic_query` / `search_type` for RAG-ranked results within those filters).
--   Handles server startup and stdio communication.
-
-### B. CardDB (`src/lib/cardDB.py`)
--   **Singleton**: `CardDB.inst()` returns the single instance; holds lazy-loaded AtomicCards list, embedding model, and ChromaDB client.
--   **Structured Search**: `get_card_data()`, `filter_cards_list()`, `filter_cards()` — load `AtomicCards.json` and apply AND-based filters (name, oracle text, colors, type line, etc.).
--   **RAG / Semantic Search**: `get_embedding_model()`, Chroma collections, `_semantic_query`, and the semantic branch inside `filter_cards_list` — lazy-load SentenceTransformer and ChromaDB; optional semantic ranking combined with structured filters.
-
-### C. Data Ingestion (`src/lib/build_rag.py` called via `main.bat`)
--   **Download**: Fetches the latest `AtomicCards.json` from MTGJSON.
--   **Build**: Parses cards, generates embeddings using the specified model (e.g., `all-MiniLM-L6-v2`), and upserts them into `chroma_db`.
-
-## 4. Key Configuration
-
--   **Environment Variables**: `MTG_LOG_LEVEL` controls logging verbosity (default: INFO).
--   **Paths & Constants**: Defined in `src/lib/config.py`.
--   **Execution**:
-    -   Use `main.bat serve` to start the server.
-    -   Use `main.bat build` to rebuild the index.
-
-## 5. Development Guidelines
-
--   **Logging**: Always use `src.utils.logger.LOGGER`.
--   **Type Hinting**: Enforce strict type hints for all functions and classes.
--   **Error Handling**: Follow strict error handling rules (raise exceptions, do not swallow errors).
--   **Dependencies**: Manage via `requirements.txt` and `main.bat install`.
+Use `src.utils.logger.LOGGER`, strict type hints, and fail-visible error handling.

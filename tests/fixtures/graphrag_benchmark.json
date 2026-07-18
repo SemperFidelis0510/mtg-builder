@@ -1,0 +1,101 @@
+{
+  "queries": [
+    {
+      "query": "efficient mana acceleration",
+      "search_type": "general",
+      "expected": ["Sol Ring", "Arcane Signet", "Birds of Paradise", "Llanowar Elves", "Rampant Growth", "Cultivate", "Nature's Lore", "Farseek", "Mana Crypt"],
+      "chroma_baseline": ["Aether Syphon", "Whir of Invention", "Macabre Mockery", "Vision Quest", "Special Move", "Starting Column", "Obscura Confluence", "Fury Charm", "Avishkar Raceway", "Breaking // Entering"]
+    },
+    {
+      "query": "graveyard recursion for creatures",
+      "search_type": "general",
+      "expected": ["Reanimate", "Animate Dead", "Eternal Witness", "Regrowth", "Living Death", "Victimize", "Unearth", "Sun Titan", "Deadwood Treefolk", "Underworld Cerberus"],
+      "chroma_baseline": ["Frankenstein's Monster", "Voracious Brood", "Underworld Cerberus", "Deadwood Treefolk", "Chitinous Crawler", "Broodspinner", "Zombie Mob", "Drakestown Forgotten", "Golgari Grave-Troll", "Ghastly Remains"]
+    },
+    {
+      "query": "protect my creatures from removal",
+      "search_type": "general",
+      "expected": ["Heroic Intervention", "Teferi's Protection", "Flawless Maneuver", "Boros Charm", "Tamiyo's Safekeeping", "Mithril Coat", "Mikaeus, the Unhallowed"],
+      "chroma_baseline": ["Pyreheart Wolf", "Gloomshrieker", "Calciderm", "Displacer Kitten", "Woodfall Primus", "Wall of Nets", "Froghemoth", "Mikaeus, the Unhallowed", "Vorapede", "Wormfang Newt"]
+    },
+    {
+      "query": "a creature enters the battlefield",
+      "search_type": "trigger",
+      "expected": ["Soul Warden", "Soul's Attendant", "Essence Warden", "Impact Tremors", "Mentor of the Meek", "Welcoming Vampire", "Beast Whisperer"],
+      "chroma_baseline": ["Gravegouger", "Phyrexian War Beast", "Horned Stoneseeker", "Worldgorger Dragon", "Obscura Polymorphist", "Thought Gorger", "Sengir Autocrat", "Spellgorger Barbarian", "Vicious Battlerager", "Soulgorger Orgg"]
+    },
+    {
+      "query": "a creature dies",
+      "search_type": "trigger",
+      "expected": ["Blood Artist", "Zulaport Cutthroat", "Falkenrath Noble", "Midnight Reaper", "Grim Haruspex", "Morbid Opportunist", "Dictate of Erebos"],
+      "chroma_baseline": ["Relentless Dead", "Doomed Dissenter", "Necropede", "Symbiotic Beast", "Bashful Beastie", "Death's-Head Buzzard", "Deathbloom Thallid", "Cathodion", "Polluted Dead", "Grief Tyrant"]
+    },
+    {
+      "query": "cast an instant or sorcery spell",
+      "search_type": "trigger",
+      "expected": ["Guttersnipe", "Young Pyromancer", "Talrand, Sky Summoner", "Archmage Emeritus", "Storm-Kiln Artist", "Thermo-Alchemist", "Docent of Perfection // Final Iteration"],
+      "chroma_baseline": ["Docent of Perfection // Final Iteration", "Smoldering Egg // Ashmouth Dragon", "Echoing Boon", "Thermo-Alchemist", "Double Stroke", "A-Sorcerer Class", "Doublecast", "Sorcerer Class", "Complete the Circuit", "Wandering Archaic // Explore the Vastlands"]
+    },
+    {
+      "query": "create creature tokens",
+      "search_type": "effect",
+      "expected": ["Raise the Alarm", "Secure the Wastes", "Spore Swarm", "Krenko, Mob Boss", "Dragon Fodder", "Feral Incarnation", "Release the Dogs"],
+      "chroma_baseline": ["Raise the Alarm", "Spore Swarm", "Smelt // Herd // Saw", "Eyes in the Skies", "Fable of Wolf and Owl", "Secure the Wastes", "Necroduality", "Feral Incarnation", "Liberated Livestock", "Release the Dogs"]
+    },
+    {
+      "query": "draw cards",
+      "search_type": "effect",
+      "expected": ["Quick Study", "Tidings", "Jace's Ingenuity", "Vision Skeins", "Meeting of Minds", "Harmonize", "Sign in Blood"],
+      "chroma_baseline": ["Mental Note", "Meeting of Minds", "Quick Study", "Heartwarming Redemption", "Tolarian Winds", "Jace's Archivist", "Knowing // Half the Battle", "Vision Skeins", "Jace's Ingenuity", "Tidings"]
+    },
+    {
+      "query": "destroy target permanent",
+      "search_type": "effect",
+      "expected": ["Vindicate", "Beast Within", "Generous Gift", "Assassin's Trophy", "Anguished Unmaking", "Terminate", "Crush"],
+      "chroma_baseline": ["Behold the Power of Destruction", "Who // What // When // Where // Why", "Illusion // Reality", "Atomize", "Winnow", "Terminate", "Vindicate", "Pure // Simple", "Who // What // When // Where // Why", "Crush"]
+    }
+  ],
+  "combo_completion": [
+    {
+      "deck_cards": ["Thassa's Oracle"],
+      "expected": "Demonic Consultation",
+      "format": "commander",
+      "colors": ["U", "B"]
+    },
+    {
+      "deck_cards": ["Kiki-Jiki, Mirror Breaker"],
+      "expected": "Zealous Conscripts",
+      "format": "commander",
+      "colors": ["R"]
+    },
+    {
+      "deck_cards": ["Sanguine Bond"],
+      "expected": "Exquisite Blood",
+      "format": "commander",
+      "colors": ["B"]
+    }
+  ],
+  "manual_decks": [
+    {
+      "name": "Mono-Green Landfall Commander",
+      "format": "commander",
+      "colors": ["G"],
+      "commander": "Azusa, Lost but Seeking",
+      "cards": ["Exploration", "Lotus Cobra", "Scute Swarm", "Ramunap Excavator"]
+    },
+    {
+      "name": "Modern Izzet Spells",
+      "format": "modern",
+      "colors": ["U", "R"],
+      "commander": "",
+      "cards": ["Young Pyromancer", "Lightning Bolt", "Consider", "Expressive Iteration"]
+    },
+    {
+      "name": "Legacy Reanimator",
+      "format": "legacy",
+      "colors": ["B"],
+      "commander": "",
+      "cards": ["Reanimate", "Entomb", "Dark Ritual", "Animate Dead"]
+    }
+  ]
+}

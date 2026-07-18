@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+from src.utils.logger import LOGGER
+
 # ---------------------------------------------------------------------------
 # Paths and model configuration
 # ---------------------------------------------------------------------------
@@ -10,11 +12,14 @@ REPO_ROOT: Path = _MODULE_DIR.parent.parent
 DATA_DIR: Path = REPO_ROOT / "data"
 DECK_EDITOR_SAVE_DIR: Path = REPO_ROOT / "decks"
 DECK_EDITOR_BASE_URL: str = "http://127.0.0.1:8000"
-CHROMA_PATH: Path = REPO_ROOT / "chroma_db"
-MODEL_NAME: str = "all-MiniLM-L6-v2"
-COLLECTION_NAME: str = "mtg_cards"
-TRIGGERS_COLLECTION_NAME: str = "mtg_triggers"
-EFFECTS_COLLECTION_NAME: str = "mtg_effects"
+GRAPHRAG_DIR: Path = DATA_DIR / "graphrag"
+GRAPHRAG_INPUT_DIR: Path = GRAPHRAG_DIR / "output"
+GRAPHRAG_LANCEDB_DIR: Path = GRAPHRAG_INPUT_DIR / "lancedb"
+GRAPHRAG_SETTINGS_PATH: Path = GRAPHRAG_DIR / "settings.yaml"
+GRAPHRAG_MANIFEST_PATH: Path = GRAPHRAG_INPUT_DIR / "manifest.json"
+GRAPHRAG_COMPLETION_MODEL: str = "gemini-3.1-flash-lite"
+GRAPHRAG_EMBEDDING_MODEL: str = "gemini-embedding-001"
+GEMINI_API_KEY_PATH: Path = Path.home() / ".mtgbuilder" / "agent" / ".key"
 ATOMIC_CARDS_PATH: Path = DATA_DIR / "AtomicCards.json"
 PRICES_PATH: Path = DATA_DIR / "prices.json"
 CARD_FACES_DIR: Path = DATA_DIR / "faces"
@@ -22,6 +27,18 @@ CONFIG_DIR: Path = REPO_ROOT / "src" / "config"
 THRESHOLDS_INI_PATH: Path = CONFIG_DIR / "thresholds.ini"
 KEYWORD_EXPLANATIONS_PATH: Path = CONFIG_DIR / "keyword_explanations.json"
 DECK_SITES_KEYS_PATH: Path = CONFIG_DIR / "deck_sites_keys.json"
+
+
+def load_required_gemini_api_key() -> str:
+    """Load the shared Gemini key for operations that require model access."""
+    if not GEMINI_API_KEY_PATH.is_file():
+        LOGGER.error("Gemini API key file not found: %s", GEMINI_API_KEY_PATH)
+        raise FileNotFoundError(f"Gemini API key file not found: {GEMINI_API_KEY_PATH}")
+    key = GEMINI_API_KEY_PATH.read_text(encoding="utf-8").strip()
+    if not key:
+        LOGGER.error("Gemini API key file is empty: %s", GEMINI_API_KEY_PATH)
+        raise ValueError(f"Gemini API key file is empty: {GEMINI_API_KEY_PATH}")
+    return key
 
 _MTGJSON_LEGALITY_ALIASES: dict[str, str] = {
     "historicbrawl": "brawl",

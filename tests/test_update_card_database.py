@@ -102,42 +102,45 @@ def test_do_update_propagates_build_error(monkeypatch: pytest.MonkeyPatch) -> No
         update_card_database.do_update()
 
 
-def test_do_build_all_propagates_clean_flag_to_all_collections(monkeypatch: pytest.MonkeyPatch) -> None:
-    """do_build_all(clean=True) must pass clean=True to _build_collection for every collection."""
-    from src.lib import build_rag
-    from src.lib.config import COLLECTION_NAME, EFFECTS_COLLECTION_NAME, TRIGGERS_COLLECTION_NAME
-
-    monkeypatch.setattr(build_rag, "_load_cards", lambda: [])
-
-    calls: list[tuple[str, bool]] = []
-
-    def fake_build_collection(name: str, rows: list, label: str, clean: bool = False) -> None:
-        calls.append((name, clean))
-
-    monkeypatch.setattr(build_rag, "_build_collection", fake_build_collection)
-
-    build_rag.do_build_all(clean=True)
-
-    assert calls == [
-        (COLLECTION_NAME, True),
-        (TRIGGERS_COLLECTION_NAME, True),
-        (EFFECTS_COLLECTION_NAME, True),
-    ]
-
-
-def test_do_build_all_defaults_to_no_clean(monkeypatch: pytest.MonkeyPatch) -> None:
-    """When clean is not set, do_build_all must pass clean=False (preserving legacy upsert behavior)."""
+def test_do_build_all_creates_graph_and_lancedb_then_reports(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The public rebuild pipeline executes graph, vector, and community stages."""
     from src.lib import build_rag
 
-    monkeypatch.setattr(build_rag, "_load_cards", lambda: [])
-
-    calls: list[bool] = []
-
-    def fake_build_collection(name: str, rows: list, label: str, clean: bool = False) -> None:
-        calls.append(clean)
-
-    monkeypatch.setattr(build_rag, "_build_collection", fake_build_collection)
+    calls: list[str] = []
+    result = type("Result", (), {"card_count": 1, "combo_count": 1})()
+    monkeypatch.setattr(build_rag, "_load_cards", lambda: ["card"])
+    monkeypatch.setattr(
+        build_rag,
+        "build_graph_artifacts",
+        lambda cards, output, **kwargs: calls.append("graph") or result,
+    )
+    monkeypatch.setattr(build_rag, "_write_settings", lambda workflows: calls.append("settings"))
+    monkeypatch.setattr(build_rag, "_build_lancedb", lambda graph_result: calls.append("lancedb"))
+    monkeypatch.setattr(
+        build_rag,
+        "_build_community_reports",
+        lambda graph_result: calls.append("reports"),
+    )
+    monkeypatch.setattr(build_rag, "_run_graphrag_workflows", lambda: calls.append("workflows"))
+    monkeypatch.setattr(
+        build_rag,
+        "_run_runtime_embeddings",
+        lambda graph_result: calls.append("embeddings"),
+    )
+    monkeypatch.setattr(build_rag, "_validate_generated_index", lambda graph_result: calls.append("validate"))
+    monkeypatch.setattr(build_rag, "_finalize_manifest", lambda graph_result: calls.append("manifest"))
 
     build_rag.do_build_all()
 
-    assert calls == [False, False, False]
+    assert calls == [
+        "graph",
+        "settings",
+        "workflows",
+        "reports",
+        "settings",
+        "embeddings",
+        "lancedb",
+        "settings",
+        "validate",
+        "manifest",
+    ]

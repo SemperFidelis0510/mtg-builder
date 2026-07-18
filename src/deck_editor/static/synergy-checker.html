@@ -122,6 +122,13 @@
       color: var(--accent);
       margin-top: 0.25rem;
     }
+    .synergy-evidence {
+      max-width: 520px;
+      margin: 0.75rem 0 0;
+      padding-left: 1.25rem;
+      color: #c7d6ec;
+      font-size: 0.85rem;
+    }
   </style>
 </head>
 <body>
@@ -159,6 +166,7 @@
   </div>
   <div id="scoreWrap" style="display: none;">
     <div class="synergy-score" id="synergyScore"></div>
+    <ul class="synergy-evidence" id="synergyEvidence"></ul>
   </div>
 
   <script>
@@ -257,7 +265,9 @@
         var msgEl = document.getElementById('synergyMsg');
         var scoreWrap = document.getElementById('scoreWrap');
         var scoreEl = document.getElementById('synergyScore');
+        var evidenceEl = document.getElementById('synergyEvidence');
         scoreWrap.style.display = 'none';
+        evidenceEl.innerHTML = '';
         msgEl.style.display = 'none';
         if (!name1 || !name2) {
           msgEl.textContent = 'Please enter both card names.';
@@ -283,6 +293,17 @@
           .then(function (data) {
             msgEl.style.display = 'none';
             scoreEl.textContent = 'Score: ' + data.synergy_score;
+            (data.evidence || []).forEach(function (edge) {
+              var item = document.createElement('li');
+              var relationship = edge.kind === 'trait' ? 'shares trait' : 'provides';
+              item.textContent = edge.source + ' ' + relationship + ' ' + edge.token + ' for ' + edge.target + '.';
+              evidenceEl.appendChild(item);
+            });
+            if (!evidenceEl.children.length) {
+              var noEvidence = document.createElement('li');
+              noEvidence.textContent = 'No direct normalized mechanic path was found.';
+              evidenceEl.appendChild(noEvidence);
+            }
             scoreWrap.style.display = 'block';
           })
           .catch(function (err) {

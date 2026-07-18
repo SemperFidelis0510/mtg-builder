@@ -8,7 +8,7 @@ When the user asks to add, remove, or move cards in **"the deck"**, **"the open 
 
 **Do not** only suggest code, curl commands, or manual steps — actually invoke the tool (when the agent has MCP access).
 
-**Prerequisite:** The deck editor server must be running (e.g. `python deck_editor.py` or `main.bat deck-editor`). If a tool returns an error that the editor is unreachable, tell the user to start the deck editor first.
+**Prerequisite:** The deck editor server must be running (for example, `editor.bat`). If a tool returns an error that the editor is unreachable, tell the user to start the deck editor first.
 
 ---
 

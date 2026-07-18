@@ -23,6 +23,7 @@ import { initAgentRules } from './agent-rules.js';
 import { initMaybeBoardViewUi } from './maybe-board-view.js';
 import { initWishlist } from './wishlist.js';
 import { initDeckSort } from './deck-sort.js';
+import { initRecommendations } from './recommendations.js';
 
 const log = createLogger('main');
 
@@ -78,6 +79,7 @@ initAgentRules();
 initMaybeBoardViewUi();
 initWishlist();
 initDeckSort();
+initRecommendations();
 log.info('All modules initialized');
 document.getElementById('collapseAllBtn').addEventListener('click', () => {
   document.querySelectorAll('#commanderSectionHost .section, #deckSections .section, #section-maybe, #section-sideboard').forEach((s) => s.classList.add('collapsed'));
@@ -311,5 +313,6 @@ evtSource.addEventListener('deck_updated', (e) => {
   log.debug('SSE deck_updated received');
   const data = JSON.parse(e.data);
   renderDeck(data);
+  window.dispatchEvent(new CustomEvent('mtg-deck-updated'));
 });
 evtSource.onerror = () => { log.warn('SSE connection error, will reconnect'); };

@@ -226,6 +226,16 @@ def _notify_deck_updated() -> None:
 @app.on_event("startup")
 def _startup_refresh_prices() -> None:
     """If prices are missing or older than 24h, start a background price update."""
+    disable = (
+        os.environ["MTG_DISABLE_PRICE_STARTUP"]
+        if "MTG_DISABLE_PRICE_STARTUP" in os.environ
+        else ""
+    )
+    if disable.strip().casefold() in ("1", "true", "yes", "on"):
+        LOGGER.info(
+            "_startup_refresh_prices: MTG_DISABLE_PRICE_STARTUP set; skipping price refresh"
+        )
+        return
     age: float | None = prices_age_hours()
     LOGGER.info("_startup_refresh_prices: price age=%s hours", age)
     if age is None or age > 24:
@@ -235,10 +245,10 @@ def _startup_refresh_prices() -> None:
 
 
 def _startup_load_rag() -> None:
-    """Load RAG (embedding model + ChromaDB) in background so semantic search is ready without blocking startup."""
-    LOGGER.info("_startup_load_rag: starting RAG load")
+    """Validate GraphRAG artifacts in background without blocking startup."""
+    LOGGER.info("_startup_load_rag: starting GraphRAG load")
     CardDB.inst().load_rag_sync()
-    LOGGER.info("_startup_load_rag: RAG loaded successfully")
+    LOGGER.info("_startup_load_rag: GraphRAG loaded successfully")
 
 
 @app.on_event("startup")
@@ -1077,7 +1087,7 @@ async def search_cards_api(body: dict) -> dict:
     if semantic_query and not CardDB.inst().is_rag_ready():
         raise HTTPException(
             status_code=503,
-            detail="Semantic search requires RAG; the embedding index is not ready yet.",
+            detail="Semantic search requires GraphRAG; the validated index is not ready yet.",
         )
 
     try:
@@ -1116,7 +1126,7 @@ async def search_cards_api(body: dict) -> dict:
 
 @app.get("/api/rag_ready")
 async def rag_ready() -> dict:
-    """Return whether RAG (embedding model + ChromaDB) is loaded and semantic search is available."""
+    """Return whether GraphRAG is loaded and semantic search is available."""
     ready: bool = CardDB.inst().is_rag_ready()
     LOGGER.debug("rag_ready: %s", ready)
     return {"ready": ready}
@@ -1511,15 +1521,102 @@ async def get_synergy(
     if not CardDB.inst().is_rag_ready():
         raise HTTPException(
             status_code=503,
-            detail="Synergy check requires RAG (embedding model) to be loaded. Please try again in a moment.",
+            detail="Synergy check requires the GraphRAG index to be loaded. Please try again in a moment.",
         )
     try:
-        score: float = CardDB.inst().get_synergy_score(name_a=name1, name_b=name2)
+        score, evidence = CardDB.inst().get_synergy_evidence(name_a=name1, name_b=name2)
     except ValueError as e:
         if "not found" in str(e).lower():
             raise HTTPException(status_code=404, detail=str(e)) from e
         raise HTTPException(status_code=400, detail=str(e)) from e
-    return {"card_a": name1, "card_b": name2, "synergy_score": round(score, 4)}
+    return {
+        "card_a": name1,
+        "card_b": name2,
+        "synergy_score": round(score, 4),
+        "evidence": evidence,
+        "sources": sorted({str(item["provenance"]) for item in evidence}),
+    }
+
+
+@app.post("/api/recommendations")
+async def deck_recommendations(body: dict) -> dict:
+    """Analyze the loaded deck and return GraphRAG additions safe for the main deck."""
+    try:
+        limit: int = int(body["limit"]) if "limit" in body and body["limit"] is not None else 12
+    except (TypeError, ValueError) as error:
+        LOGGER.error("deck_recommendations: invalid limit=%r", body["limit"])
+        raise HTTPException(status_code=400, detail="'limit' must be an integer") from error
+    if limit < 1 or limit > 50:
+        LOGGER.error("deck_recommendations: limit out of range: %s", limit)
+        raise HTTPException(status_code=400, detail="'limit' must be between 1 and 50")
+    card_db = CardDB.inst()
+    if not card_db.is_rag_ready():
+        raise HTTPException(
+            status_code=503,
+            detail="GraphRAG index is not ready. Build the index and restart the deck editor.",
+        )
+    deck_cards: list[Card] = [
+        *_current_deck.cards,
+        *_current_deck.maybe,
+        *_current_deck.sideboard,
+    ]
+    if _current_deck.commander:
+        deck_cards.extend(_cards_from_names([_current_deck.commander]))
+    if not deck_cards:
+        raise HTTPException(status_code=400, detail="Add at least one card before requesting recommendations")
+    canonical_candidates = card_db.get_canonical_cards()
+    candidate_names = [card_db.card_display_name(card) for card in canonical_candidates]
+    eligible_candidates, _, rejected = validate_cards_for_deck(
+        canonical_candidates,
+        candidate_names,
+        _current_deck,
+        "main",
+    )
+    LOGGER.info(
+        "deck_recommendations: prevalidated candidates eligible=%d rejected=%d",
+        len(eligible_candidates),
+        len(rejected),
+    )
+    deck_context: dict[str, Any] = {
+        "format": _current_deck.format,
+        "colors": sorted(_current_deck.colors),
+        "commander": _current_deck.commander,
+        "main": sorted(card_db.card_display_name(card) for card in _current_deck.cards),
+        "maybe": sorted(card_db.card_display_name(card) for card in _current_deck.maybe),
+        "sideboard": sorted(card_db.card_display_name(card) for card in _current_deck.sideboard),
+    }
+    try:
+        analysis = await card_db.analyze_deck(
+            deck_cards,
+            eligible_candidates,
+            limit,
+            deck_context,
+        )
+    except (ValueError, RuntimeError, FileNotFoundError, TypeError) as error:
+        LOGGER.error("deck_recommendations: graph analysis failed: %s", error)
+        raise HTTPException(status_code=503, detail=str(error)) from error
+
+    recommendations: list[dict[str, Any]] = []
+    for recommendation in analysis.recommendations:
+        candidate = card_db.resolve_primary_card(recommendation.name)
+        recommendations.append(
+            {
+                "name": recommendation.name,
+                "score": recommendation.score,
+                "reasons": list(recommendation.reasons),
+                "sources": list(recommendation.sources),
+                "type_line": candidate.type_line,
+                "mana_cost": candidate.mana_cost,
+            }
+        )
+    response: dict[str, Any] = {
+        "recommendations": recommendations,
+        "graph_manifest_hash": card_db.get_graph_manifest_hash(),
+        "analysis_fingerprint": analysis.fingerprint,
+    }
+    if analysis.explanation is not None:
+        response["analysis"] = analysis.explanation
+    return response
 
 
 @app.get("/api/card_image")

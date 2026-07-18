@@ -12,10 +12,8 @@ import requests
 
 from src.lib.card_name_parser import parse_card_names_arg
 from src.lib.config import (
-    CHROMA_PATH,
-    COLLECTION_NAME,
     DECK_EDITOR_BASE_URL,
-    MODEL_NAME,
+    GRAPHRAG_DIR,
     REPO_ROOT,
 )
 from src.lib.cardDB import CardDB
@@ -33,8 +31,8 @@ def run_server() -> None:
     from fastmcp import FastMCP
 
     LOGGER.info(
-        "Server startup repo_root=%s chroma_path=%s collection=%s model=%s transport=stdio",
-        REPO_ROOT, CHROMA_PATH, COLLECTION_NAME, MODEL_NAME,
+        "Server startup repo_root=%s graphrag_dir=%s transport=stdio",
+        REPO_ROOT, GRAPHRAG_DIR,
     )
 
     def _load_rag() -> None:

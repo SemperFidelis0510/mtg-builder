@@ -48,6 +48,16 @@ def test_card_arena_export_name_split_uses_full_name() -> None:
 
 
 @pytest.mark.skipif(not ATOMIC_CARDS_PATH.is_file(), reason="AtomicCards.json not present")
+def test_exact_canonical_name_wins_over_back_face_alias() -> None:
+    from src.lib.cardDB import CardDB
+
+    card = CardDB.inst().resolve_primary_card("Reanimate")
+
+    assert card.canonical_name == "Reanimate"
+    assert card.type_line == "Sorcery"
+
+
+@pytest.mark.skipif(not ATOMIC_CARDS_PATH.is_file(), reason="AtomicCards.json not present")
 def test_deck_export_arena_mdfc_lines() -> None:
     from src.obj.deck import Deck
 

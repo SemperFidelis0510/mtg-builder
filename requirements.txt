@@ -1,6 +1,6 @@
 fastmcp
-chromadb
-sentence-transformers
+graphrag==3.1.0
+lancedb==0.24.3
 tqdm
 requests
 fastapi

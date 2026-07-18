@@ -4,12 +4,11 @@ set "CONDA_ENV=mtg-rag"
 cd /d "%~dp0"
 
 REM --- Parse arguments ---
-REM   Usage: install.bat [install|download|build|prices|update|uninstall|reinstall] [--force] [--cuda 11|12|cpu]
+REM   Usage: install.bat [install|download|build|prices|update|uninstall|reinstall] [--force]
 REM   Default (no stage): run all three stages in order.
 
 set "STAGE="
 set "FORCE="
-set "CUDA=12"
 
 :parse_args
 if "%~1"=="" goto args_done
@@ -21,14 +20,6 @@ if /i "%~1"=="update"     ( set "STAGE=update"     & shift & goto parse_args )
 if /i "%~1"=="uninstall"  ( set "STAGE=uninstall"  & shift & goto parse_args )
 if /i "%~1"=="reinstall"  ( set "STAGE=reinstall"  & shift & goto parse_args )
 if /i "%~1"=="--force"  ( set "FORCE=1"        & shift & goto parse_args )
-if /i "%~1"=="--cuda"   (
-    if "%~2"=="" (
-        echo ERROR: --cuda requires a value: 11, 12, or cpu
-        exit /b 1
-    )
-    set "CUDA=%~2"
-    shift & shift & goto parse_args
-)
 echo ERROR: Unknown argument: %~1
 goto usage
 :args_done
@@ -107,8 +98,8 @@ if !errorlevel!==0 (
 )
 
 call conda activate %CONDA_ENV%
-echo === Installing Python dependencies (CUDA=%CUDA%) ===
-python -m src.lib.setup --install --cuda %CUDA%
+echo === Installing Python dependencies ===
+python -m src.lib.setup --install
 if errorlevel 1 (
     echo ERROR: Dependency installation failed.
     exit /b 1
@@ -134,9 +125,9 @@ exit /b 0
 
 :do_build
 echo.
-echo === [build] Building ChromaDB vector index ===
+echo === [build] Building GraphRAG graph, reports, and LanceDB index ===
 call "%_ACTIVATE%" %CONDA_ENV%
-python -m src.lib.build_rag --build
+python -m src.lib.build_rag
 if errorlevel 1 (
     echo ERROR: Build failed.
     exit /b 1
@@ -202,12 +193,12 @@ if exist "data\prices.json" (
     echo data\prices.json not found. Skipping.
 )
 
-REM Remove ChromaDB vector index
-if exist "chroma_db" (
-    echo Deleting chroma_db\...
-    rmdir /s /q "chroma_db"
+REM Remove GraphRAG graph and LanceDB artifacts
+if exist "data\graphrag" (
+    echo Deleting data\graphrag\...
+    rmdir /s /q "data\graphrag"
 ) else (
-    echo chroma_db\ not found. Skipping.
+    echo data\graphrag\ not found. Skipping.
 )
 
 echo === [uninstall] Done ===
@@ -229,27 +220,23 @@ exit /b 0
 
 :usage
 echo.
-echo Usage: .\%~nx0 [install^|download^|build^|prices^|update^|uninstall^|reinstall] [--force] [--cuda 11^|12^|cpu]
+echo Usage: .\%~nx0 [install^|download^|build^|prices^|update^|uninstall^|reinstall] [--force]
 echo.
 echo   (no stage)           Run all stages: install, download, build
 echo   install              Create conda env and install Python deps
 echo   download             Download AtomicCards.json
-echo   build                Ingest data and build ChromaDB vector index
+echo   build                Ingest data and build GraphRAG and LanceDB artifacts
 echo   prices               Update card prices from Scryfall to data/prices.json
 echo   update               Refresh card database when new cards come out:
 echo                          force-download AtomicCards.json, refresh prices,
-echo                          and clean-rebuild all ChromaDB collections.
+echo                          and clean-rebuild GraphRAG and LanceDB artifacts.
 echo                          Restart MCP server and deck editor afterwards.
-echo   uninstall            Remove conda env, downloaded data, and ChromaDB index
+echo   uninstall            Remove conda env, downloaded data, and GraphRAG index
 echo   reinstall            Full uninstall then full install (install + download + build)
 echo.
 echo   --force              Skip-checks override:
 echo                          install  : remove and recreate the conda env
 echo                          download : re-download even if file exists
-echo   --cuda 11^|12^|cpu    PyTorch variant for install/reinstall stage (default: 12)
-echo                          11  = CUDA 11.8 (PyTorch 2.1.2)
-echo                          12  = CUDA 12.8 (latest PyTorch, default)
-echo                          cpu = CPU-only (no GPU)
 echo.
 exit /b 1
 

@@ -14,28 +14,19 @@ from typing import Any
 from src.lib.config import (
     ATOMIC_CARDS_PATH,
     CARD_FACES_DIR,
-    CHROMA_PATH,
-    COLLECTION_NAME,
-    EFFECTS_COLLECTION_NAME,
-    MODEL_NAME,
-    TRIGGERS_COLLECTION_NAME,
     mtgjson_legality_key,
 )
-from src.lib.rag_device import embedding_torch_device
+from src.lib.graphrag_service import GraphAnalysis, GraphRAGService
 from src.lib.prices import load_prices
 from src.obj.card import Card
 from src.utils.logger import LOGGER
 
 # ---------------------------------------------------------------------------
-# CardDB singleton: AtomicCards + ChromaDB + embedding model
+# CardDB singleton: AtomicCards + GraphRAG semantic service
 # ---------------------------------------------------------------------------
 
-# Max Chroma rows to pull when combining semantic ranking with structural filters.
-_CHROMA_SEMANTIC_FILTER_CAP: int = 25000
-
-
 class CardDB:
-    """Unified card database: lazy-loaded AtomicCards list, structured filtering, and RAG semantic search."""
+    """Unified card database: cards, exact filters, and GraphRAG semantic retrieval."""
 
     _instance: CardDB | None = None
 
@@ -50,11 +41,6 @@ class CardDB:
         self._name_to_card: dict[str, Card] | None = None
         self._name_to_faces: dict[str, list[Card]] | None = None
         self._canonical_to_faces: dict[str, list[Card]] | None = None
-        self._embedding_model = None
-        self._chroma_client = None
-        self._collections: dict[str, object] = {}
-        self._rag_lock: threading.Lock = threading.Lock()
-        self._rag_ready: bool = False
 
     # -----------------------------------------------------------------------
     # AtomicCards loading and filtering
@@ -145,15 +131,19 @@ class CardDB:
         alias_to_primary: dict[str, Card] = {}
         alias_to_faces: dict[str, list[Card]] = {}
         for canonical, faces in canonical_to_faces.items():
+            ordered_faces = sorted(faces, key=lambda c: c.face_index)
+            canonical_alias = canonical.casefold()
+            alias_to_primary[canonical_alias] = ordered_faces[0]
+            alias_to_faces[canonical_alias] = ordered_faces
+        for canonical, faces in canonical_to_faces.items():
             ordered_faces: list[Card] = sorted(faces, key=lambda c: c.face_index)
             primary: Card = ordered_faces[0]
             aliases: set[str] = set()
-            aliases.add(canonical.lower())
             for face in ordered_faces:
-                aliases.add(face.name.lower())
-                aliases.add(face.face_name.lower())
+                aliases.add(face.name.casefold())
+                aliases.add(face.face_name.casefold())
                 for fname in face.face_names:
-                    aliases.add(fname.lower())
+                    aliases.add(fname.casefold())
             for alias in aliases:
                 if alias not in alias_to_primary:
                     alias_to_primary[alias] = primary
@@ -176,7 +166,7 @@ class CardDB:
         if not name or not name.strip():
             LOGGER.error("resolve_primary_card: name is empty")
             raise ValueError("resolve_primary_card: name is empty")
-        key: str = name.strip().lower()
+        key: str = name.strip().casefold()
         name_map: dict[str, Card] = self._get_name_to_card()
         if key not in name_map:
             LOGGER.error("resolve_primary_card: card not found: %r", name)
@@ -187,7 +177,7 @@ class CardDB:
         """Resolve name to primary face Card, or None if unknown. Does not log."""
         if not name or not name.strip():
             return None
-        key: str = name.strip().lower()
+        key: str = name.strip().casefold()
         name_map: dict[str, Card] = self._get_name_to_card()
         return name_map[key] if key in name_map else None
 
@@ -198,11 +188,23 @@ class CardDB:
             raise ValueError("resolve_faces: name is empty")
         self._build_name_indexes()
         assert self._name_to_faces is not None, "_build_name_indexes must initialize _name_to_faces"
-        key: str = name.strip().lower()
+        key: str = name.strip().casefold()
         if key not in self._name_to_faces:
             LOGGER.error("resolve_faces: card not found: %r", name)
             raise ValueError(f"Card not found: {name!r}")
         return list(self._name_to_faces[key])
+
+    def get_canonical_cards(self) -> list[Card]:
+        """Return one existing primary face per canonical card, sorted by name."""
+        self._build_name_indexes()
+        assert self._canonical_to_faces is not None
+        primary_cards: list[Card] = []
+        for canonical, faces in self._canonical_to_faces.items():
+            if not faces:
+                LOGGER.error("get_canonical_cards: canonical card %r has no faces", canonical)
+                raise ValueError(f"Canonical card {canonical!r} has no faces")
+            primary_cards.append(min(faces, key=lambda card: card.face_index))
+        return sorted(primary_cards, key=lambda card: (card.canonical_name or card.name).casefold())
 
     @staticmethod
     def card_display_name(card: Card) -> str:
@@ -242,12 +244,12 @@ class CardDB:
     @staticmethod
     def _name_query_matches_card(card: Card, query_lower: str) -> bool:
         aliases: list[str] = []
-        aliases.append(card.name.lower())
-        aliases.append(card.face_name.lower())
+        aliases.append(card.name.casefold())
+        aliases.append(card.face_name.casefold())
         if card.canonical_name:
-            aliases.append(card.canonical_name.lower())
+            aliases.append(card.canonical_name.casefold())
         for face_name in card.face_names:
-            aliases.append(face_name.lower())
+            aliases.append(face_name.casefold())
         for alias in aliases:
             if query_lower in alias:
                 return True
@@ -326,22 +328,39 @@ class CardDB:
         return "; ".join(items)
 
     def get_synergy_score(self, name_a: str, name_b: str) -> float:
-        """Return synergy score between two cards by name (higher = better synergy).
-
-        Uses embedding model with cosine similarity: cos_sim(triggers_A, effects_B) + cos_sim(effects_A, triggers_B).
-        Raises ValueError if either card is not found. Requires RAG (embedding model) to be loaded.
-        """
+        """Return deterministic graph synergy score between two cards."""
         card_a: Card = self.resolve_primary_card(name_a)
         card_b: Card = self.resolve_primary_card(name_b)
-        model = self.get_embedding_model()
-        def encode_fn(texts: list[str]):
-            return model.encode(texts).tolist()
-        return card_a.synergy_with(card_b, encode_fn)
+        score, _ = GraphRAGService.inst().pair_evidence(card_a, card_b)
+        return score
 
-    @staticmethod
-    def make_id(card_name: str, face_index: int) -> str:
-        """Build a unique ID from the dict key (guaranteed unique) and face index."""
-        return f"{card_name}::{face_index}"
+    def get_synergy_evidence(self, name_a: str, name_b: str) -> tuple[float, list[dict[str, Any]]]:
+        """Return the graph score and explainable evidence for two named cards."""
+        card_a: Card = self.resolve_primary_card(name_a)
+        card_b: Card = self.resolve_primary_card(name_b)
+        return GraphRAGService.inst().pair_evidence(card_a, card_b)
+
+    async def analyze_deck(
+        self,
+        deck_cards: list[Card],
+        eligible_candidates: list[Card],
+        limit: int,
+        deck_context: dict[str, Any],
+    ) -> GraphAnalysis:
+        """Return a complete cached GraphRAG analysis over prevalidated candidates."""
+        if not deck_cards:
+            LOGGER.error("analyze_deck: deck_cards must not be empty")
+            raise ValueError("analyze_deck: deck_cards must not be empty")
+        return await GraphRAGService.inst().analyze_deck(
+            deck_cards,
+            eligible_candidates,
+            limit,
+            deck_context,
+        )
+
+    def get_graph_manifest_hash(self) -> str:
+        """Return the loaded GraphRAG artifact hash for response cache invalidation."""
+        return GraphRAGService.inst().manifest_hash()
 
     @staticmethod
     def _parse_colors(colors_str: str) -> set[str]:
@@ -352,13 +371,10 @@ class CardDB:
 
     @staticmethod
     def _collection_name_for_search_type(search_type: str) -> str:
+        """Validate the public GraphRAG search scope."""
         st: str = (search_type or "").strip().lower()
-        if st == "general":
-            return COLLECTION_NAME
-        if st == "trigger":
-            return TRIGGERS_COLLECTION_NAME
-        if st == "effect":
-            return EFFECTS_COLLECTION_NAME
+        if st in ("general", "trigger", "effect"):
+            return st
         LOGGER.error("filter_cards_list: search_type must be general/trigger/effect, got %r", search_type)
         raise ValueError(f"search_type must be general/trigger/effect, got {search_type!r}")
 
@@ -447,16 +463,16 @@ class CardDB:
                 return False
         return True
 
-    def _faces_for_chroma_card_name(self, chroma_name: str) -> list[Card] | None:
-        """Resolve Chroma metadata name to all faces for that card, or None if unknown."""
-        cn: str = chroma_name.strip()
+    def _faces_for_canonical_card_name(self, card_name: str) -> list[Card] | None:
+        """Resolve a graph canonical name to all faces for that card, or None if unknown."""
+        cn: str = card_name.strip()
         if not cn:
             return None
         self._build_name_indexes()
         assert self._canonical_to_faces is not None
         if cn in self._canonical_to_faces:
             return self._canonical_to_faces[cn]
-        al: str = cn.lower()
+        al: str = cn.casefold()
         assert self._name_to_faces is not None
         if al in self._name_to_faces:
             return self._name_to_faces[al]
@@ -469,7 +485,7 @@ class CardDB:
 
     def _canonical_matches_structural_filters(
         self,
-        chroma_name: str,
+        card_name: str,
         *,
         name_lower: str,
         oracle_lower_list: list[str],
@@ -491,7 +507,7 @@ class CardDB:
         format_lower: str,
     ) -> tuple[bool, Card | None]:
         """True if any face matches filters; returns primary face for display when True."""
-        faces: list[Card] | None = self._faces_for_chroma_card_name(chroma_name)
+        faces: list[Card] | None = self._faces_for_canonical_card_name(card_name)
         if not faces:
             return False, None
         ordered: list[Card] = sorted(faces, key=lambda c: c.face_index)
@@ -524,7 +540,7 @@ class CardDB:
     def _filter_cards_list_semantic_ranked(
         self,
         semantic_query: str,
-        collection_name: str,
+        search_type: str,
         *,
         name_lower: str,
         oracle_lower_list: list[str],
@@ -547,9 +563,7 @@ class CardDB:
         n_results: int,
         offset: int,
     ) -> list[Card]:
-        """Chroma-ranked hits filtered by structural rules; dedupe by canonical; honor offset/limit."""
-        need: int = offset + n_results
-        n_chroma: int = min(_CHROMA_SEMANTIC_FILTER_CAP, max(100, need * 4))
+        """GraphRAG-ranked hits filtered by deterministic structural rules."""
         filter_kw = dict(
             name_lower=name_lower,
             oracle_lower_list=oracle_lower_list,
@@ -570,40 +584,29 @@ class CardDB:
             supertype_lower=supertype_lower,
             format_lower=format_lower,
         )
-        while True:
-            ranked: list[tuple[str, str]] = self._semantic_query(collection_name, semantic_query, n_chroma)
-            seen_canonical: set[str] = set()
-            skipped_qualified: int = 0
-            out: list[Card] = []
-            for _doc, raw_name in ranked:
-                name_key: str = (raw_name or "").strip()
-                if not name_key:
-                    continue
-                if name_key in seen_canonical:
-                    continue
-                seen_canonical.add(name_key)
-                ok, primary = self._canonical_matches_structural_filters(name_key, **filter_kw)
-                if not ok or primary is None:
-                    continue
-                if skipped_qualified < offset:
-                    skipped_qualified += 1
-                    continue
-                out.append(primary)
-                if len(out) >= n_results:
-                    return out
-            if n_chroma >= _CHROMA_SEMANTIC_FILTER_CAP:
-                if need > len(out) + offset:
-                    LOGGER.warning(
-                        "filter_cards_list semantic: exhausted Chroma cap=%s (query=%r collection=%s); "
-                        "returning %s row(s), offset=%s",
-                        _CHROMA_SEMANTIC_FILTER_CAP,
-                        semantic_query,
-                        collection_name,
-                        len(out),
-                        offset,
-                    )
-                return out
-            n_chroma = min(_CHROMA_SEMANTIC_FILTER_CAP, n_chroma * 2)
+        ranked_names: list[str] = GraphRAGService.inst().rank_card_names(
+            semantic_query,
+            search_type,
+            max(100, (offset + n_results) * 4),
+        )
+        seen_canonical: set[str] = set()
+        skipped_qualified: int = 0
+        out: list[Card] = []
+        for raw_name in ranked_names:
+            name_key: str = raw_name.strip()
+            if not name_key or name_key in seen_canonical:
+                continue
+            seen_canonical.add(name_key)
+            ok, primary = self._canonical_matches_structural_filters(name_key, **filter_kw)
+            if not ok or primary is None:
+                continue
+            if skipped_qualified < offset:
+                skipped_qualified += 1
+                continue
+            out.append(primary)
+            if len(out) >= n_results:
+                break
+        return out
 
     def _filter_cards_list_structural_scan_deduped(
         self,
@@ -703,7 +706,7 @@ class CardDB:
 
         At least one structural filter or a non-empty *semantic_query* must be set. offset/n_results support pagination.
 
-        If semantic_query is non-empty, results are Chroma-ranked by similarity within the given search_type
+        If semantic_query is non-empty, results are GraphRAG-ranked within the given search_type
         collection, intersected with the same structural filters (deduped by canonical card).
         """
         _oracle_list: list[str] = (
@@ -756,11 +759,11 @@ class CardDB:
         if sem:
             if not self.is_rag_ready():
                 LOGGER.error("filter_cards_list: semantic_query set but RAG is not ready")
-                raise ValueError("Semantic search requires RAG; the embedding index is not ready yet.")
-            coll: str = self._collection_name_for_search_type(search_type)
+                raise ValueError("Semantic search requires GraphRAG; the validated index is not ready yet.")
+            scope: str = self._collection_name_for_search_type(search_type)
             ranked: list[Card] = self._filter_cards_list_semantic_ranked(
                 sem,
-                coll,
+                scope,
                 name_lower=name_lower,
                 oracle_lower_list=oracle_lower_list,
                 type_lower=type_lower,
@@ -782,38 +785,6 @@ class CardDB:
                 n_results=n_results,
                 offset=offset,
             )
-            if len(ranked) == 0:
-                LOGGER.info(
-                    "filter_cards_list: semantic returned 0 matches; structural fallback "
-                    "semantic_query=%r search_type=%r type_line=%r format_legal=%r color_identity=%r",
-                    sem,
-                    search_type,
-                    type_line,
-                    format_legal,
-                    color_identity,
-                )
-                return self._filter_cards_list_structural_scan_deduped(
-                    offset=offset,
-                    n_results=n_results,
-                    name_lower=name_lower,
-                    oracle_lower_list=oracle_lower_list,
-                    type_lower=type_lower,
-                    colors_filter=colors_filter,
-                    color_identity_filter=color_identity_filter,
-                    color_identity_colorless=color_identity_colorless,
-                    colorless_only=colorless_only,
-                    mana_value=mana_value,
-                    mana_value_min=mana_value_min,
-                    mana_value_max=mana_value_max,
-                    price_usd_min=price_usd_min,
-                    price_usd_max=price_usd_max,
-                    power_val=power_val,
-                    toughness_val=toughness_val,
-                    keywords_lower=keywords_lower,
-                    subtype_lower=subtype_lower,
-                    supertype_lower=supertype_lower,
-                    format_lower=format_lower,
-                )
             return ranked
 
         cards: list[Card] = self.get_card_data()
@@ -903,124 +874,40 @@ class CardDB:
         return "\n\n".join(parts) if parts else "No cards found."
 
     # -----------------------------------------------------------------------
-    # RAG: embedding model and ChromaDB (load only in _load_rag_impl / at server init)
+    # RAG: GraphRAG artifacts and local LanceDB
     # -----------------------------------------------------------------------
 
     def _load_rag_impl(self) -> None:
-        """Load embedding model and ChromaDB client. Call under _rag_lock. Idempotent."""
-        if self._embedding_model is not None and self._chroma_client is not None:
-            return
-        t0: float = time.perf_counter()
-        LOGGER.debug("Importing torch")
-        import torch
-        LOGGER.debug("torch imported elapsed=%.3fs", time.perf_counter() - t0)
-
-        t1: float = time.perf_counter()
-        LOGGER.debug("Importing SentenceTransformer")
-        from sentence_transformers import SentenceTransformer
-        LOGGER.debug("SentenceTransformer imported elapsed=%.3fs", time.perf_counter() - t1)
-
-        t2: float = time.perf_counter()
-        LOGGER.debug("Importing chromadb")
-        import chromadb
-        LOGGER.debug("chromadb imported elapsed=%.3fs", time.perf_counter() - t2)
-
-        if self._embedding_model is None:
-            t3: float = time.perf_counter()
-            device: str = embedding_torch_device()
-            LOGGER.info("Loading embedding model name=%s device=%s", MODEL_NAME, device)
-            self._embedding_model = SentenceTransformer(MODEL_NAME, device=device)
-            LOGGER.info("Embedding model loaded name=%s device=%s elapsed=%.3fs", MODEL_NAME, device, time.perf_counter() - t3)
-
-        if self._chroma_client is None:
-            t4: float = time.perf_counter()
-            LOGGER.info("Opening ChromaDB path=%s", CHROMA_PATH)
-            self._chroma_client = chromadb.PersistentClient(path=str(CHROMA_PATH))
-            LOGGER.info("ChromaDB client ready path=%s elapsed=%.3fs", CHROMA_PATH, time.perf_counter() - t4)
-        self._rag_ready = True
+        """Load and validate the locally built GraphRAG artifacts."""
+        GraphRAGService.inst().load_sync()
 
     def is_rag_ready(self) -> bool:
-        """Return True if RAG (embedding model + ChromaDB) has been loaded and is ready for semantic search."""
-        with self._rag_lock:
-            return self._rag_ready
+        """Return True when the validated GraphRAG index is ready for retrieval."""
+        return GraphRAGService.inst().is_ready()
 
     def load_rag_sync(self) -> None:
-        """Load RAG dependencies (embedding model + ChromaDB) in the current thread.
-        Intended to be called from a background thread at server startup so the main
-        server can start without blocking. Subsequent get_embedding_model / semantic
-        search will use the cached instances."""
-        with self._rag_lock:
-            self._load_rag_impl()
-
-    def get_embedding_model(self):
-        """Return the embedding model; load via _load_rag_impl if not yet loaded (under lock)."""
-        with self._rag_lock:
-            if self._embedding_model is None:
-                self._load_rag_impl()
-        LOGGER.debug("Using embedding model name=%s", MODEL_NAME)
-        return self._embedding_model
-
-    def _get_chroma_collection(self, collection_name: str):
-        """Return the named ChromaDB collection; load client via _load_rag_impl if not yet loaded (under lock)."""
-        with self._rag_lock:
-            if self._chroma_client is None:
-                self._load_rag_impl()
-        if collection_name not in self._collections:
-            t2: float = time.perf_counter()
-            self._collections[collection_name] = self._chroma_client.get_or_create_collection(
-                name=collection_name,
-                metadata={"hnsw:space": "cosine"},
-            )
-            LOGGER.debug("get_or_create_collection name=%s elapsed=%.3fs", collection_name, time.perf_counter() - t2)
-            LOGGER.info("ChromaDB collection ready name=%s path=%s", collection_name, CHROMA_PATH)
-        return self._collections[collection_name]
-
-    def get_collection(self):
-        """Lazy-load ChromaDB persistent client and mtg_cards collection."""
-        return self._get_chroma_collection(COLLECTION_NAME)
+        """Load GraphRAG dependencies in the current thread."""
+        self._load_rag_impl()
 
     def _semantic_query(self, collection_name: str, query: str, n_results: int) -> list[tuple[str, str]]:
-        """Shared encode-and-query against *collection_name*. Returns list of ``(document, card_name)``."""
-        model = self.get_embedding_model()
-        coll = self._get_chroma_collection(collection_name)
-        t_enc: float = time.perf_counter()
-        emb = model.encode([query]).tolist()
-        LOGGER.debug("Query encoded collection=%s elapsed=%.3fs", collection_name, time.perf_counter() - t_enc)
-        t_query: float = time.perf_counter()
-        out = coll.query(query_embeddings=emb, n_results=n_results, include=["documents", "metadatas"])
-        LOGGER.debug("ChromaDB query done collection=%s elapsed=%.3fs", collection_name, time.perf_counter() - t_query)
-        docs = (out.get("documents") or [[]])[0]
-        metas = (out.get("metadatas") or [[]])[0]
-        results: list[tuple[str, str]] = []
-        for doc, meta in zip(docs, metas):
-            if not isinstance(meta, dict):
-                meta = {}
-            if "canonicalName" in meta and isinstance(meta["canonicalName"], str) and meta["canonicalName"].strip():
-                name = meta["canonicalName"]
-            elif "name" in meta and isinstance(meta["name"], str):
-                name = meta["name"]
-            else:
-                name = ""
-            results.append((doc, name))
-        return results
+        """Shared GraphRAG semantic retrieval returning descriptions and card names."""
+        scope: str = self._collection_name_for_search_type(collection_name)
+        names: list[str] = GraphRAGService.inst().rank_card_names(query, scope, n_results)
+        return [
+            (self.resolve_primary_card(name).to_graph_description(), name)
+            for name in names
+        ]
 
     def search_cards(self, query: str, n_results: int = 5) -> str:
         """Search for Magic: The Gathering cards by semantic meaning.
         Returns card names and rules text matching the query."""
         LOGGER.info("search_cards started query=%r n_results=%s", query, n_results)
-        model = self.get_embedding_model()
-        coll = self.get_collection()
-        emb = model.encode([query]).tolist()
-        out = coll.query(query_embeddings=emb, n_results=n_results, include=["documents", "metadatas"])
-        docs = (out.get("documents") or [[]])[0]
-        metas = (out.get("metadatas") or [[]])[0]
-        LOGGER.debug("ChromaDB returned %s document(s)", len(docs))
         parts: list[str] = []
-        for i, (doc, meta) in enumerate(zip(docs, metas), 1):
-            card: Card = Card.from_chroma_result(meta, doc)
-            LOGGER.debug("Card %s/%s: %s", i, len(docs), card.name)
-            parts.append(card.format_display(i, len(docs)))
-        LOGGER.info("search_cards finished query=%r returned %s card(s)", query, len(docs))
+        names: list[str] = GraphRAGService.inst().rank_card_names(query, "general", n_results)
+        for i, name in enumerate(names, 1):
+            card: Card = self.resolve_primary_card(name)
+            parts.append(card.format_display(i, len(names)))
+        LOGGER.info("search_cards finished query=%r returned %s card(s)", query, len(names))
         return "\n\n".join(parts) if parts else "No cards found."
 
     def search_triggers(self, query: str, n_results: int = 10) -> str:
@@ -1031,7 +918,7 @@ class CardDB:
         trigger when a creature ETBs.
         """
         LOGGER.info("search_triggers started query=%r n_results=%s", query, n_results)
-        results = self._semantic_query(TRIGGERS_COLLECTION_NAME, query, n_results)
+        results = self._semantic_query("trigger", query, n_results)
         parts: list[str] = []
         for i, (doc, name) in enumerate(results, 1):
             parts.append(f"--- {i} of {len(results)} ---\n{doc}")
@@ -1046,7 +933,7 @@ class CardDB:
         produce creature tokens.
         """
         LOGGER.info("search_effects started query=%r n_results=%s", query, n_results)
-        results = self._semantic_query(EFFECTS_COLLECTION_NAME, query, n_results)
+        results = self._semantic_query("effect", query, n_results)
         parts: list[str] = []
         for i, (doc, name) in enumerate(results, 1):
             parts.append(f"--- {i} of {len(results)} ---\n{doc}")
@@ -1059,18 +946,11 @@ class CardDB:
         """Semantic search returning structured list of {name, text} for deck editor API.
 
         search_type must be one of "general", "trigger", "effect"; maps to the
-        corresponding ChromaDB collection. Results are deduplicated by card name
+        corresponding GraphRAG scope. Results are deduplicated by card name
         (first occurrence kept), preserving order.
         """
-        if search_type == "general":
-            collection_name = COLLECTION_NAME
-        elif search_type == "trigger":
-            collection_name = TRIGGERS_COLLECTION_NAME
-        elif search_type == "effect":
-            collection_name = EFFECTS_COLLECTION_NAME
-        else:
-            raise ValueError(f"search_type must be general/trigger/effect, got {search_type!r}")
-        raw = self._semantic_query(collection_name, query, n_results)
+        scope: str = self._collection_name_for_search_type(search_type)
+        raw = self._semantic_query(scope, query, n_results)
         seen: set[str] = set()
         out: list[dict[str, str]] = []
         for doc, name in raw:

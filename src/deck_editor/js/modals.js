@@ -70,7 +70,7 @@ export function initSynergyCheckerModal() {
           'position:relative;z-index:2;background:#16213e;border:1px solid #0f3460;border-radius:8px;padding:1.5rem 2rem;max-width:360px;box-shadow:0 8px 32px rgba(0,0,0,0.4);color:#e8e8e8;';
       }
     } else {
-      alert('RAG still loading. Synergy check requires the embedding model. Please try again in a moment.');
+      alert('GraphRAG is still loading. Synergy check requires the validated graph index. Please try again in a moment.');
     }
   }
 

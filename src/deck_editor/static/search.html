@@ -398,7 +398,7 @@
     </div>
     <div class="semantic-section">
       <label for="semantic_query">Semantic search (optional)</label>
-      <p class="search-hint">When filled, results are ranked by similarity in the RAG index among cards that match the filters above (embedding index must be loaded).</p>
+      <p class="search-hint">When filled, GraphRAG ranks cards or traverses matching mechanic entities among cards that pass the exact filters above.</p>
       <textarea id="semantic_query" name="semantic_query" placeholder="e.g. draw cards when creatures enter the battlefield"></textarea>
       <span class="search-type-label">Semantic scope</span>
       <div class="search-type-toggle" id="searchTypeToggle" role="group" aria-label="Semantic search scope">
@@ -685,7 +685,7 @@
           if (!r.ok) {
             var errText = typeof data.detail === 'string' ? data.detail : (data.detail ? JSON.stringify(data.detail) : 'Search failed');
             if (r.status === 503) {
-              errText = typeof data.detail === 'string' ? data.detail : 'Semantic search is not ready; wait for the embedding index to finish loading.';
+              errText = typeof data.detail === 'string' ? data.detail : 'Semantic search is not ready; wait for the validated GraphRAG index to finish loading.';
             }
             setMsg(errText, true);
             if (!append) renderResults([]);

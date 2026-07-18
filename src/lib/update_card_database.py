@@ -7,11 +7,11 @@ Run via: python -m src.lib.update_card_database  (or install.bat update).
 Steps:
 1. Force-download the latest MTGJSON AtomicCards.json into data/.
 2. Refresh USD prices from Scryfall into data/prices.json.
-3. Cleanly rebuild all ChromaDB semantic-search collections so removed
+3. Cleanly rebuild GraphRAG graph, community, and LanceDB artifacts so removed
    or renamed cards do not leave stale rows behind.
 
 The MCP server (server.bat) and deck editor (editor.bat) cache card JSON,
-name indexes, and ChromaDB client handles in memory. Restart both after this
+name indexes, and GraphRAG artifact handles in memory. Restart both after this
 routine completes so they pick up the new data.
 """
 
@@ -36,7 +36,7 @@ def do_update() -> None:
     LOGGER.info("update_card_database: step 2/3 refreshing prices from Scryfall")
     update_all_prices()
 
-    LOGGER.info("update_card_database: step 3/3 rebuilding Chroma collections (clean=True)")
+    LOGGER.info("update_card_database: step 3/3 rebuilding GraphRAG artifacts (clean=True)")
     do_build_all(clean=True)
 
     LOGGER.info(

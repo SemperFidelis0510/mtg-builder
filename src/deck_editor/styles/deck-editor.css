@@ -2044,3 +2044,82 @@ body.agent-panel-open {
 .wishlist-card-list.wishlist-full-card-view .card-img {
   display: block !important;
 }
+
+/* ── GraphRAG recommendations ───────────────────────────────────── */
+
+.tab-panel#recommendationsTab {
+  padding: 1rem;
+  background: var(--bg);
+}
+.recommendations-panel {
+  max-width: 960px;
+  margin: 0 auto;
+}
+.recommendations-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.75rem;
+}
+.recommendations-header h2 {
+  margin: 0;
+  color: var(--text);
+}
+.recommendations-header p,
+.recommendation-details,
+.recommendation-source {
+  margin: 0.35rem 0 0;
+  color: var(--muted);
+}
+.recommendations-status {
+  min-height: 1.2rem;
+  color: var(--accent);
+}
+.recommendations-status.error { color: #f88; }
+.recommendations-analysis {
+  margin: 0 0 0.85rem;
+  padding: 0.7rem;
+  border-left: 3px solid var(--accent);
+  color: var(--text);
+  background: var(--panel);
+}
+.recommendations-analysis:empty { display: none; }
+.recommendations-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.6rem;
+}
+.recommendation-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+}
+.recommendation-title {
+  font-weight: 700;
+  color: var(--text);
+}
+.recommendation-source { font-size: 0.8rem; }
+.recommendation-add-btn {
+  flex: 0 0 auto;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+}
+.recommendation-add-btn:disabled { opacity: 0.6; cursor: default; }
+
+@media (max-width: 600px) {
+  .recommendations-header,
+  .recommendation-item { align-items: stretch; flex-direction: column; }
+}
