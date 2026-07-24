@@ -114,7 +114,6 @@
     <div class="tab-buttons">
       <button type="button" class="tab-btn active" data-tab="board" id="tabBoard">Board</button>
       <button type="button" class="tab-btn" data-tab="statistics" id="tabStatistics">Statistics</button>
-      <button type="button" class="tab-btn" data-tab="recommendations" id="tabRecommendations">Recommendations</button>
       <button type="button" class="tab-btn" data-tab="agent" id="tabAgent">Agent</button>
       <button type="button" class="tab-btn" data-tab="wishlist" id="tabWishlist">Wishlist</button>
       <button type="button" class="agent-toggle-btn" id="agentPanelToggle" title="Toggle AI Assistant">AI Assistant</button>
@@ -163,24 +162,21 @@
             </div>
             <div class="section-body"><ul class="removed-list" id="list-maybe"></ul></div>
           </div>
+          <div class="section collapsed" id="section-recommendations" data-type="recommendations">
+            <div class="section-header">
+              <span class="section-header-label">Recommendations (0)</span>
+              <button type="button" class="recommendations-analyze-btn" id="analyzeRecommendationsBtn" title="Analyze the current deck for graph-backed additions. Respects the deck's main-deck color, legality, and copy restrictions.">Analyze deck</button>
+            </div>
+            <div class="section-body">
+              <p id="recommendationsStatus" class="recommendations-status" role="status"></p>
+              <ul id="recommendationsList" class="recommendations-list" aria-live="polite"></ul>
+            </div>
+          </div>
         </div>
       </main>
     </div>
     <div class="tab-panel" id="statisticsTab">
       <div id="statisticsContainer"></div>
-    </div>
-    <div class="tab-panel" id="recommendationsTab">
-      <section class="recommendations-panel" aria-labelledby="recommendationsTitle">
-        <div class="recommendations-header">
-          <div>
-            <h2 id="recommendationsTitle">Deck Recommendations</h2>
-            <p>Analyze the current deck for graph-backed additions. Recommendations respect the deck’s main-deck color, legality, and copy restrictions.</p>
-          </div>
-          <button type="button" id="analyzeRecommendationsBtn" class="save-btn">Analyze deck</button>
-        </div>
-        <p id="recommendationsStatus" class="recommendations-status" role="status"></p>
-        <ul id="recommendationsList" class="recommendations-list" aria-live="polite"></ul>
-      </section>
     </div>
     <div class="tab-panel" id="agentTab">
       <div class="agent-rules-container">

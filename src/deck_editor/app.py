@@ -1599,6 +1599,7 @@ async def deck_recommendations(body: dict) -> dict:
     recommendations: list[dict[str, Any]] = []
     for recommendation in analysis.recommendations:
         candidate = card_db.resolve_primary_card(recommendation.name)
+        price_usd = getattr(candidate, "price_usd", -1.0)
         recommendations.append(
             {
                 "name": recommendation.name,
@@ -1607,6 +1608,7 @@ async def deck_recommendations(body: dict) -> dict:
                 "sources": list(recommendation.sources),
                 "type_line": candidate.type_line,
                 "mana_cost": candidate.mana_cost,
+                "price_usd": price_usd if price_usd >= 0 else None,
             }
         )
     if analysis.explanation is not None:

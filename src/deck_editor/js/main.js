@@ -54,7 +54,11 @@ if (!toolsHeader || !toolsSection) {
   });
 }
 
-[document.getElementById('section-maybe'), document.getElementById('section-sideboard')].forEach((el) => {
+[
+  document.getElementById('section-maybe'),
+  document.getElementById('section-sideboard'),
+  document.getElementById('section-recommendations'),
+].forEach((el) => {
   if (!el) return;
   el.addEventListener('click', (e) => {
     const header = e.target.closest('.section-header');
@@ -82,10 +86,10 @@ initDeckSort();
 initRecommendations();
 log.info('All modules initialized');
 document.getElementById('collapseAllBtn').addEventListener('click', () => {
-  document.querySelectorAll('#commanderSectionHost .section, #deckSections .section, #section-maybe, #section-sideboard').forEach((s) => s.classList.add('collapsed'));
+  document.querySelectorAll('#commanderSectionHost .section, #deckSections .section, #section-maybe, #section-sideboard, #section-recommendations').forEach((s) => s.classList.add('collapsed'));
 });
 document.getElementById('expandAllBtn').addEventListener('click', () => {
-  document.querySelectorAll('#commanderSectionHost .section, #deckSections .section, #section-maybe, #section-sideboard').forEach((s) => s.classList.remove('collapsed'));
+  document.querySelectorAll('#commanderSectionHost .section, #deckSections .section, #section-maybe, #section-sideboard, #section-recommendations').forEach((s) => s.classList.remove('collapsed'));
 });
 
 document.getElementById('clearAllBtn').addEventListener('click', () => {

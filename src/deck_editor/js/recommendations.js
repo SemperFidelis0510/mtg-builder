@@ -1,4 +1,4 @@
-/** On-demand GraphRAG deck recommendations with fingerprint-scoped client cache. */
+/** On-demand GraphRAG deck recommendations, rendered as a collapsible board section. */
 
 import { createLogger } from './logger.js';
 import { collectState } from './deck.js';
@@ -27,6 +27,11 @@ function setStatus(message, isError = false) {
   const el = document.getElementById('recommendationsStatus');
   el.textContent = message;
   el.className = 'recommendations-status' + (isError ? ' error' : '');
+}
+
+function setHeaderCount(count) {
+  const label = document.querySelector('#section-recommendations .section-header-label');
+  if (label) label.textContent = 'Recommendations (' + count + ')';
 }
 
 function addRecommendationToMainDeck(recommendation, cardEl, addButton) {
@@ -97,6 +102,10 @@ function renderRecommendations(recommendations) {
     const title = document.createElement('div');
     title.className = 'recommendation-title';
     title.textContent = recommendation.name + ' · score ' + Number(recommendation.score).toFixed(1);
+    const price = document.createElement('span');
+    price.className = 'card-price recommendation-price';
+    const priceVal = recommendation.price_usd;
+    price.textContent = (priceVal != null && Number(priceVal) >= 0) ? '$' + Number(priceVal).toFixed(2) : '\u2014';
     const details = document.createElement('p');
     details.className = 'recommendation-details';
     details.textContent = recommendation.reasons.join(' · ');
@@ -114,7 +123,7 @@ function renderRecommendations(recommendations) {
       addRecommendationToMainDeck(recommendation, card, addButton);
     });
 
-    body.append(title, details, source, addButton);
+    body.append(title, price, details, source, addButton);
     card.append(stack, body);
     item.appendChild(card);
     list.appendChild(item);
@@ -123,9 +132,12 @@ function renderRecommendations(recommendations) {
 
 function analyze() {
   const button = document.getElementById('analyzeRecommendationsBtn');
+  const section = document.getElementById('section-recommendations');
+  if (section) section.classList.remove('collapsed');
   const currentFingerprint = deckFingerprint();
   if (cachedFingerprint === currentFingerprint && cachedRecommendations !== null) {
     renderRecommendations(cachedRecommendations);
+    setHeaderCount(cachedRecommendations.length);
     setStatus('Showing cached results for the current deck and graph index ' + cachedManifestHash.slice(0, 8) + '.');
     return;
   }
@@ -156,6 +168,7 @@ function analyze() {
       cachedManifestHash = data.graph_manifest_hash;
       cachedRecommendations = recommendations;
       renderRecommendations(recommendations);
+      setHeaderCount(recommendations.length);
       setStatus(
         recommendations.length
           ? 'Showing ' + recommendations.length + ' graph-backed recommendations.'
@@ -172,7 +185,12 @@ function analyze() {
 }
 
 export function initRecommendations() {
-  document.getElementById('analyzeRecommendationsBtn').addEventListener('click', analyze);
+  const button = document.getElementById('analyzeRecommendationsBtn');
+  button.addEventListener('mousedown', (e) => e.stopPropagation());
+  button.addEventListener('click', (e) => {
+    e.stopPropagation();
+    analyze();
+  });
   window.addEventListener('mtg-deck-updated', () => {
     const current = deckFingerprint();
     if (cachedFingerprint !== null && cachedFingerprint !== current) {

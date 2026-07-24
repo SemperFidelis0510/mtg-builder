@@ -2047,30 +2047,20 @@ body.agent-panel-open {
 
 /* ── GraphRAG recommendations ───────────────────────────────────── */
 
-.tab-panel#recommendationsTab {
-  padding: 1rem;
-  background: var(--bg);
-}
-.recommendations-panel {
-  max-width: 960px;
-  margin: 0 auto;
-}
-.recommendations-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  align-items: flex-start;
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 0.75rem;
-}
-.recommendations-header h2 {
-  margin: 0;
+.recommendations-analyze-btn {
+  flex-shrink: 0;
+  padding: 0.2rem 0.55rem;
+  background: var(--panel);
   color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-left: auto;
 }
-.recommendations-header p {
-  margin: 0.35rem 0 0;
-  color: var(--muted);
-}
+.recommendations-analyze-btn:hover { background: #1a4a7a; }
+.recommendations-analyze-btn:disabled { opacity: 0.6; cursor: default; }
 .recommendations-status {
   min-height: 1.2rem;
   color: var(--accent);
@@ -2116,6 +2106,10 @@ body.agent-panel-open {
   font-size: 0.9rem;
   color: var(--text);
 }
+.recommendation-price {
+  margin-top: -0.15rem;
+  font-weight: 600;
+}
 .recommendation-details,
 .recommendation-source {
   margin: 0;
@@ -2132,7 +2126,3 @@ body.agent-panel-open {
   cursor: pointer;
 }
 .recommendation-add-btn:disabled { opacity: 0.6; cursor: default; }
-
-@media (max-width: 600px) {
-  .recommendations-header { align-items: stretch; flex-direction: column; }
-}
