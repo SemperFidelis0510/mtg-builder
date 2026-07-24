@@ -1609,6 +1609,8 @@ async def deck_recommendations(body: dict) -> dict:
                 "mana_cost": candidate.mana_cost,
             }
         )
+    if analysis.explanation is not None:
+        LOGGER.info("deck_recommendations: analysis explanation: %s", analysis.explanation)
     response: dict[str, Any] = {
         "recommendations": recommendations,
         "graph_manifest_hash": card_db.get_graph_manifest_hash(),

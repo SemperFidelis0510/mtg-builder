@@ -2067,9 +2067,7 @@ body.agent-panel-open {
   margin: 0;
   color: var(--text);
 }
-.recommendations-header p,
-.recommendation-details,
-.recommendation-source {
+.recommendations-header p {
   margin: 0.35rem 0 0;
   color: var(--muted);
 }
@@ -2078,38 +2076,54 @@ body.agent-panel-open {
   color: var(--accent);
 }
 .recommendations-status.error { color: #f88; }
-.recommendations-analysis {
-  margin: 0 0 0.85rem;
-  padding: 0.7rem;
-  border-left: 3px solid var(--accent);
-  color: var(--text);
-  background: var(--panel);
-}
-.recommendations-analysis:empty { display: none; }
 .recommendations-list {
   list-style: none;
   padding: 0;
   margin: 0;
-  display: grid;
-  gap: 0.6rem;
-}
-.recommendation-item {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1rem;
-  padding: 0.8rem;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+}
+.recommendation-card-wrap { list-style: none; }
+.recommendation-card {
+  width: 220px;
+  display: flex;
+  flex-direction: column;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--panel);
+  overflow: hidden;
+  transition: opacity 0.15s ease;
+}
+.recommendation-card .card-stack { display: block; width: 100%; }
+.recommendation-card .card-img {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 5 / 7;
+  object-fit: cover;
+  border-radius: 8px 8px 0 0;
+  cursor: pointer;
+}
+.recommendation-card-added { opacity: 0.6; }
+.recommendation-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.6rem 0.7rem 0.75rem;
 }
 .recommendation-title {
   font-weight: 700;
+  font-size: 0.9rem;
   color: var(--text);
 }
-.recommendation-source { font-size: 0.8rem; }
+.recommendation-details,
+.recommendation-source {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
 .recommendation-add-btn {
-  flex: 0 0 auto;
+  margin-top: 0.3rem;
   padding: 0.45rem 0.65rem;
   border: 1px solid var(--accent);
   border-radius: 4px;
@@ -2120,6 +2134,5 @@ body.agent-panel-open {
 .recommendation-add-btn:disabled { opacity: 0.6; cursor: default; }
 
 @media (max-width: 600px) {
-  .recommendations-header,
-  .recommendation-item { align-items: stretch; flex-direction: column; }
+  .recommendations-header { align-items: stretch; flex-direction: column; }
 }
