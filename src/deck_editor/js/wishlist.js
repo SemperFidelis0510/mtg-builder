@@ -295,7 +295,13 @@ function toggleView() {
   syncViewToggleButton();
 }
 
-export function addToWishlist(cardName) {
+/**
+ * Add a card to the wishlist by name.
+ * @param {string} cardName
+ * @param {{ onSuccess?: () => void, onError?: (error: Error) => void }} [callbacks]
+ */
+export function addToWishlist(cardName, callbacks = {}) {
+  const { onSuccess, onError } = callbacks;
   log.info('addToWishlist: %s', cardName);
   fetch('/api/wishlist/add', {
     method: 'POST',
@@ -303,7 +309,11 @@ export function addToWishlist(cardName) {
     body: JSON.stringify({ name: cardName }),
   })
     .then((r) => {
-      if (!r.ok) throw new Error('Failed to add to wishlist');
+      if (!r.ok) {
+        return r.json().then((body) => {
+          throw new Error(body.detail || 'Failed to add to wishlist');
+        });
+      }
       return r.json();
     })
     .then((data) => {
@@ -313,8 +323,12 @@ export function addToWishlist(cardName) {
         if (item.price_usd != null) wishlistPrices[item.name] = item.price_usd;
       }
       renderWishlist();
+      if (onSuccess) onSuccess();
     })
-    .catch((err) => { log.error('addToWishlist failed', err); });
+    .catch((err) => {
+      log.error('addToWishlist failed', err);
+      if (onError) onError(err);
+    });
 }
 
 export function initWishlist() {

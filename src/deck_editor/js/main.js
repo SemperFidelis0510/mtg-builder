@@ -15,7 +15,7 @@ import { initCardPreview } from './card-preview.js';
 import { initContextMenu } from './context-menu.js';
 import { updateSectionHeaderTotal, getDeckMeta, collectState, syncDeckToServer } from './deck.js';
 import { renderDeck } from './render.js';
-import { initSearch } from './search.js';
+import { initSearch, initWishlistSearch } from './search.js';
 import { initAdvSearchModal, initSynergyCheckerModal, initExportModal, initImportModal, initIssueModal } from './modals.js';
 import { initSettings, populateSettings } from './settings.js';
 import { initAgentChat } from './agent-chat.js';
@@ -82,14 +82,15 @@ initAgentChat();
 initAgentRules();
 initMaybeBoardViewUi();
 initWishlist();
+initWishlistSearch();
 initDeckSort();
 initRecommendations();
 log.info('All modules initialized');
 document.getElementById('collapseAllBtn').addEventListener('click', () => {
-  document.querySelectorAll('#commanderSectionHost .section, #deckSections .section, #section-maybe, #section-sideboard, #section-recommendations').forEach((s) => s.classList.add('collapsed'));
+  document.querySelectorAll('#section-main-deck, #commanderSectionHost .section, #deckSections .section, #section-maybe, #section-sideboard, #section-recommendations').forEach((s) => s.classList.add('collapsed'));
 });
 document.getElementById('expandAllBtn').addEventListener('click', () => {
-  document.querySelectorAll('#commanderSectionHost .section, #deckSections .section, #section-maybe, #section-sideboard, #section-recommendations').forEach((s) => s.classList.remove('collapsed'));
+  document.querySelectorAll('#section-main-deck, #commanderSectionHost .section, #deckSections .section, #section-maybe, #section-sideboard, #section-recommendations').forEach((s) => s.classList.remove('collapsed'));
 });
 
 document.getElementById('clearAllBtn').addEventListener('click', () => {

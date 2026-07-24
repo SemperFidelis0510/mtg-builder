@@ -607,6 +607,11 @@ body {
   position: relative;
   min-height: 120px;
 }
+/* The min-height above reserves drop space for drag-and-drop onto an empty main deck;
+   drop it once Main Deck is collapsed so it doesn't leave a dangling empty gap. */
+.deck-sections-zone:has(> #section-main-deck.collapsed) {
+  min-height: 0;
+}
 .deck-sections-zone-title {
   display: flex;
   align-items: center;
@@ -619,6 +624,20 @@ body {
   margin: 0 0 0.5rem 0;
   color: var(--text);
   position: relative;
+}
+/* Main Deck is collapsible like the other boards, but keeps its original edge-to-edge
+   layout (no side margins) and starts uncollapsed, unlike Maybe/Sideboard/Recommendations. */
+#section-main-deck {
+  margin: 0 0 0.5rem 0;
+}
+#section-main-deck.collapsed .deck-sections-zone-title {
+  margin-bottom: 0;
+}
+.main-deck-section-body {
+  padding: 0;
+  background: transparent;
+  border: none;
+  min-height: 0;
 }
 .deck-sections-zone #deckSections {
   margin-top: 0.75rem;
