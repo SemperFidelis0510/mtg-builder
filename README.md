@@ -84,6 +84,8 @@ Build reads MTGJSON oracle text and EDHREC ranks, produces deterministic typed m
 
 The build uses Gemini `gemini-embedding-001` for 34,633 canonical cards and 775 mechanic entities. Those vectors are reused for card text units and the runtime search table rather than billed twice. Gemini `gemini-3.1-flash-lite` generates 46 top-level community reports on the current corpus; report responses are cached by graph content and model. A complete first build currently takes about 30 minutes on the tested Windows machine. Actual cost depends on token counts and Google's current pricing, so review the Gemini price and quota pages before rebuilding.
 
+Gemini enforces a per-minute embedding quota (3000 requests/minute on the paid tier) and counts every text in a batched call against it, so the generated GraphRAG settings throttle embeddings to 2400 texts/minute and retry with exponential backoff. Without that throttle the embedding pass exhausts the quota within about 90 seconds and fails the build. If your account has a different quota, adjust `_GEMINI_EMBED_TEXTS_PER_MINUTE` in `src/lib/build_rag.py`.
+
 Commander Spellbook downloads are checkpointed under `data/graphrag/`, retried on 429/5xx responses, and reused by clean index rebuilds. The initial import currently contains 27,332 combo variants; later builds do not redownload that snapshot unless it is removed explicitly.
 
 Before treating a newly built index as production-ready, collect the offline benchmark:
