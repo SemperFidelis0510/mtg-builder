@@ -30,6 +30,26 @@ from src.utils.logger import LOGGER, init_logger
 
 _EMBED_BATCH_SIZE: int = 50
 
+# Gemini quotas are per minute, per model, and GraphRAG configures no limiter by
+# default, so an unthrottled embedding pass exhausts the quota and fails the build.
+_MODEL_RATE_LIMIT_PERIOD_SECONDS: int = 60
+_MODEL_MAX_RETRIES: int = 10
+_MODEL_RETRY_BASE_DELAY_SECONDS: float = 2.0
+_MODEL_RETRY_MAX_DELAY_SECONDS: float = 60.0
+
+# LiteLLM packs `batch_size` texts into one batchEmbedContents call, but Gemini
+# charges its embed-request quota (3000/min on the paid tier) per *text*, not per
+# call. GraphRAG's limiter counts calls, so the call budget is the text budget
+# divided by the batch size. Sizing it against calls instead is what let a run
+# issue 337 calls in 96s -- only ~210 calls/min, yet ~3400 texts/min -- and trip
+# the quota. The budget is held below the quota to leave room for burst overlap.
+_EMBED_TEXT_BATCH_SIZE: int = 16
+_GEMINI_EMBED_TEXTS_PER_MINUTE: int = 2400
+_EMBED_REQUESTS_PER_PERIOD: int = _GEMINI_EMBED_TEXTS_PER_MINUTE // _EMBED_TEXT_BATCH_SIZE
+
+# Completions are one request per call, so this budget needs no batch adjustment.
+_COMPLETION_REQUESTS_PER_PERIOD: int = 900
+
 
 def _load_cards() -> list[Card]:
     """Use CardDB's canonical/face resolver as the graph's card authority."""
@@ -38,6 +58,22 @@ def _load_cards() -> list[Card]:
         LOGGER.error("build_rag: CardDB produced no canonical cards")
         raise ValueError("build_rag: CardDB produced no canonical cards")
     return cards
+
+
+def _throttle_block(requests_per_period: int) -> str:
+    """Render the rate-limit and retry settings shared by both model entries."""
+    if requests_per_period <= 0:
+        LOGGER.error("_throttle_block: requests_per_period must be positive")
+        raise ValueError("_throttle_block: requests_per_period must be positive")
+    return f"""    rate_limit:
+      type: sliding_window
+      period_in_seconds: {_MODEL_RATE_LIMIT_PERIOD_SECONDS}
+      requests_per_period: {requests_per_period}
+    retry:
+      type: exponential_backoff
+      max_retries: {_MODEL_MAX_RETRIES}
+      base_delay: {_MODEL_RETRY_BASE_DELAY_SECONDS}
+      max_delay: {_MODEL_RETRY_MAX_DELAY_SECONDS}"""
 
 
 def _write_settings(workflows: tuple[str, ...]) -> None:
@@ -53,12 +89,14 @@ def _write_settings(workflows: tuple[str, ...]) -> None:
     model: {GRAPHRAG_COMPLETION_MODEL}
     auth_method: api_key
     api_key: ${{GEMINI_API_KEY}}
+{_throttle_block(_COMPLETION_REQUESTS_PER_PERIOD)}
 embedding_models:
   default_embedding_model:
     model_provider: gemini
     model: {GRAPHRAG_EMBEDDING_MODEL}
     auth_method: api_key
     api_key: ${{GEMINI_API_KEY}}
+{_throttle_block(_EMBED_REQUESTS_PER_PERIOD)}
 output_storage:
   type: file
   base_dir: output
@@ -76,6 +114,7 @@ vector_store:
 workflows: [{workflow_names}]
 embed_text:
   embedding_model_id: default_embedding_model
+  batch_size: {_EMBED_TEXT_BATCH_SIZE}
   names: [entity_description, community_full_content]
 cluster_graph:
   max_cluster_size: 250

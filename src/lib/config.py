@@ -20,6 +20,7 @@ GRAPHRAG_MANIFEST_PATH: Path = GRAPHRAG_INPUT_DIR / "manifest.json"
 GRAPHRAG_COMPLETION_MODEL: str = "gemini-3.1-flash-lite"
 GRAPHRAG_EMBEDDING_MODEL: str = "gemini-embedding-001"
 GEMINI_API_KEY_PATH: Path = Path.home() / ".mtgbuilder" / "agent" / ".key"
+GEMINI_API_KEY_URL: str = "https://aistudio.google.com/apikey"
 ATOMIC_CARDS_PATH: Path = DATA_DIR / "AtomicCards.json"
 PRICES_PATH: Path = DATA_DIR / "prices.json"
 CARD_FACES_DIR: Path = DATA_DIR / "faces"
@@ -39,6 +40,26 @@ def load_required_gemini_api_key() -> str:
         LOGGER.error("Gemini API key file is empty: %s", GEMINI_API_KEY_PATH)
         raise ValueError(f"Gemini API key file is empty: {GEMINI_API_KEY_PATH}")
     return key
+
+
+def load_optional_gemini_api_key() -> str | None:
+    """Return the saved Gemini key, or None when it is absent or empty."""
+    if not GEMINI_API_KEY_PATH.is_file():
+        return None
+    key = GEMINI_API_KEY_PATH.read_text(encoding="utf-8").strip()
+    return key if key else None
+
+
+def save_gemini_api_key(key: str) -> None:
+    """Persist the shared Gemini key, creating the agent directory if needed."""
+    stripped = key.strip()
+    if not stripped:
+        LOGGER.error("save_gemini_api_key: refusing to save an empty key")
+        raise ValueError("Gemini API key must be non-empty")
+    GEMINI_API_KEY_PATH.parent.mkdir(parents=True, exist_ok=True)
+    GEMINI_API_KEY_PATH.write_text(stripped, encoding="utf-8")
+    LOGGER.info("Gemini API key saved to %s", GEMINI_API_KEY_PATH)
+
 
 _MTGJSON_LEGALITY_ALIASES: dict[str, str] = {
     "historicbrawl": "brawl",

@@ -4,7 +4,7 @@ set "CONDA_ENV=mtg-rag"
 cd /d "%~dp0"
 
 REM --- Parse arguments ---
-REM   Usage: install.bat [install|download|build|prices|update|uninstall|reinstall] [--force]
+REM   Usage: install.bat [install|key|download|build|prices|update|uninstall|reinstall] [--force]
 REM   Default (no stage): run all three stages in order.
 
 set "STAGE="
@@ -13,6 +13,7 @@ set "FORCE="
 :parse_args
 if "%~1"=="" goto args_done
 if /i "%~1"=="install"    ( set "STAGE=install"    & shift & goto parse_args )
+if /i "%~1"=="key"        ( set "STAGE=key"        & shift & goto parse_args )
 if /i "%~1"=="download"   ( set "STAGE=download"   & shift & goto parse_args )
 if /i "%~1"=="build"      ( set "STAGE=build"      & shift & goto parse_args )
 if /i "%~1"=="prices"     ( set "STAGE=prices"     & shift & goto parse_args )
@@ -53,22 +54,67 @@ exit /b 1
 :found_conda
 
 REM --- Run stage(s) ---
-if "%STAGE%"=="" (
-    call :do_install
-    if errorlevel 1 exit /b 1
-    call :do_download
-    if errorlevel 1 exit /b 1
-    call :do_build
-    if errorlevel 1 exit /b 1
-    goto end
-)
-if /i "%STAGE%"=="install"    ( call :do_install    & if errorlevel 1 exit /b 1 & goto end )
-if /i "%STAGE%"=="download"   ( call :do_download   & if errorlevel 1 exit /b 1 & goto end )
-if /i "%STAGE%"=="build"      ( call :do_build      & if errorlevel 1 exit /b 1 & goto end )
-if /i "%STAGE%"=="prices"     ( call :do_prices     & if errorlevel 1 exit /b 1 & goto end )
-if /i "%STAGE%"=="update"     ( call :do_update     & if errorlevel 1 exit /b 1 & goto end )
-if /i "%STAGE%"=="uninstall"  ( call :do_uninstall  & if errorlevel 1 exit /b 1 & goto end )
-if /i "%STAGE%"=="reinstall"  ( call :do_reinstall  & if errorlevel 1 exit /b 1 & goto end )
+REM Dispatch via labels, not parenthesized blocks: "exit /b N" inside a block
+REM does not propagate the failure code out of the script.
+if "%STAGE%"==""              goto stage_all
+if /i "%STAGE%"=="install"    goto stage_install
+if /i "%STAGE%"=="key"        goto stage_key
+if /i "%STAGE%"=="download"   goto stage_download
+if /i "%STAGE%"=="build"      goto stage_build
+if /i "%STAGE%"=="prices"     goto stage_prices
+if /i "%STAGE%"=="update"     goto stage_update
+if /i "%STAGE%"=="uninstall"  goto stage_uninstall
+if /i "%STAGE%"=="reinstall"  goto stage_reinstall
+goto usage
+
+:stage_all
+call :do_install
+if errorlevel 1 exit /b 1
+call :do_download
+if errorlevel 1 exit /b 1
+call :do_build
+if errorlevel 1 exit /b 1
+goto end
+
+:stage_install
+call :do_install
+if errorlevel 1 exit /b 1
+goto end
+
+:stage_key
+call :do_key
+if errorlevel 1 exit /b 1
+goto end
+
+:stage_download
+call :do_download
+if errorlevel 1 exit /b 1
+goto end
+
+:stage_build
+call :do_build
+if errorlevel 1 exit /b 1
+goto end
+
+:stage_prices
+call :do_prices
+if errorlevel 1 exit /b 1
+goto end
+
+:stage_update
+call :do_update
+if errorlevel 1 exit /b 1
+goto end
+
+:stage_uninstall
+call :do_uninstall
+if errorlevel 1 exit /b 1
+goto end
+
+:stage_reinstall
+call :do_reinstall
+if errorlevel 1 exit /b 1
+goto end
 
 :do_install
 echo.
@@ -99,12 +145,37 @@ if !errorlevel!==0 (
 
 call conda activate %CONDA_ENV%
 echo === Installing Python dependencies ===
-python -m src.lib.setup --install
+if "%FORCE%"=="1" (
+    python -m src.lib.setup --install --force
+) else (
+    python -m src.lib.setup --install
+)
 if errorlevel 1 (
     echo ERROR: Dependency installation failed.
     exit /b 1
 )
+
+REM Configure the Gemini key now so the long download/build stages do not
+REM stop for input later. Already-configured keys are left alone.
+call :do_key
+if errorlevel 1 exit /b 1
 echo === [install] Done ===
+exit /b 0
+
+:do_key
+echo.
+echo === [key] Configuring Gemini API key ===
+call "%_ACTIVATE%" %CONDA_ENV%
+if "%FORCE%"=="1" (
+    python -m src.lib.setup --configure-key --force
+) else (
+    python -m src.lib.setup --configure-key
+)
+if errorlevel 1 (
+    echo ERROR: Gemini API key configuration failed.
+    exit /b 1
+)
+echo === [key] Done ===
 exit /b 0
 
 :do_download
@@ -127,6 +198,15 @@ exit /b 0
 echo.
 echo === [build] Building GraphRAG graph, reports, and LanceDB index ===
 call "%_ACTIVATE%" %CONDA_ENV%
+
+REM The build fails closed without Gemini access, so make sure a key is saved
+REM before starting. This is a no-op when the key is already configured.
+python -m src.lib.setup --configure-key
+if errorlevel 1 (
+    echo ERROR: Gemini API key configuration failed.
+    exit /b 1
+)
+
 python -m src.lib.build_rag
 if errorlevel 1 (
     echo ERROR: Build failed.
@@ -151,6 +231,14 @@ exit /b 0
 echo.
 echo === [update] Refreshing card database (download + prices + clean rebuild) ===
 call "%_ACTIVATE%" %CONDA_ENV%
+
+REM The clean rebuild needs Gemini access; no-op when the key is already configured.
+python -m src.lib.setup --configure-key
+if errorlevel 1 (
+    echo ERROR: Gemini API key configuration failed.
+    exit /b 1
+)
+
 python -m src.lib.update_card_database
 if errorlevel 1 (
     echo ERROR: Update failed.
@@ -220,10 +308,12 @@ exit /b 0
 
 :usage
 echo.
-echo Usage: .\%~nx0 [install^|download^|build^|prices^|update^|uninstall^|reinstall] [--force]
+echo Usage: .\%~nx0 [install^|key^|download^|build^|prices^|update^|uninstall^|reinstall] [--force]
 echo.
 echo   (no stage)           Run all stages: install, download, build
-echo   install              Create conda env and install Python deps
+echo   install              Create conda env, install Python deps, configure Gemini key
+echo   key                  Prompt for and save the Gemini API key
+echo                          (no-op if a key is already saved; --force replaces it)
 echo   download             Download AtomicCards.json
 echo   build                Ingest data and build GraphRAG and LanceDB artifacts
 echo   prices               Update card prices from Scryfall to data/prices.json
@@ -235,7 +325,9 @@ echo   uninstall            Remove conda env, downloaded data, and GraphRAG inde
 echo   reinstall            Full uninstall then full install (install + download + build)
 echo.
 echo   --force              Skip-checks override:
-echo                          install  : remove and recreate the conda env
+echo                          install  : remove and recreate the conda env,
+echo                                     reinstall all deps, replace the saved key
+echo                          key      : replace the saved Gemini API key
 echo                          download : re-download even if file exists
 echo.
 exit /b 1

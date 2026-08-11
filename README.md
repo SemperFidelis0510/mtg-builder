@@ -13,7 +13,7 @@ A [Model Context Protocol](https://modelcontextprotocol.io/) server that provide
 - **Windows** (the launcher script is a `.bat` file)
 - **Conda** (Anaconda or Miniconda)
 - **Git**
-- A saved Gemini API key in `%USERPROFILE%\.mtgbuilder\agent\.key`
+- A Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey). The `install` stage prompts for it and saves it to `%USERPROFILE%\.mtgbuilder\agent\.key`, so you do not need to create that file by hand.
 
 ## Quick Start
 
@@ -21,7 +21,7 @@ A [Model Context Protocol](https://modelcontextprotocol.io/) server that provide
 git clone <repo-url>
 cd MTG
 
-.\install.bat install       REM 1. Create conda env + install deps
+.\install.bat install       REM 1. Create conda env, install deps, enter Gemini API key
 .\install.bat download      REM 2. Download card data from MTGJSON
 .\install.bat build         REM 3. Build GraphRAG graph, reports, and LanceDB index
 .\server.bat                REM 4. Start the MCP server (stdio)
@@ -31,10 +31,23 @@ cd MTG
 
 ### 1. Install Dependencies
 
-The `install` command creates a conda environment named `mtg-rag` (Python 3.11) and installs the packages in `requirements.txt`. GraphRAG does not support Python 3.13, so run project commands inside this environment.
+The `install` command creates a conda environment named `mtg-rag` (Python 3.11), installs the packages in `requirements.txt`, and prompts for your Gemini API key. GraphRAG does not support Python 3.13, so run project commands inside this environment.
 
 ```bat
 .\install.bat install
+```
+
+The stage is idempotent and safe to rerun: an existing `mtg-rag` environment is reused, requirements already installed are not reinstalled, and a saved API key is left untouched. Use `--force` to recreate the environment, reinstall every requirement, and replace the key.
+
+#### Gemini API Key
+
+The build uses Gemini for embeddings and community reports, so it cannot run without a key. `install` prompts for one, validates it against the API, and saves it to `%USERPROFILE%\.mtgbuilder\agent\.key`. The `build` and `update` stages also check for a key first and prompt if it is missing, so the long-running stages never fail on a missing key after doing their work.
+
+To enter or replace a key on its own:
+
+```bat
+.\install.bat key           REM no-op if a key is already saved
+.\install.bat key --force   REM replace the saved key
 ```
 
 #### Manual Install (without `install.bat`)
@@ -44,6 +57,7 @@ conda create -n mtg-rag python=3.11 -y
 conda activate mtg-rag
 
 pip install -r requirements.txt
+python -m src.lib.setup --configure-key
 ```
 
 ### 2. Download Card Data
@@ -69,6 +83,8 @@ Build reads MTGJSON oracle text and EDHREC ranks, produces deterministic typed m
 ```
 
 The build uses Gemini `gemini-embedding-001` for 34,633 canonical cards and 775 mechanic entities. Those vectors are reused for card text units and the runtime search table rather than billed twice. Gemini `gemini-3.1-flash-lite` generates 46 top-level community reports on the current corpus; report responses are cached by graph content and model. A complete first build currently takes about 30 minutes on the tested Windows machine. Actual cost depends on token counts and Google's current pricing, so review the Gemini price and quota pages before rebuilding.
+
+Gemini enforces a per-minute embedding quota (3000 requests/minute on the paid tier) and counts every text in a batched call against it, so the generated GraphRAG settings throttle embeddings to 2400 texts/minute and retry with exponential backoff. Without that throttle the embedding pass exhausts the quota within about 90 seconds and fails the build. If your account has a different quota, adjust `_GEMINI_EMBED_TEXTS_PER_MINUTE` in `src/lib/build_rag.py`.
 
 Commander Spellbook downloads are checkpointed under `data/graphrag/`, retried on 429/5xx responses, and reused by clean index rebuilds. The initial import currently contains 27,332 combo variants; later builds do not redownload that snapshot unless it is removed explicitly.
 
