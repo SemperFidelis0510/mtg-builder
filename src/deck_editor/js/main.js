@@ -21,7 +21,7 @@ import { initSettings, populateSettings } from './settings.js';
 import { initAgentChat } from './agent-chat.js';
 import { initAgentRules } from './agent-rules.js';
 import { initMaybeBoardViewUi } from './maybe-board-view.js';
-import { initWishlist } from './wishlist.js';
+import { initWishlist, addManyToWishlist } from './wishlist.js';
 import { initDeckSort } from './deck-sort.js';
 import { initRecommendations } from './recommendations.js';
 
@@ -151,6 +151,35 @@ function moveAllCards(fromBoard, toBoard) {
 
 document.getElementById('moveAllToMaybeBtn').addEventListener('click', () => moveAllCards('main', 'maybe'));
 document.getElementById('moveAllToMainBtn').addEventListener('click', () => moveAllCards('maybe', 'main'));
+
+document.getElementById('copyMainToWishlistBtn').addEventListener('click', () => {
+  log.info('Copy main deck to wishlist clicked');
+  const state = collectState();
+  const names = [];
+  TYPE_KEYS.forEach((key) => {
+    for (const name of state[key]) names.push(name);
+  });
+  if (state.commander) names.push(state.commander);
+  const resultEl = document.getElementById('saveResult');
+  if (!names.length) {
+    if (resultEl) resultEl.textContent = 'Main deck is empty; nothing to copy.';
+    return;
+  }
+  addManyToWishlist(names, {
+    onSuccess: () => {
+      if (resultEl) {
+        resultEl.style.color = '';
+        resultEl.textContent = 'Copied ' + names.length + ' card(s) to wishlist.';
+      }
+    },
+    onError: (err) => {
+      if (resultEl) {
+        resultEl.style.color = '#f88';
+        resultEl.textContent = 'Copy to wishlist failed: ' + (err.message || 'unknown error');
+      }
+    },
+  });
+});
 
 document.getElementById('saveBtn').addEventListener('click', () => {
   log.info('Save button clicked');

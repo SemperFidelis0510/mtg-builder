@@ -1703,6 +1703,30 @@ async def export_deck(format: str) -> dict:
     return {"text": text}
 
 
+@app.get("/api/wishlist/export")
+async def export_wishlist(format: str) -> dict:
+    """Export the wishlist in the given format. Returns {"text": "..."}. Use format from /api/export/formats."""
+    LOGGER.debug("export_wishlist: format=%r", format)
+    fmt: str = (format or "").strip().lower()
+    if fmt not in Deck.EXPORT_FORMATS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported format {format!r}; use one of: {list(Deck.EXPORT_FORMATS.keys())}",
+        )
+    entries: list[dict[str, Any]] = _read_wishlist()
+    names: list[str] = []
+    for entry in entries:
+        names.extend([entry["name"]] * entry["quantity"])
+    wishlist_deck: Deck = Deck()
+    if names:
+        wishlist_deck.add_cards(names)
+    try:
+        text: str = wishlist_deck.export(fmt)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return {"text": text}
+
+
 @app.post("/api/import")
 async def import_deck(request: Request) -> dict:
     """Import a deck from pasted text. Body: {"text": str, "format": str, "merge"?: bool}.

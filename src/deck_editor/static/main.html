@@ -113,9 +113,9 @@
   <div class="tabs tabs-after-settings">
     <div class="tab-buttons">
       <button type="button" class="tab-btn active" data-tab="board" id="tabBoard">Board</button>
+      <button type="button" class="tab-btn" data-tab="wishlist" id="tabWishlist">Wishlist</button>
       <button type="button" class="tab-btn" data-tab="statistics" id="tabStatistics">Statistics</button>
       <button type="button" class="tab-btn" data-tab="agent" id="tabAgent">Agent</button>
-      <button type="button" class="tab-btn" data-tab="wishlist" id="tabWishlist">Wishlist</button>
       <button type="button" class="agent-toggle-btn" id="agentPanelToggle" title="Toggle AI Assistant">AI Assistant</button>
     </div>
     <div class="tab-panel active" id="boardTab">
@@ -144,6 +144,7 @@
               <div class="section-header deck-sections-zone-title">
                 <span class="section-header-label deck-sections-zone-title-label">Main Deck</span>
                 <button type="button" class="move-all-btn" id="moveAllToMaybeBtn" title="Move all main deck cards to maybe board">&#8594; Maybe</button>
+                <button type="button" class="move-all-btn" id="copyMainToWishlistBtn" title="Copy all main deck cards (including commander) to the wishlist">Copy to Wishlist</button>
                 <span class="deck-banner-price" id="deckBannerPrice">—</span>
               </div>
               <div class="section-body main-deck-section-body">
@@ -179,6 +180,28 @@
         </div>
       </main>
     </div>
+    <div class="tab-panel" id="wishlistTab">
+      <div class="search-bar">
+        <div class="search-group">
+          <div class="search-wrap">
+            <input type="text" id="wishlistCardSearch" placeholder="Search card by name..." title="Type a card name and click Add or press Enter" autocomplete="off">
+            <ul class="autocomplete-dropdown" id="wishlistAutocompleteDropdown" style="display: none;"></ul>
+          </div>
+          <button type="button" class="add-card-btn" id="wishlistAddCardBtn" title="Add the searched card to the wishlist">Add to wishlist</button>
+          <span class="search-msg" id="wishlistSearchMsg"></span>
+        </div>
+      </div>
+      <div class="wishlist-header">
+        <span class="wishlist-title">Wishlist</span>
+        <div class="wishlist-controls">
+          <button type="button" class="wishlist-sort-btn" id="wishlistSortNameBtn" title="Sort cards alphabetically by name">Sort by Name</button>
+          <button type="button" class="wishlist-sort-btn" id="wishlistSortPriceBtn" title="Sort cards by price (most expensive first)">Sort by Price</button>
+          <button type="button" class="wishlist-view-toggle-btn" id="wishlistViewToggleBtn" aria-pressed="false" title="Toggle between compact list and card images">Card images</button>
+          <span class="wishlist-total-price" id="wishlistTotalPrice">$0.00</span>
+        </div>
+      </div>
+      <ul class="wishlist-card-list" id="list-wishlist"></ul>
+    </div>
     <div class="tab-panel" id="statisticsTab">
       <div id="statisticsContainer"></div>
     </div>
@@ -203,28 +226,6 @@
         </div>
         <div id="agentRulesList" class="agent-rules-list"></div>
       </div>
-    </div>
-    <div class="tab-panel" id="wishlistTab">
-      <div class="search-bar">
-        <div class="search-group">
-          <div class="search-wrap">
-            <input type="text" id="wishlistCardSearch" placeholder="Search card by name..." title="Type a card name and click Add or press Enter" autocomplete="off">
-            <ul class="autocomplete-dropdown" id="wishlistAutocompleteDropdown" style="display: none;"></ul>
-          </div>
-          <button type="button" class="add-card-btn" id="wishlistAddCardBtn" title="Add the searched card to the wishlist">Add to wishlist</button>
-          <span class="search-msg" id="wishlistSearchMsg"></span>
-        </div>
-      </div>
-      <div class="wishlist-header">
-        <span class="wishlist-title">Wishlist</span>
-        <div class="wishlist-controls">
-          <button type="button" class="wishlist-sort-btn" id="wishlistSortNameBtn" title="Sort cards alphabetically by name">Sort by Name</button>
-          <button type="button" class="wishlist-sort-btn" id="wishlistSortPriceBtn" title="Sort cards by price (most expensive first)">Sort by Price</button>
-          <button type="button" class="wishlist-view-toggle-btn" id="wishlistViewToggleBtn" aria-pressed="false" title="Toggle between compact list and card images">Card images</button>
-          <span class="wishlist-total-price" id="wishlistTotalPrice">$0.00</span>
-        </div>
-      </div>
-      <ul class="wishlist-card-list" id="list-wishlist"></ul>
     </div>
   </div>
   <div id="cardPreview" class="card-preview" aria-hidden="true"><img src="" alt=""></div>

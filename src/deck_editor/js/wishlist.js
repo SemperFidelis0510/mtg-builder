@@ -296,17 +296,18 @@ function toggleView() {
 }
 
 /**
- * Add a card to the wishlist by name.
- * @param {string} cardName
+ * Add one or more cards to the wishlist by name, incrementing quantity per
+ * occurrence (pass duplicate names to add multiple copies).
+ * @param {string[]} cardNames
  * @param {{ onSuccess?: () => void, onError?: (error: Error) => void }} [callbacks]
  */
-export function addToWishlist(cardName, callbacks = {}) {
+export function addManyToWishlist(cardNames, callbacks = {}) {
   const { onSuccess, onError } = callbacks;
-  log.info('addToWishlist: %s', cardName);
+  log.info('addManyToWishlist: %d names', cardNames.length);
   fetch('/api/wishlist/add', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: cardName }),
+    body: JSON.stringify({ names: cardNames }),
   })
     .then((r) => {
       if (!r.ok) {
@@ -326,9 +327,18 @@ export function addToWishlist(cardName, callbacks = {}) {
       if (onSuccess) onSuccess();
     })
     .catch((err) => {
-      log.error('addToWishlist failed', err);
+      log.error('addManyToWishlist failed', err);
       if (onError) onError(err);
     });
+}
+
+/**
+ * Add a single card to the wishlist by name.
+ * @param {string} cardName
+ * @param {{ onSuccess?: () => void, onError?: (error: Error) => void }} [callbacks]
+ */
+export function addToWishlist(cardName, callbacks = {}) {
+  addManyToWishlist([cardName], callbacks);
 }
 
 export function initWishlist() {

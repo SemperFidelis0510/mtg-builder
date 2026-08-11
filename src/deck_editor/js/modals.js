@@ -135,9 +135,12 @@ export function initExportModal() {
   const resultEl = document.getElementById('saveResult');
 
   document.getElementById('exportDecklistBtn').addEventListener('click', () => {
-    log.info('Opening export modal');
+    const activeBtn = document.querySelector('.tab-btn.active');
+    const activeTab = activeBtn ? activeBtn.getAttribute('data-tab') : 'board';
+    const source = activeTab === 'wishlist' ? 'wishlist' : 'deck';
+    log.info('Opening export modal (source=%s)', source);
     resultEl.textContent = '';
-    iframe.src = '/export-modal?t=' + Date.now();
+    iframe.src = '/export-modal?source=' + source + '&t=' + Date.now();
     modal.classList.add('open');
     modal.setAttribute('aria-hidden', 'false');
   });

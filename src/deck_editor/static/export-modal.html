@@ -38,7 +38,7 @@
   </style>
 </head>
 <body>
-  <h3 class="modal-title">Export as</h3>
+  <h3 class="modal-title" id="modalTitle">Export as</h3>
   <div class="format-btns" id="formatButtons"></div>
   <p class="msg" id="msg"></p>
   <script>
@@ -46,6 +46,11 @@
       var container = document.getElementById('formatButtons');
       var msgEl = document.getElementById('msg');
       var cardKingdomImportUrl = 'https://www.cardkingdom.com/static/csvImport';
+      var params = new URLSearchParams(window.location.search);
+      var source = params.get('source') === 'wishlist' ? 'wishlist' : 'deck';
+      var exportBase = source === 'wishlist' ? '/api/wishlist/export' : '/api/export';
+      var titleEl = document.getElementById('modalTitle');
+      if (source === 'wishlist' && titleEl) titleEl.textContent = 'Export wishlist as';
       msgEl.textContent = '';
 
       function sendDone(message, isError) {
@@ -74,7 +79,7 @@
             btn.addEventListener('click', function () {
               msgEl.textContent = '';
               msgEl.className = 'msg';
-              fetch('/api/export?format=' + encodeURIComponent(key))
+              fetch(exportBase + '?format=' + encodeURIComponent(key))
                 .then(function (r) {
                   if (!r.ok) return r.json().then(function (err) { throw new Error(err.detail || 'Export failed'); });
                   return r.json();
