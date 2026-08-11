@@ -12,6 +12,9 @@ from src.utils.logger import LOGGER, init_logger
 SCRYFALL_COLLECTION_URL: str = "https://api.scryfall.com/cards/collection"
 BATCH_SIZE: int = 75
 DELAY_BETWEEN_BATCHES_S: float = 0.1
+SAVE_EVERY_N_BATCHES: int = 10
+MAX_BATCH_RETRIES: int = 3
+RETRY_BACKOFF_BASE_S: float = 1.0
 
 
 def load_prices() -> dict[str, float]:
@@ -95,6 +98,19 @@ def fetch_prices_batch(names: list[str]) -> dict[str, float]:
     return out
 
 
+def _fetch_batch_with_retries(batch: list[str]) -> dict[str, float]:
+    """Fetch a batch, retrying with exponential backoff. Returns {} if all attempts fail."""
+    for attempt in range(MAX_BATCH_RETRIES):
+        try:
+            return fetch_prices_batch(batch)
+        except Exception as e:
+            if attempt + 1 >= MAX_BATCH_RETRIES:
+                LOGGER.error("update_all_prices: batch failed after %s attempts: %s", MAX_BATCH_RETRIES, e)
+                return {}
+            time.sleep(RETRY_BACKOFF_BASE_S * (2**attempt))
+    return {}
+
+
 def update_all_prices() -> dict[str, float]:
     """Load all card names from CardDB, fetch prices from Scryfall in batches, save to prices.json, return the dict."""
     from src.lib.cardDB import CardDB
@@ -103,17 +119,22 @@ def update_all_prices() -> dict[str, float]:
     names: list[str] = list({c.name for c in cards})
     LOGGER.info("update_all_prices: fetching prices for %s unique names", len(names))
     result: dict[str, float] = load_prices()
-    for i in range(0, len(names), BATCH_SIZE):
+    num_batches = (len(names) + BATCH_SIZE - 1) // BATCH_SIZE
+    for batch_idx, i in enumerate(range(0, len(names), BATCH_SIZE)):
         batch = names[i : i + BATCH_SIZE]
-        try:
-            batch_prices = fetch_prices_batch(batch)
-        except Exception:
-            raise
+        batch_prices = _fetch_batch_with_retries(batch)
         for k, v in batch_prices.items():
             result[k] = v
+        if (batch_idx + 1) % SAVE_EVERY_N_BATCHES == 0 or batch_idx + 1 == num_batches:
+            save_prices(result)
+            LOGGER.info(
+                "update_all_prices: progress %s/%s batches, %s prices saved so far",
+                batch_idx + 1,
+                num_batches,
+                len(result),
+            )
         if i + BATCH_SIZE < len(names):
             time.sleep(DELAY_BETWEEN_BATCHES_S)
-    save_prices(result)
     LOGGER.info("update_all_prices: saved %s prices to %s", len(result), PRICES_PATH)
     return result
 
